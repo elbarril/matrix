@@ -1,0 +1,22 @@
+# Matrix Intelligence Engine - Git Ignore
+
+# Project repos (pulled on demand)
+clients/
+
+# Brain symlink (created in active projects)
+_brain
+
+# Sensitive data
+brain/state/sessions/
+brain/config.yaml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

@@ -1,0 +1,355 @@
+#!/bin/bash
+
+# Matrix CLI - Personal Intelligence Engine Orchestrator
+# Version 1.0.0
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Matrix paths
+MATRIX_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REGISTRY_FILE="$MATRIX_DIR/.registry.json"
+CONTEXT_FILE="$MATRIX_DIR/.context.yaml"
+BRAIN_DIR="$MATRIX_DIR/brain"
+CLIENTS_DIR="$MATRIX_DIR/clients"
+CHECKPOINTS_DIR="$BRAIN_DIR/state/checkpoints"
+
+# Helper functions
+log_info() {
+    echo -e "${BLUE}[MATRIX]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[MATRIX]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[MATRIX]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[MATRIX]${NC} $1"
+}
+
+# Initialize registry if it doesn't exist
+init_registry() {
+    if [[ ! -f "$REGISTRY_FILE" ]]; then
+        echo '{"projects": [], "created": "'$(date -Iseconds)'", "version": "1.0.0"}' > "$REGISTRY_FILE"
+    fi
+}
+
+# Initialize context if it doesn't exist
+init_context() {
+    if [[ ! -f "$CONTEXT_FILE" ]]; then
+        cat > "$CONTEXT_FILE" << 'EOF'
+# Matrix Active Project Context
+active_project: null
+active_project_path: null
+last_updated: null
+session_id: null
+EOF
+    fi
+}
+
+# Read registry
+read_registry() {
+    init_registry
+    jq -r '.projects[] | "\(.name):\(.path):\(.type)"' "$REGISTRY_FILE" 2>/dev/null || echo ""
+}
+
+# Read context
+read_context() {
+    init_context
+    grep "active_project:" "$CONTEXT_FILE" | cut -d' ' -f2 || echo "null"
+}
+
+# Update context
+update_context() {
+    local project="$1"
+    local path="$2"
+    
+    sed -i "s/active_project:.*/active_project: $project/" "$CONTEXT_FILE"
+    sed -i "s|active_project_path:.*|active_project_path: $path|" "$CONTEXT_FILE"
+    sed -i "s/last_updated:.*/last_updated: $(date -Iseconds)/" "$CONTEXT_FILE"
+}
+
+# Add project to registry
+add_project() {
+    local name="$1"
+    local path_or_url="$2"
+    
+    if [[ -z "$name" || -z "$path_or_url" ]]; then
+        log_error "Usage: matrix add <name> <path-or-url>"
+        return 1
+    fi
+    
+    # Check if project already exists
+    if read_registry | grep -q "^$name:"; then
+        log_error "Project '$name' already exists in registry"
+        return 1
+    fi
+    
+    # Determine if it's a local path or remote URL
+    local type="local"
+    if [[ "$path_or_url" =~ ^https?:// ]] || [[ "$path_or_url" =~ ^git@ ]]; then
+        type="remote"
+    fi
+    
+    # Add to registry
+    local temp_file=$(mktemp)
+    jq --arg name "$name" --arg path "$path_or_url" --arg type "$type" \
+       '.projects += [{"name": $name, "path": $path, "type": $type, "added": "'$(date -Iseconds)'"}]' \
+       "$REGISTRY_FILE" > "$temp_file"
+    mv "$temp_file" "$REGISTRY_FILE"
+    
+    log_success "Added project '$name' to registry"
+}
+
+# List all projects
+list_projects() {
+    log_info "Known projects:"
+    echo
+    
+    local projects=$(read_registry)
+    if [[ -z "$projects" ]]; then
+        echo "  No projects registered"
+        return
+    fi
+    
+    local active=$(read_context)
+    while IFS=: read -r name path type; do
+        if [[ "$active" == "$name" ]]; then
+            echo "  ✓ $name ($type) - $path [active]"
+        else
+            echo "    $name ($type) - $path"
+        fi
+    done <<< "$projects"
+}
+
+# Select active project
+select_project() {
+    local name="$1"
+    
+    if [[ -z "$name" ]]; then
+        log_error "Usage: matrix select <name>"
+        return 1
+    fi
+    
+    # Find project in registry
+    local project_info=$(read_registry | grep "^$name:" | head -1)
+    if [[ -z "$project_info" ]]; then
+        log_error "Project '$name' not found in registry"
+        return 1
+    fi
+    
+    IFS=: read -r proj_name proj_path proj_type <<< "$project_info"
+    
+    # Expand tilde in path
+    proj_path="${proj_path/#\~/$HOME}"
+    
+    # Handle remote projects
+    if [[ "$proj_type" == "remote" ]]; then
+        local project_dir="$CLIENTS_DIR/$name"
+        if [[ ! -d "$project_dir" ]]; then
+            log_info "Cloning remote project '$name'..."
+            mkdir -p "$CLIENTS_DIR"
+            git clone "$proj_path" "$project_dir"
+            proj_path="$project_dir"
+        else
+            log_info "Project '$name' already cloned locally"
+            proj_path="$project_dir"
+        fi
+    fi
+    
+    # Verify project exists
+    if [[ ! -d "$proj_path" ]]; then
+        log_error "Project path '$proj_path' does not exist"
+        return 1
+    fi
+    
+    # Create brain symlink
+    local brain_link="$proj_path/_brain"
+    if [[ -L "$brain_link" ]]; then
+        log_info "Removing existing brain symlink"
+        rm "$brain_link"
+    elif [[ -e "$brain_link" ]]; then
+        log_error "File '_brain' exists in project but is not a symlink"
+        return 1
+    fi
+    
+    ln -sf "$BRAIN_DIR" "$brain_link"
+    
+    # Update context
+    update_context "$name" "$proj_path"
+    
+    log_success "Selected project '$name'"
+    log_info "Brain symlink created at: $brain_link"
+}
+
+# Deselect active project
+deselect_project() {
+    local active=$(read_context)
+    
+    if [[ "$active" == "null" || -z "$active" ]]; then
+        log_warning "No active project to deselect"
+        return
+    fi
+    
+    # Get active path from context
+    local active_path=$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)
+    active_path="${active_path/#\~/$HOME}"
+    
+    # Remove brain symlink if it exists
+    if [[ -n "$active_path" && -L "$active_path/_brain" ]]; then
+        rm "$active_path/_brain"
+        log_info "Removed brain symlink from '$active'"
+    fi
+    
+    # Clear context
+    update_context "null" "null"
+    
+    log_success "Deselected project '$active'"
+}
+
+# Show status
+show_status() {
+    log_info "Matrix Status"
+    echo
+    
+    # Active project
+    local active=$(read_context)
+    if [[ "$active" != "null" && -n "$active" ]]; then
+        local active_path=$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)
+        active_path="${active_path/#\~/$HOME}"
+        echo "Active Project: $active"
+        echo "Path: $active_path"
+        echo "Brain Link: $active_path/_brain"
+        if [[ -L "$active_path/_brain" ]]; then
+            echo "Link Status: ✓ Active"
+        else
+            echo "Link Status: ✗ Broken"
+        fi
+    else
+        echo "Active Project: None"
+    fi
+    echo
+    
+    # Project count
+    local project_count=$(read_registry | wc -l)
+    echo "Registered Projects: $project_count"
+    echo
+    
+    # Recent checkpoints
+    if [[ -d "$CHECKPOINTS_DIR" ]]; then
+        echo "Recent Checkpoints:"
+        ls -1t "$CHECKPOINTS_DIR"/*.yaml 2>/dev/null | head -3 | while read -r checkpoint; do
+            local basename=$(basename "$checkpoint" .yaml)
+            echo "  $basename"
+        done
+    else
+        echo "No checkpoints yet"
+    fi
+}
+
+# Write checkpoint
+write_checkpoint() {
+    local note="$1"
+    
+    if [[ -z "$note" ]]; then
+        log_error "Usage: matrix checkpoint \"<note>\""
+        return 1
+    fi
+    
+    mkdir -p "$CHECKPOINTS_DIR"
+    
+    local timestamp=$(date +"%Y-%m-%d-%H-%M-%S")
+    local checkpoint_file="$CHECKPOINTS_DIR/checkpoint-$timestamp.yaml"
+    
+    local active=$(read_context)
+    
+    cat > "$checkpoint_file" << EOF
+timestamp: "$(date -Iseconds)"
+user: "Emiliano"
+project: $active
+note: "$note"
+context:
+  active_agents: []
+  current_focus: ""
+  blockers: []
+  next_actions: []
+EOF
+    
+    log_success "Checkpoint written: checkpoint-$timestamp.yaml"
+}
+
+# Show help
+show_help() {
+    echo "Matrix CLI - Personal Intelligence Engine"
+    echo
+    echo "Usage: matrix <command> [args]"
+    echo
+    echo "Commands:"
+    echo "  list                    List all registered projects"
+    echo "  add <name> <path>       Add a new project to registry"
+    echo "  select <name>           Set active project and create brain symlink"
+    echo "  deselect                Clear active project and remove brain symlink"
+    echo "  status                  Show current Matrix status"
+    echo "  checkpoint \"<note>\"    Write a timestamped checkpoint"
+    echo "  help                    Show this help message"
+    echo
+    echo "Examples:"
+    echo "  matrix add myproject /path/to/project"
+    echo "  matrix select myproject"
+    echo "  matrix checkpoint \"Completed bugfix for client X\""
+}
+
+# Main command dispatcher
+main() {
+    case "${1:-}" in
+        "list")
+            list_projects
+            ;;
+        "add")
+            add_project "$2" "$3"
+            ;;
+        "select")
+            select_project "$2"
+            ;;
+        "deselect")
+            deselect_project
+            ;;
+        "status")
+            show_status
+            ;;
+        "checkpoint")
+            write_checkpoint "$2"
+            ;;
+        "help"|"--help"|"-h")
+            show_help
+            ;;
+        "")
+            log_error "No command specified. Use 'matrix help' for usage."
+            exit 1
+            ;;
+        *)
+            log_error "Unknown command: $1"
+            echo "Use 'matrix help' for available commands."
+            exit 1
+            ;;
+    esac
+}
+
+# Check dependencies
+if ! command -v jq >/dev/null 2>&1; then
+    log_error "jq is required but not installed. Please install jq to continue."
+    exit 1
+fi
+
+# Run main function with all arguments
+main "$@"

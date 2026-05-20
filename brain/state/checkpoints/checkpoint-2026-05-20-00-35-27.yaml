@@ -1,0 +1,9 @@
+timestamp: "2026-05-20T00:35:27-03:00"
+user: "Emiliano"
+project: matrix
+note: "Mejorado arte ASCII de Deus Ex Machina en onboarding - ahora con ojos (* *), nariz (o) y boca (\___/) más reconocibles, font-size reducido a 6px según consejos de Neo"
+context:
+  active_agents: []
+  current_focus: ""
+  blockers: []
+  next_actions: []

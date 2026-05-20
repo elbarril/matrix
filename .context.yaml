@@ -1,0 +1,7 @@
+# Matrix Active Project Context
+# This file tracks which project is currently active
+
+active_project: matrix
+active_project_path: /home/emiliano/www/emisrepos/matrix/
+last_updated: 2026-05-19T18:45:55-03:00
+session_id: null

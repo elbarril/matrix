@@ -1,0 +1,9 @@
+timestamp: "2026-05-19T22:31:51-03:00"
+user: "Emiliano"
+project: matrix
+note: "Agregada nueva pestaña Tutorial con step-by-step de caso de uso real de debugging - incluye 9 pasos interactivos mostrando coordinación entre especialistas"
+context:
+  active_agents: []
+  current_focus: ""
+  blockers: []
+  next_actions: []
