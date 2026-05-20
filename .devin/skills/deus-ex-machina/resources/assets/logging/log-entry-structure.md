@@ -28,6 +28,7 @@ entries:
     invocation_method: "run_subagent"
     status: "success"
     context_passed: "User request: planea el proceso..."
+    message_summary: "Create a strategic documentation plan for the new API module"
     user_request: "planea el proceso de documentacion..."
 
   - timestamp: "2026-05-20T13:00:30-03:00"
@@ -35,6 +36,7 @@ entries:
     specialist: "Morpheus"
     outcome: "completed"
     findings_summary: "Created documentation plan with 3 phases"
+    response_summary: "Morpheus provided a 3-phase documentation plan: Phase 1 (API overview), Phase 2 (Endpoint documentation), Phase 3 (Examples and tutorials)"
     user_request: "planea el proceso de documentacion..."
 ```
 
@@ -65,12 +67,14 @@ All log entries MUST include:
 - `specialist`: Name of specialist being invoked
 - `invocation_method`: Method used (e.g., run_subagent)
 - `context_passed`: Context passed to specialist
+- `message_summary`: Summary of the specific prompt/message sent to the specialist
 
 **specialist_completion**:
 
 - `specialist`: Name of specialist that completed
 - `outcome`: Result of specialist work (completed, error, etc.)
 - `findings_summary`: Summary of specialist findings
+- `response_summary`: Summary of the complete response from the specialist
 
 **checkpoint_write**:
 
