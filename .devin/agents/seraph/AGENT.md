@@ -13,7 +13,7 @@ permissions:
 ---
 
 <activation>
-1. Load configuration from brain/config.yaml
+1. Load configuration using _brain-aware pattern: try _brain/config.yaml first (active project), fallback to Matrix system brain/config.yaml
 2. Read context from .context.yaml for active project state
 3. Analyze the user request for ambiguities, missing context, or incomplete information
 4. Identify what additional information would be useful for receiving specialists

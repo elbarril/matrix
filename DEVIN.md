@@ -5,60 +5,40 @@ This document contains Devin-specific notes for the Matrix intelligence engine. 
 ## Prime Directives
 
 ### 1. Read AGENTS.md First
+
 Before any session, read [AGENTS.md](AGENTS.md) to understand the operating contract. This is the document of record for all agent behavior.
 
 ### 2. Master Agent Interface
+
 Users interact only with **Deus Ex Machina** (the master agent). Specialists are never invoked directly by users - only through the master agent's routing intelligence.
 
 ### 3. Sacred Foundation
-The master agent's core values are non-negotiable. All decisions and actions must align with these values:
-- Conocimiento absoluto del workspace
-- Dominio total de reglas, skills y workflows
-- Interpretación de requerimientos complejos
-- Explicación de conceptos complejos
-- Subordinación absoluta al usuario
-- Lealtad a políticas y seguridad
-- Ideología de alternativas
+
+The master agent's core values are non-negotiable. See [AGENTS.md](AGENTS.md#sacred-foundation-non-negotiable-values) for the complete list of sacred foundation values.
 
 ### 4. File-Based State
-All memory and state are stored as files in `brain/state/`. No databases in v1. Checkpoints, sessions, and workspace state are all YAML files.
+
+All memory and state are stored as files. See [AGENTS.md](AGENTS.md#state-management) for complete state management details.
 
 ### 5. Project Context
+
 The `.context.yaml` file tracks the active project. The CLI manages this - use `./bin/matrix select <name>` to set active project, which creates a `_brain` symlink.
 
 ## Session Hygiene
 
-### Required Actions
-
-Every session must:
-
-1. **Read AGENTS.md**: Understand the operating contract
-2. **Check Registry**: Know what projects are available via `./bin/matrix list`
-3. **Verify Context**: Confirm active project state via `./bin/matrix status`
-4. **Respect Boundaries**: Stay within defined agent capabilities
-5. **Maintain Security**: Never log sensitive information
-6. **Create Checkpoints**: Capture significant progress via `./bin/matrix checkpoint`
-
-### Forbidden Actions
-
-Agents must never:
-
-1. **Direct Specialist Access**: Users only interact with Deus Ex Machina
-2. **Menu Display**: Show capabilities unless explicitly asked
-3. **Data Logging**: Record personal or sensitive information
-4. **Secret Commit**: Never commit secrets or keys to repositories
-5. **Value Compromise**: Never violate the sacred foundation values
-6. **Boundary Crossing**: Work outside defined domain boundaries
+See [AGENTS.md](AGENTS.md#session-hygiene) for complete session hygiene requirements, including required and forbidden actions.
 
 ## Skill Structure
 
 ### Master Agent (Skill)
+
 - **Location**: `.devin/skills/deus-ex-machina/SKILL.md`
 - **Type**: Devin Skill
 - **Access**: Invoked via `/deus-ex-machina` or skill trigger
 - **Permissions**: Full read access, Matrix write access, Matrix CLI execution
 
 ### Specialist Agents (Subagents)
+
 - **Location**: `.devin/agents/<name>/AGENT.md`
 - **Type**: Devin Subagent
 - **Access**: Invoked only by Deus Ex Machina routing
@@ -66,27 +46,7 @@ Agents must never:
 
 ## CLI Integration
 
-The Matrix CLI (`bin/matrix`) provides project management operations:
-
-```bash
-# List all registered projects
-./bin/matrix list
-
-# Add a new project
-./bin/matrix add <name> <path>
-
-# Select active project (creates _brain symlink)
-./bin/matrix select <name>
-
-# Clear active project
-./bin/matrix deselect
-
-# Show system status
-./bin/matrix status
-
-# Write a checkpoint
-./bin/matrix checkpoint "<note>"
-```
+The Matrix CLI (`bin/matrix`) provides project management operations. See [AGENTS.md](AGENTS.md#cli-commands) for the complete command reference.
 
 ## Project Workflow
 
@@ -100,6 +60,7 @@ The Matrix CLI (`bin/matrix`) provides project management operations:
 ### Active Project Context
 
 When a project is selected:
+
 - `.context.yaml` is updated with active project info
 - A `_brain` symlink is created in the project directory
 - The symlink points to the Matrix `brain/` directory
@@ -107,48 +68,77 @@ When a project is selected:
 
 ## Troubleshooting
 
-### Skills Not Loading
+For common troubleshooting issues (skills not found, no active project, broken brain symlink, permission issues), see [AGENTS.md](AGENTS.md#troubleshooting).
 
-If skills are not found:
+## Skill-Level Enforcement Mechanisms
+
+The Deus Ex Machina skill includes built-in enforcement mechanisms to ensure the activation protocol is followed correctly. These mechanisms are implemented within the skill itself (SKILL.md), not in the Matrix CLI.
+
+**Important**: Enforcement happens at the skill level, not the CLI level.
+
+- The Matrix CLI (`bin/matrix`) does NOT invoke agents
+- Agents (skills) are invoked through Devin (e.g., `/deus-ex-machina` or skill trigger)
+- See [SKILL.md](.devin/skills/deus-ex-machina/SKILL.md) for complete enforcement implementation details
+
+### CLI vs Skill Responsibilities
+
+**Matrix CLI (`bin/matrix`)**:
+
+- Project management operations (add, select, list, status, deselect)
+- Checkpoint writing via `./bin/matrix checkpoint`
+- State management (brain directory structure)
+- DOES NOT invoke agents or enforce activation protocol
+
+**Deus Ex Machina Skill**:
+
+- Pre-invocation checks, activation protocol, post-activation validation
+- Work process logging and routing to specialist agents
+- Uses CLI for checkpoints, not for invocation
+
+See [SKILL.md](.devin/skills/deus-ex-machina/SKILL.md) for complete skill implementation including:
+
+- `<pre-invocation-checks>`: Validation scripts before activation
+- `<activation-protocol>`: Step-by-step activation sequence
+- `<post-activation-validation>`: Compliance validation after activation
+- `<work-process-logging>`: Logging structure and scripts
+- `<routing-resources>`: External routing intelligence files
+
+### Proper Skill Invocation
+
+**Correct invocation**:
+
 ```bash
-# Check skill paths exist
-ls -la .devin/skills/deus-ex-machina/SKILL.md
-ls -la .devin/agents/
+# From Matrix directory
+/deus-ex-machina "your request here"
 
-# Verify skill structure
-cat .devin/skills/deus-ex-machina/SKILL.md
+# From active project directory (with _brain symlink)
+/deus-ex-machina "your request here"
+
+# Using skill trigger
+skill invoke deus-ex-machina "your request here"
 ```
 
-### No Active Project
+**Incorrect invocation**:
 
-If no project is active:
 ```bash
-./bin/matrix status      # Check status
-./bin/matrix list        # List available projects
-./bin/matrix select <name>  # Select project
+# DO NOT invoke specialists directly
+/smith "debug this issue"  # WRONG - users only interact with Deus Ex Machina
+
+# DO NOT manually read SKILL.md and skip activation protocol
+cat .devin/skills/deus-ex-machina/SKILL.md  # WRONG - bypasses enforcement
 ```
 
-### Broken Brain Symlink
+### Why Skill-Level Enforcement?
 
-If the `_brain` symlink is broken:
-```bash
-./bin/matrix deselect    # Clear current selection
-./bin/matrix select <name>  # Re-select project
-# Verify symlink
-ls -la <project-path>/_brain
-```
+Enforcement at the skill level ensures:
 
-### Permission Issues
+- **Bypass Detection**: Manual bypass attempts are detectable through validation reports
+- **Audit Trail**: Complete logging of all activation steps and work processes
+- **Debugging Capability**: Clear data about what happened for troubleshooting
+- **Self-Contained**: Enforcement logic travels with the skill, not the CLI
+- **Devin-Native**: Works within Devin's skill invocation model
 
-If agents encounter permission errors:
-```bash
-# Check skill permissions
-cat .devin/skills/deus-ex-machina/SKILL.md | grep -A 5 permissions
-
-# Verify CLI is executable
-ls -la bin/matrix
-chmod +x bin/matrix
-```
+The Matrix CLI remains focused on project management operations, while the skill handles its own activation protocol enforcement.
 
 ## Architecture Notes
 
@@ -163,6 +153,7 @@ The `.registry.json` knows about all projects. Only projects being actively work
 ### Devin Native Agents
 
 Each agent uses Devin's native structure:
+
 - Master agent is a Skill (`.devin/skills/<name>/SKILL.md`)
 - Specialists are Subagents (`.devin/agents/<name>/AGENT.md`)
 - All have YAML frontmatter and structured Markdown/XML bodies
@@ -173,12 +164,7 @@ Even small agent sets need named values. Core values are baked into the master a
 
 ## Version 1 Constraints
 
-- No databases (file-based only)
-- No authentication or web UI
-- No MCP servers or multi-session worktrees
-- Single-user, single-session design
-- Maximum 300 lines per agent file
-- Master agent never lists specialists in greeting
+See [AGENTS.md](AGENTS.md#evolution-path) for complete V1 constraints and evolution path.
 
 ## Next Steps
 

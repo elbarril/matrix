@@ -7,8 +7,11 @@ clients/
 _brain
 
 # Sensitive data
+brain/state/checkpoints/*
 brain/state/sessions/
+brain/state/*.yaml
 brain/config.yaml
+.context.yaml
 
 # OS files
 .DS_Store

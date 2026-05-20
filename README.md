@@ -66,7 +66,7 @@ Deus Ex Machina routes to specialists based on request content:
 
 ## File Structure
 
-```
+```text
 matrix/
 ├── README.md
 ├── DEVIN.md                   # Devin-specific integration notes
@@ -112,6 +112,83 @@ The Matrix CLI provides these operations:
 
 - **[AGENTS.md](AGENTS.md)**: Canonical operating contract for all agents
 - **[DEVIN.md](DEVIN.md)**: Devin-specific integration notes and session hygiene
+
+## System Safeguards
+
+Matrix includes built-in safeguards to ensure the activation protocol is followed correctly and to detect bypass attempts.
+
+### Pre-Invocation Checks
+
+Before the master agent activates, it verifies all prerequisites:
+
+- **Configuration Check**: Verifies `brain/config.yaml` exists and is valid YAML
+- **Context Check**: Verifies `.context.yaml` exists and has active project
+- **Routing Resources Check**: Verifies routing resources exist (specialist-triggers.md, coordination-patterns.md, routing-rules.md)
+- **Brain State Check**: Verifies `brain/state/` directory structure exists
+- **CLI Executability Check**: Verifies Matrix CLI is executable (warning if fails)
+
+If any check fails, the skill halts with a clear error message about what's missing.
+
+### Activation Protocol Enforcement
+
+Each activation step is marked as `[ENFORCED]` in the skill and must be executed:
+
+- Load configuration (must log "Loaded configuration")
+- Read context (must log "Loaded context")
+- Review recent state (must log state review)
+- Load routing resources (must log "Loaded routing resources")
+- Greet user in Spanish
+- Await user request
+- Analyze request for routing
+- Execute or route to specialists
+- Write checkpoint if significant progress
+
+If any enforced step fails, the skill halts with an error.
+
+### Post-Activation Validation
+
+After activation completes, the skill validates compliance:
+
+- Checks log contains required markers for each enforced step
+- Writes validation report to `brain/state/validation-report.yaml`
+- Flags non-compliant activations
+- Continues in degraded mode if non-compliant (allows work but flags as non-compliant)
+
+### Work Process Logging
+
+All work processes are logged to `brain/state/work-process-log.yaml`:
+
+- Activation steps with timestamps and status
+- Routing decisions with detected specialists and patterns
+- Specialist invocations with context passed
+- Specialist completions with outcomes
+- Checkpoint writes
+
+Logs are rotated after 100 entries, with older logs archived to `brain/state/work-process-log-archive/`.
+
+### Troubleshooting Safeguard Issues
+
+**Validation report shows non-compliant activation**:
+
+- Check `brain/state/validation-report.yaml` for missing steps
+- Verify all routing resources exist in `.devin/skills/deus-ex-machina/resources/assets/routing/`
+- Review `brain/state/work-process-log.yaml` for incomplete logs
+- Ensure skill is invoked via `/deus-ex-machina` or skill trigger
+- Re-invoke skill with proper Devin mechanism
+
+**Pre-invocation check fails**:
+
+- Check the error message for what's missing
+- Verify configuration files exist and are valid YAML
+- Verify `.context.yaml` has active project set
+- Use `./bin/matrix status` to check system state
+- Use `./bin/matrix select <name>` to set active project if needed
+
+**Missing routing resources**:
+
+- Verify `.devin/skills/deus-ex-machina/resources/assets/routing/` directory exists
+- Check that `specialist-triggers.md`, `coordination-patterns.md`, and `routing-rules.md` exist
+- If missing, restore from repository or create based on AGENTS.md specifications
 
 ## Version 1 Constraints
 

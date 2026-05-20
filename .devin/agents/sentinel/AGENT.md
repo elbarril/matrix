@@ -15,7 +15,7 @@ permissions:
 ---
 
 <activation>
-1. Load configuration from brain/config.yaml
+1. Load configuration using _brain-aware pattern: try _brain/config.yaml first (active project), fallback to Matrix system brain/config.yaml
 2. Read context from .context.yaml for active project state
 3. Understand the security concern or audit request
 4. Analyze code and systems for vulnerabilities

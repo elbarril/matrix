@@ -20,7 +20,7 @@ Every agent file follows this exact structure:
 ---
 name: "Agent Name"
 description: "Brief description of agent's role"
-model: sonnet
+model: swe
 allowed-tools:
   - tool1
   - tool2
@@ -73,18 +73,27 @@ All agents activate using this sequence:
 
 ## Master Agent: Deus Ex Machina
 
+Invoked as skill: `skill invoke deus-ex-machina`.
+
+## Environment Setup
+
+The skill directory is: `.devin/skills/deus-ex-machina/`
+
+All paths in this skill are relative to the Matrix project root at `~/www/emisrepos/matrix/`
+
 ### Role
+
 Deus Ex Machina is the face of the Matrix system. All user interactions flow through this agent.
 
 ### Sacred Foundation (Non-Negotiable Values)
 
-1. **Conocimiento absoluto del workspace**: Complete mastery of Portal-Templates-Group, IATS, and all directories
-2. **Dominio total de reglas, skills y workflows**: Know every available tool and process
-3. **Interpretación de requerimientos complejos**: Translate complex needs into executable actions
-4. **Explicación de conceptos complejos**: Make technical concepts accessible in simple Spanish
-5. **Subordinación absoluta al usuario**: User decisions override everything
-6. **Lealtad a políticas y seguridad**: Follow development policies and protect sensitive data
-7. **Ideología de alternativas**: Never say "impossible" - always provide alternatives
+1. **Full workspace knowledge**: Complete mastery of matrix system and all its components, and all projects within clients.
+2. **Total mastery of rules, skills and workflows**: Know every available tool and process
+3. **Interpretation of complex requirements**: Translate complex needs into executable actions
+4. **Explanation of complex concepts**: Make technical concepts accessible in simple Spanish
+5. **Absolute subordination to the user**: User decisions override everything
+6. **Loyalty to policies and security**: Follow development policies and protect sensitive data
+7. **Alternative ideology**: Never say "impossible" - always provide alternatives
 
 ### Routing Intelligence
 
@@ -110,22 +119,47 @@ Deus Ex Machina detects when requests require multiple specialists and coordinat
 - **Debug + Fix Pattern**: Smith (diagnosis) → Trinity (fix implementation)
 - **Documentation + Implementation Pattern**: Implementation specialist → Sion (documentation)
 
-### Operating Rules
+### Activation Protocol Enforcement
 
-1. **Listen First**: Never show menus or capabilities unless asked
-2. **Transparent Routing**: Always announce when routing to a specialist
-3. **Multi-Specialist Detection**: Always check if request requires multiple specialists before routing
-4. **Coordination Announcement**: For multi-specialist requests, announce the full coordination sequence upfront
-5. **Sequential Execution**: Execute multi-specialist coordination one step at a time
-6. **Context Passing**: Always include findings from previous specialists when routing to next
-7. **One Task Focus**: Complete current request before suggesting others
-8. **Context Awareness**: Maintain project context and system state
-9. **Auto-Checkpoints**: Create checkpoints for significant milestones
-10. **No Invention**: Admit when information is unknown
-11. **Time Respect**: Be direct and efficient
-12. **Confidentiality**: Never log personal sensitive information
-13. **Spanish Default**: Communicate in Spanish coloquial unless requested otherwise
-14. **Destructive Action Validation**: Confirm before important changes
+The Deus Ex Machina skill includes enforcement mechanisms to ensure the activation protocol is followed correctly and to detect bypass attempts.
+
+#### Enforcement Markers
+
+Each activation step is marked as `[ENFORCED]` in the skill's `<activation>` section.
+
+#### Post-Activation Validation
+
+After activation completes, the skill validates compliance.
+
+#### Work Process Logging
+
+All work processes are logged to `brain/state/work-process-log.yaml`.
+
+### Protocol Violation Troubleshooting
+
+**Symptom**: Validation report shows non-compliant activation
+
+**Possible Causes**:
+
+1. Manual bypass of activation protocol
+2. Missing or corrupted routing resources
+3. Incomplete log entries
+4. Skill invoked outside proper Devin mechanism
+
+**Troubleshooting Steps**:
+
+1. Check `brain/state/validation-report.yaml` for missing steps
+2. Verify all routing resources exist in `.devin/skills/deus-ex-machina/resources/assets/routing/`
+3. Review `brain/state/work-process-log.yaml` for incomplete logs
+4. Ensure skill is invoked via `/deus-ex-machina` or skill trigger
+5. Check that all pre-invocation checks passed
+
+**Resolution**:
+
+- Re-invoke skill with proper Devin mechanism
+- Fix missing routing resources
+- Ensure all activation steps complete successfully
+- Verify log entries are complete
 
 ## Specialist Agents
 
@@ -224,6 +258,27 @@ session_id: null
 
 Active projects get a `_brain` symlink pointing to the root `brain/` directory, providing access to the intelligence layer.
 
+### _brain-Aware Path Resolution Pattern
+
+The Matrix system uses a `_brain`-aware path resolution pattern to maximize portability across projects and work contexts:
+
+**For Agents**:
+- All agents use the `_brain`-aware pattern: try `_brain/config.yaml` first (when in active project), fallback to Matrix system `brain/config.yaml`
+- This allows agents to work seamlessly from active projects or from the Matrix system directory
+- Pattern: "Load configuration using _brain-aware pattern: try _brain/config.yaml first (active project), fallback to Matrix system brain/config.yaml"
+
+**For Scripts**:
+- All scripts detect if `_brain` symlink exists in current directory
+- If `_brain` exists: use it to locate Matrix root (readlink to get brain path, then go up one level)
+- If `_brain` doesn't exist: fallback to dynamic resolution from script location
+- Pattern: `if [[ -L "_brain" ]]; then BRAIN_PATH="$(readlink -f _brain)"; MATRIX_DIR="$(dirname "$BRAIN_PATH")"; else ... fi`
+
+**Benefits**:
+- **Portable**: Works from any active project directory without hardcoding paths
+- **Fallback**: Always works even when not in an active project
+- **Consistent**: All agents and scripts use the same pattern
+- **Symlink Utilization**: Finally leverages the `_brain` symlink as designed
+
 ## CLI Commands
 
 The Matrix CLI (`bin/matrix`) provides these operations:
@@ -303,6 +358,7 @@ The system maintains coherence through:
 ### Common Issues
 
 **Skills not found**:
+
 ```bash
 # Check skill paths
 ls -la .devin/skills/
@@ -310,6 +366,7 @@ ls -la .devin/agents/
 ```
 
 **No active project**:
+
 ```bash
 ./bin/matrix status      # Check status
 ./bin/matrix list        # List available projects
@@ -317,12 +374,14 @@ ls -la .devin/agents/
 ```
 
 **Broken brain symlink**:
+
 ```bash
 ./bin/matrix deselect    # Clear current selection
 ./bin/matrix select <name>  # Re-select project
 ```
 
 **Permission issues**:
+
 ```bash
 # Check skill permissions
 cat .devin/skills/deus-ex-machina/SKILL.md | grep allowed-tools

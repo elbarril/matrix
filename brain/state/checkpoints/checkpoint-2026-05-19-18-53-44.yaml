@@ -1,9 +1,0 @@
-timestamp: "2026-05-19T18:53:44-03:00"
-user: "Emiliano"
-project: matrix
-note: "Incidente crítico documentado: fallo en invocación de skills con argumentos. Creado informe en docs/incidentes/skill-invocation-failure-2026-05-19.md"
-context:
-  active_agents: []
-  current_focus: ""
-  blockers: []
-  next_actions: []

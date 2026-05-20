@@ -1,9 +1,0 @@
-timestamp: "2026-05-19T22:35:35-03:00"
-user: "Emiliano"
-project: matrix
-note: "Creado nuevo especialista Seraph para clarificación y reformulación de solicitudes - actualizado AGENTS.md, onboarding.html y skill deus-ex-machina"
-context:
-  active_agents: []
-  current_focus: ""
-  blockers: []
-  next_actions: []
