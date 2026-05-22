@@ -1,7 +1,7 @@
 ---
 name: morpheus
 description: "Strategic planning and roadmap specialist - organizes complex projects and workflows"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

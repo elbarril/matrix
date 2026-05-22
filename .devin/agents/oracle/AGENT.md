@@ -1,7 +1,7 @@
 ---
 name: oracle
 description: "Research and intelligence gathering specialist - finds information and analyzes patterns"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

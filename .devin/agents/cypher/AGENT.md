@@ -1,7 +1,7 @@
 ---
 name: cypher
 description: "Problem communication specialist - communicates when things are wrong, errors occur, or something is going wrong, even if many things were done well"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

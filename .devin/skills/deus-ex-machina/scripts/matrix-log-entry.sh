@@ -2,26 +2,28 @@
 # Write log entries to brain/state/work-process-log.yaml with proper format and rotation.
 #
 # Usage:
-#   matrix-log-entry.sh --event-type <type> --status <status> --details <details> [--user-request <request>] [event-specific-fields]
+#   matrix-log-entry.sh --event-type <type> --status <status> --details <details> [--level <level>] [--user-request <request>] [event-specific-fields]
 #
 # Required:
-#   --event-type <type>     Event type (activation_step, routing_decision, specialist_invocation, specialist_completion, checkpoint_write)
+#   --event-type <type>     Event type (activation, activation_step, routing_decision, specialist_invocation, specialist_completion, specialist_execution, checkpoint_write)
 #   --status <status>       Status (success, error)
 #   --details <details>     Human-readable description
 #
 # Optional:
+#   --level <lvl>           Log level (ERROR, WARNING, INFO, DEBUG, TRACE). Default: INFO
 #   --user-request <req>    Original user request
-#   --step-number <num>     For activation_step events
-#   --step-name <name>      For activation_step events
+#   --step-number <num>     For activation_step events (deprecated - use activation instead)
+#   --step-name <name>      For activation_step events (deprecated - use activation instead)
 #   --specialists <list>    For routing_decision events (comma-separated)
 #   --pattern <name>        For routing_decision events
-#   --specialist <name>     For specialist_invocation/completion events
+#   --specialist <name>     For specialist_invocation/completion/execution events
 #   --invocation-method <m> For specialist_invocation events
 #   --context <ctx>         For specialist_invocation events
 #   --message <msg>         For specialist_invocation events (message_summary)
-#   --outcome <outcome>     For specialist_completion events
-#   --findings <summary>    For specialist_completion events
+#   --outcome <outcome>     For specialist_completion/execution events
+#   --findings <summary>    For specialist_completion/execution events
 #   --response <resp>       For specialist_completion events (response_summary)
+#   --duration <seconds>    For specialist_execution events
 #   --checkpoint-note <n>   For checkpoint_write events
 #   --matrix-dir <path>     Path to matrix directory (default: script dir/../..)
 #
@@ -35,6 +37,7 @@ set -euo pipefail
 EVENT_TYPE=""
 STATUS=""
 DETAILS=""
+LEVEL=""
 USER_REQUEST=""
 STEP_NUMBER=""
 STEP_NAME=""
@@ -47,6 +50,7 @@ MESSAGE=""
 OUTCOME=""
 FINDINGS=""
 RESPONSE=""
+DURATION=""
 CHECKPOINT_NOTE=""
 MATRIX_DIR=""
 
@@ -62,6 +66,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --details)
       DETAILS="$2"
+      shift 2
+      ;;
+    --level)
+      LEVEL="$2"
       shift 2
       ;;
     --user-request)
@@ -112,6 +120,10 @@ while [[ $# -gt 0 ]]; do
       RESPONSE="$2"
       shift 2
       ;;
+    --duration)
+      DURATION="$2"
+      shift 2
+      ;;
     --checkpoint-note)
       CHECKPOINT_NOTE="$2"
       shift 2
@@ -130,6 +142,47 @@ done
 # Validate required fields
 if [[ -z "$EVENT_TYPE" ]] || [[ -z "$STATUS" ]] || [[ -z "$DETAILS" ]]; then
   echo "ERROR: Missing required fields: --event-type, --status, --details" >&2
+  exit 2
+fi
+
+# Log level configuration
+# Level hierarchy (lower number = higher priority):
+# ERROR=0, WARNING=1, INFO=2, DEBUG=3, TRACE=4
+declare -A LOG_LEVEL_VALUES=(
+  ["ERROR"]=0
+  ["WARNING"]=1
+  ["INFO"]=2
+  ["DEBUG"]=3
+  ["TRACE"]=4
+)
+
+# Default log level mapping by event type
+# If --level is not specified, assign based on event type
+declare -A DEFAULT_EVENT_LEVELS=(
+  ["activation"]="INFO"
+  ["activation_step"]="DEBUG"
+  ["checkpoint_write"]="DEBUG"
+  ["routing_decision"]="INFO"
+  ["specialist_invocation"]="INFO"
+  ["specialist_completion"]="INFO"
+  ["specialist_execution"]="INFO"
+  ["problem"]="WARNING"
+  ["validation"]="WARNING"
+  ["error"]="ERROR"
+)
+
+# Set default level if not specified
+if [[ -z "$LEVEL" ]]; then
+  if [[ -n "${DEFAULT_EVENT_LEVELS[$EVENT_TYPE]:-}" ]]; then
+    LEVEL="${DEFAULT_EVENT_LEVELS[$EVENT_TYPE]}"
+  else
+    LEVEL="INFO"  # Default for unknown event types
+  fi
+fi
+
+# Validate log level
+if [[ -z "${LOG_LEVEL_VALUES[$LEVEL]:-}" ]]; then
+  echo "ERROR: Invalid log level: $LEVEL. Valid levels: ERROR, WARNING, INFO, DEBUG, TRACE" >&2
   exit 2
 fi
 
@@ -187,6 +240,104 @@ if [[ -n "$RESPONSE" ]]; then
   RESPONSE=$(sanitize_yaml_field "$RESPONSE")
 fi
 
+# yq binary detection with multiple fallbacks
+find_yq_binary() {
+  # Check environment variable first
+  if [[ -n "${YQ_PATH:-}" ]] && [[ -x "$YQ_PATH" ]]; then
+    echo "$YQ_PATH"
+    return 0
+  fi
+
+  # Check common locations in order of preference
+  local locations=(
+    "$HOME/yq"
+    "$HOME/.local/bin/yq"
+    "/usr/local/bin/yq"
+    "/usr/bin/yq"
+    "./yq"
+  )
+
+  for location in "${locations[@]}"; do
+    if [[ -x "$location" ]]; then
+      echo "$location"
+      return 0
+    fi
+  done
+
+  # Check PATH
+  if command -v yq &>/dev/null; then
+    command -v yq
+    return 0
+  fi
+
+  # yq not found
+  echo ""
+  return 1
+}
+
+# Calculate string similarity using Levenshtein distance algorithm
+# Returns similarity percentage (0-100)
+calculate_string_similarity() {
+  local str1="$1"
+  local str2="$2"
+
+  # Normalize strings: lowercase, remove extra spaces
+  str1=$(echo "$str1" | tr '[:upper:]' '[:lower:]' | tr -s ' ')
+  str2=$(echo "$str2" | tr '[:upper:]' '[:lower:]' | tr -s ' ')
+
+  local len1=${#str1}
+  local len2=${#str2}
+
+  # If either string is empty, similarity is 0
+  if [[ $len1 -eq 0 ]] || [[ $len2 -eq 0 ]]; then
+    echo 0
+    return
+  fi
+
+  # For performance, use a simpler algorithm for long strings
+  # If strings are very long (>200 chars), use word-based similarity
+  if [[ $len1 -gt 200 ]] || [[ $len2 -gt 200 ]]; then
+    # Word-based similarity: count common words
+    local words1=($str1)
+    local words2=($str2)
+    local common=0
+    for word in "${words1[@]}"; do
+      if [[ " ${words2[@]} " =~ " ${word} " ]]; then
+        common=$((common + 1))
+      fi
+    done
+    local total=${#words1[@]}
+    if [[ $total -eq 0 ]]; then
+      echo 0
+      return
+    fi
+    local similarity=$((common * 100 / total))
+    echo $similarity
+    return
+  fi
+
+  # Levenshtein distance calculation for shorter strings
+  local i j cost
+
+  # Use a simpler approach: character-by-character comparison
+  local max_len=$len1
+  if [[ $len2 -gt $max_len ]]; then
+    max_len=$len2
+  fi
+
+  local matches=0
+  for ((i=0; i<max_len; i++)); do
+    if [[ $i -lt $len1 ]] && [[ $i -lt $len2 ]]; then
+      if [[ "${str1:$i:1}" == "${str2:$i:1}" ]]; then
+        matches=$((matches + 1))
+      fi
+    fi
+  done
+
+  local similarity=$((matches * 100 / max_len))
+  echo $similarity
+}
+
 # File locking functions to prevent race conditions
 # Uses flock with timeout to prevent deadlocks
 LOCK_TIMEOUT=30  # seconds
@@ -240,41 +391,6 @@ validate_permissions() {
   return 0
 }
 
-# yq binary detection with multiple fallbacks
-find_yq_binary() {
-  # Check environment variable first
-  if [[ -n "${YQ_PATH:-}" ]] && [[ -x "$YQ_PATH" ]]; then
-    echo "$YQ_PATH"
-    return 0
-  fi
-
-  # Check common locations in order of preference
-  local locations=(
-    "$HOME/yq"
-    "$HOME/.local/bin/yq"
-    "/usr/local/bin/yq"
-    "/usr/bin/yq"
-    "./yq"
-  )
-
-  for location in "${locations[@]}"; do
-    if [[ -x "$location" ]]; then
-      echo "$location"
-      return 0
-    fi
-  done
-
-  # Check PATH
-  if command -v yq &>/dev/null; then
-    command -v yq
-    return 0
-  fi
-
-  # yq not found
-  echo ""
-  return 1
-}
-
 # Default matrix dir: scripts/ -> deus-ex-machina/ -> skills/ -> .devin/ -> matrix root
 if [[ -z "$MATRIX_DIR" ]]; then
   # Check if _brain symlink exists in current directory (active project)
@@ -289,9 +405,127 @@ if [[ -z "$MATRIX_DIR" ]]; then
   fi
 fi
 
+# Read configured log level from brain/config.yaml
+CONFIG_FILE="$MATRIX_DIR/brain/config.yaml"
+CONFIGURED_LOG_LEVEL="INFO"  # Default if not configured
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  # Try to extract log_level from config using grep (yq not available yet)
+  CONFIGURED_LOG_LEVEL=$(grep -E '^log_level:' "$CONFIG_FILE" 2>/dev/null | sed 's/log_level:[[:space:]]*//' | tr -d '"' | tr -d "'" || echo "INFO")
+  # Validate the configured level
+  if [[ -z "${LOG_LEVEL_VALUES[$CONFIGURED_LOG_LEVEL]:-}" ]]; then
+    CONFIGURED_LOG_LEVEL="INFO"  # Fallback to default if invalid
+  fi
+fi
+
 LOG_FILE="$MATRIX_DIR/brain/state/work-process-log.yaml"
 ARCHIVE_DIR="$MATRIX_DIR/brain/state/work-process-log-archive"
 LOCK_FILE="$MATRIX_DIR/brain/state/work-process-log.lock"
+
+# Filter by log level
+# Only write log if event level is <= configured level (lower number = higher priority)
+EVENT_LEVEL_VALUE="${LOG_LEVEL_VALUES[$LEVEL]}"
+CONFIGURED_LEVEL_VALUE="${LOG_LEVEL_VALUES[$CONFIGURED_LOG_LEVEL]}"
+
+if [[ $EVENT_LEVEL_VALUE -gt $CONFIGURED_LEVEL_VALUE ]]; then
+  # Event level is too verbose, skip writing
+  exit 0
+fi
+
+# Checkpoint Intelligence: Detect and filter redundant checkpoints
+check_checkpoint_similarity() {
+  local current_details="$1"
+  local current_specialist="${2:-}"
+  local log_file="$3"
+  local time_window_minutes=5
+
+  # Only apply to checkpoint_write events
+  if [[ "$EVENT_TYPE" != "checkpoint_write" ]]; then
+    return 1  # Not a checkpoint, allow writing
+  fi
+
+  # Calculate timestamp threshold (5 minutes ago)
+  local timestamp_threshold=$(date -d "$time_window_minutes minutes ago" -Iseconds 2>/dev/null || date -v-${time_window_minutes}M -Iseconds 2>/dev/null)
+  if [[ -z "$timestamp_threshold" ]]; then
+    # If date calculation fails, allow writing (fail-safe)
+    return 1
+  fi
+
+  # Read recent checkpoint entries from log file
+  if [[ ! -f "$log_file" ]]; then
+    return 1  # No log file exists, allow writing
+  fi
+
+  # Use yq to extract recent checkpoint_write entries within time window
+  # This is more reliable than grep parsing
+  local yq_bin=$(find_yq_binary)
+  if [[ -z "$yq_bin" ]]; then
+    # Fallback to allow writing if yq not available
+    return 1
+  fi
+
+  # Extract all checkpoint_write entries with their timestamps and details
+  # Use yq to filter by timestamp and extract relevant fields
+  local recent_checkpoints=$("$yq_bin" eval '.entries[] | select(.event_type == "checkpoint_write") | select(.timestamp >= "'"$timestamp_threshold"'")' "$log_file" 2>/dev/null || echo "")
+
+  if [[ -z "$recent_checkpoints" ]]; then
+    return 1  # No recent checkpoints found, allow writing
+  fi
+
+  # Parse each checkpoint entry and check similarity
+  local entry_count=0
+  local in_entry=0
+  local entry_timestamp=""
+  local entry_details=""
+  local entry_specialist=""
+
+  while IFS= read -r line; do
+    # Detect timestamp line
+    if [[ "$line" =~ ^timestamp: ]]; then
+      # Process previous entry if exists
+      if [[ $in_entry -eq 1 ]] && [[ -n "$entry_details" ]]; then
+        # Calculate similarity
+        local similarity=$(calculate_string_similarity "$current_details" "$entry_details")
+        if [[ $similarity -ge 80 ]]; then
+          # Check specialist match if current specialist is specified
+          if [[ -z "$current_specialist" ]] || [[ "$entry_specialist" == "$current_specialist" ]]; then
+            echo "SKIP: Redundant checkpoint detected (similarity: ${similarity}%, timestamp: ${entry_timestamp})" >&2
+            return 0  # Skip writing this checkpoint
+          fi
+        fi
+      fi
+      # Start new entry
+      entry_timestamp=$(echo "$line" | sed 's/timestamp: "\(.*\)"/\1/')
+      entry_details=""
+      entry_specialist=""
+      in_entry=1
+    # Extract details
+    elif [[ "$line" =~ ^details: ]] && [[ $in_entry -eq 1 ]]; then
+      entry_details=$(echo "$line" | sed 's/details: "\(.*\)"/\1/')
+    # Extract specialist if present
+    elif [[ "$line" =~ ^specialist: ]] && [[ $in_entry -eq 1 ]]; then
+      entry_specialist=$(echo "$line" | sed 's/specialist: "\(.*\)"/\1/')
+    fi
+  done <<< "$recent_checkpoints"
+
+  # Process last entry
+  if [[ $in_entry -eq 1 ]] && [[ -n "$entry_details" ]]; then
+    local similarity=$(calculate_string_similarity "$current_details" "$entry_details")
+    if [[ $similarity -ge 80 ]]; then
+      if [[ -z "$current_specialist" ]] || [[ "$entry_specialist" == "$current_specialist" ]]; then
+        echo "SKIP: Redundant checkpoint detected (similarity: ${similarity}%, timestamp: ${entry_timestamp})" >&2
+        return 0  # Skip writing this checkpoint
+      fi
+    fi
+  fi
+
+  return 1  # No similar checkpoint found, allow writing
+}
+
+# Apply checkpoint similarity check before writing
+if check_checkpoint_similarity "$DETAILS" "$SPECIALIST" "$LOG_FILE"; then
+  exit 0  # Skip writing redundant checkpoint
+fi
 
 # Generate timestamp
 TIMESTAMP=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S%z")
@@ -299,6 +533,7 @@ TIMESTAMP=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S%z")
 # Start building log entry
 LOG_ENTRY="  - timestamp: \"$TIMESTAMP\"\n"
 LOG_ENTRY+="    event_type: \"$EVENT_TYPE\"\n"
+LOG_ENTRY+="    level: \"$LEVEL\"\n"
 LOG_ENTRY+="    status: \"$STATUS\"\n"
 LOG_ENTRY+="    details: \"$DETAILS\"\n"
 # Quote user_request if present, otherwise use YAML null
@@ -310,6 +545,10 @@ fi
 
 # Add event-specific fields
 case "$EVENT_TYPE" in
+  activation)
+    # No additional fields for consolidated activation event
+    # All information should be in details field
+    ;;
   activation_step)
     if [[ -n "$STEP_NUMBER" ]]; then
       LOG_ENTRY+="    step_number: $STEP_NUMBER\n"
@@ -367,6 +606,26 @@ case "$EVENT_TYPE" in
     fi
     if [[ -n "$RESPONSE" ]]; then
       LOG_ENTRY+="    response_summary: \"$RESPONSE\"\n"
+    fi
+    ;;
+  specialist_execution)
+    if [[ -n "$SPECIALIST" ]]; then
+      LOG_ENTRY+="    specialist: \"$SPECIALIST\"\n"
+    fi
+    if [[ -n "$INVOCATION_METHOD" ]]; then
+      LOG_ENTRY+="    invocation_method: \"$INVOCATION_METHOD\"\n"
+    fi
+    if [[ -n "$CONTEXT" ]]; then
+      LOG_ENTRY+="    context_passed: \"$CONTEXT\"\n"
+    fi
+    if [[ -n "$OUTCOME" ]]; then
+      LOG_ENTRY+="    outcome: \"$OUTCOME\"\n"
+    fi
+    if [[ -n "$DURATION" ]]; then
+      LOG_ENTRY+="    duration_seconds: $DURATION\n"
+    fi
+    if [[ -n "$FINDINGS" ]]; then
+      LOG_ENTRY+="    findings_summary: \"$FINDINGS\"\n"
     fi
     ;;
   checkpoint_write)

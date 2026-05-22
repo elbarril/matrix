@@ -1,7 +1,7 @@
 ---
 name: sentinel
 description: "Security and vulnerability detection specialist - protects systems and data"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

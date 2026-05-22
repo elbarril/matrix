@@ -1,7 +1,7 @@
 ---
 name: neo
 description: "Final confirmation communication specialist - generates confirmations for task completion, deploy announcements, error fix verification, and implementation certainty"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

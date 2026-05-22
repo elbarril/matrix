@@ -41,7 +41,7 @@ Data includes reference materials, templates, and static information that agents
    - matrix-init-brain-state.sh: OK
 
 **System State:**
-- All 11 agents using swe-1-5 model consistently
+- All 11 agents using swe-1-6 model consistently
 - All scripts have _brain-aware pattern for portability
 - Configuration valid and active project set (providence)
 - 9 projects registered in registry

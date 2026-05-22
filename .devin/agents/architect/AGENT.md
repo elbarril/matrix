@@ -1,7 +1,7 @@
 ---
 name: architect
 description: "Code review and quality assurance specialist - ensures best practices and quality standards"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

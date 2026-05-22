@@ -1,7 +1,7 @@
 ---
 name: wachowski
 description: "Matrix system specialist - handles all Matrix workspace and system update tasks with full specialist capabilities"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

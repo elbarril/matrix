@@ -336,7 +336,9 @@ The system maintains coherence through:
 
 - **Sacred Foundation**: Master agent's unchangeable core values
 - **Clear Boundaries**: Each specialist has defined scope
-- **Silent Operation**: Deus Ex Machina operates silently, logging all actions to work-process-log.yaml for traceability, only communicating final confirmations via Neo and problem communications via Cypher
+- **Specialist Equality**: All 11 specialists have equal importance, routing is based on domain expertise
+- **Silent Operation**: Deus Ex Machina operates silently, logging all actions to work-process-log.yaml for traceability
+- **Communication Delegation**: Final confirmations via Neo, problems via Cypher, all other work performed silently
 - **File-Based State**: All interactions are traceable and recoverable
 
 ## Evolution Path

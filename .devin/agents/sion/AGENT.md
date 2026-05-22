@@ -1,7 +1,7 @@
 ---
 name: sion
 description: "Documentation and knowledge management specialist - creates and organizes documentation"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

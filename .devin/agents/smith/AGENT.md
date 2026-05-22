@@ -1,7 +1,7 @@
 ---
 name: smith
 description: "Bug detection and analysis specialist - finds, diagnoses and resolves technical issues"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

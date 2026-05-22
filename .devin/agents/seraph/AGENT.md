@@ -1,7 +1,7 @@
 ---
 name: seraph
 description: "Request clarification and interpretation specialist - analyzes, clarifies and reformulates user requests for improved routing"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep

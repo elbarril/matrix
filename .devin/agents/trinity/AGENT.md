@@ -1,7 +1,7 @@
 ---
 name: trinity
 description: "Code design and architecture specialist - designs and implements technical solutions"
-model: swe-1-5
+model: swe-1-6
 allowed-tools:
   - read
   - grep
