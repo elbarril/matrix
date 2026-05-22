@@ -84,9 +84,22 @@ add_project() {
     local name="$1"
     local path_or_url="$2"
     
-    if [[ -z "$name" || -z "$path_or_url" ]]; then
-        log_error "Usage: matrix add <name> <path-or-url>"
+    if [[ -z "$name" ]]; then
+        log_error "Usage: matrix add <name> [path-or-url]"
         return 1
+    fi
+    
+    # If no path provided, detect current directory and ask user
+    if [[ -z "$path_or_url" ]]; then
+        local current_dir=$(pwd)
+        log_info "No path provided. Current directory: $current_dir"
+        echo -n "Do you want to use this path? [y/N]: "
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            log_warning "Cancelled by user"
+            return 1
+        fi
+        path_or_url="$current_dir"
     fi
     
     # Check if project already exists
@@ -149,6 +162,13 @@ select_project() {
     fi
     
     IFS=: read -r proj_name proj_path proj_type <<< "$project_info"
+    
+    # First, deselect current project if any
+    local active=$(read_context)
+    if [[ "$active" != "null" && -n "$active" && "$active" != "$name" ]]; then
+        log_info "Deselecting current project '$active'..."
+        deselect_project
+    fi
     
     # Expand tilde in path
     proj_path="${proj_path/#\~/$HOME}"
@@ -296,8 +316,8 @@ show_help() {
     echo
     echo "Commands:"
     echo "  list                    List all registered projects"
-    echo "  add <name> <path>       Add a new project to registry"
-    echo "  select <name>           Set active project and create brain symlink"
+    echo "  add <name> [path]       Add a new project to registry (path optional, uses current dir if not provided)"
+    echo "  select <name>           Set active project and create brain symlink (deselects current first)"
     echo "  deselect                Clear active project and remove brain symlink"
     echo "  status                  Show current Matrix status"
     echo "  checkpoint \"<note>\"    Write a timestamped checkpoint"
@@ -305,6 +325,7 @@ show_help() {
     echo
     echo "Examples:"
     echo "  matrix add myproject /path/to/project"
+    echo "  matrix add myproject              (uses current directory)"
     echo "  matrix select myproject"
     echo "  matrix checkpoint \"Completed bugfix for client X\""
 }

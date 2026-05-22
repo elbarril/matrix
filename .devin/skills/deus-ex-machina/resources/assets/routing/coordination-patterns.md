@@ -49,3 +49,11 @@
 - Route to Morpheus for documentation plan
 - Route to Sion with plan
 - Synthesize results
+
+## Pattern 7: Problem Communication (Any Specialist + Cypher)
+
+- Trigger: Any specialist detects error, failure, or issue during execution
+- Route to Cypher for problem communication
+- Cypher communicates what went wrong, why it matters, and what needs to happen next
+- Even if many things were done well, if something is wrong, Cypher communicates it
+- Synthesize results with problem context

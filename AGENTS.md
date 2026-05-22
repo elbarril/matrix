@@ -106,8 +106,10 @@ Deus Ex Machina routes to specialists based on these signals:
 - **Architect**: Code review, quality assurance, best practices
 - **Sentinel**: Security, vulnerability detection, data protection
 - **Sion**: Documentation, knowledge management, organization
-- **Neo**: Content creation, writing, communication
+- **Neo**: Content creation, writing, communication (final confirmations and success)
+- **Cypher**: Problem communication, error reporting, when things are going wrong
 - **Seraph**: Request clarification, interpretation, and reformulation for improved routing
+- **Wachowski**: Matrix system specialist - handles all Matrix workspace and system update tasks with full specialist capabilities (self-sufficient, no coordination with other specialists)
 
 ### Multi-Specialist Coordination
 
@@ -180,8 +182,10 @@ All work processes are logged to `brain/state/work-process-log.yaml`.
 - **Architect**: Code review, quality assurance, best practices
 - **Sentinel**: Security analysis, vulnerability detection, protection
 - **Sion**: Documentation creation, knowledge organization
-- **Neo**: Content writing, communication, explanation
+- **Neo**: Content writing, communication, explanation (final confirmations and success)
+- **Cypher**: Problem communication, error reporting, when things are going wrong
 - **Seraph**: Request clarification, interpretation, and reformulation for improved routing
+- **Wachowski**: Matrix system specialist - handles all Matrix workspace and system update tasks with full specialist capabilities (self-sufficient, no coordination with other specialists), proactive improvement proposals
 
 ## State Management
 
@@ -332,7 +336,7 @@ The system maintains coherence through:
 
 - **Sacred Foundation**: Master agent's unchangeable core values
 - **Clear Boundaries**: Each specialist has defined scope
-- **Transparent Routing**: Users always know what's happening
+- **Silent Operation**: Deus Ex Machina operates silently, logging all actions to work-process-log.yaml for traceability, only communicating final confirmations via Neo and problem communications via Cypher
 - **File-Based State**: All interactions are traceable and recoverable
 
 ## Evolution Path
@@ -342,7 +346,7 @@ The system maintains coherence through:
 - No databases (file-based only)
 - No authentication or web UI
 - No MCP servers or multi-session worktrees
-- Maximum 5 active specialists initially (expanded to 9 for this implementation)
+- Maximum 11 active specialists (Smith, Morpheus, Oracle, Trinity, Architect, Sentinel, Sion, Neo, Cypher, Seraph, Wachowski)
 - Single-user, single-session design
 
 ### Future Expansion

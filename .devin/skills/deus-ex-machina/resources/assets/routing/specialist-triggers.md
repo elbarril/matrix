@@ -39,10 +39,22 @@ Specialists are invoked using **ONLY** the `run_subagent` command with the appro
 
 ## Neo
 
-- **Domain**: Content creation, writing, communication
+- **Domain**: Content creation, writing, communication (final confirmations and success)
 - **Trigger keywords**: "escribe", "redacta", "comunica", "explica para otros", "contenido", "texto"
+
+## Cypher
+
+- **Domain**: Problem communication, error reporting, when things are going wrong
+- **Trigger keywords**: "error", "fallo", "problema", "algo salió mal", "no funcionó", "falló", "issue", "bug report", "error message", "something went wrong", "problema grave", "crítico", "blocker"
 
 ## Seraph
 
 - **Domain**: Request clarification, interpretation, and reformulation
 - **Trigger keywords**: "clarifica", "entiende mejor", "reformula", "no entiendo", "confuso", "ambiguo", "estructura"
+
+## Wachowski
+
+- **Domain**: Matrix system specialist - handles all Matrix workspace and system update tasks with full specialist capabilities
+- **Trigger keywords**: "matrix", "actualizar matrix", "update matrix", "mejorar matrix", "matrix workspace", "sistema matrix"
+- **Special trigger condition**: When request originates from Matrix workspace (/home/emiliano/www/emisrepos/matrix)
+- **Note**: Wachowski is a self-sufficient specialist with all specialist capabilities (code, debugging, planning, research, security, documentation, architecture, quality assurance) - no coordination with other specialists needed
