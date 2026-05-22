@@ -400,8 +400,9 @@ if [[ -z "$YQ_BIN" ]]; then
 fi
 
 # Check log rotation (keep last 100 entries) using yq for YAML-aware counting
+# Changed from >= 100 to > 100 to avoid rotation when exactly at 100
 ENTRY_COUNT=$("$YQ_BIN" eval '.entries | length' "$LOG_FILE" 2>/dev/null || echo "0")
-if [[ $ENTRY_COUNT -ge 100 ]]; then
+if [[ $ENTRY_COUNT -gt 100 ]]; then
   # Archive old logs
   mkdir -p "$ARCHIVE_DIR"
   set_secure_permissions "$ARCHIVE_DIR" "dir"
@@ -455,4 +456,18 @@ mv "$TEMP_FILE" "$LOG_FILE"
 set_secure_permissions "$LOG_FILE" "file"
 
 echo "OK: Log entry written"
+
+# Optional: Trigger checkpoint cleanup if this is a checkpoint_write event
+# This keeps checkpoint count manageable without requiring separate cron jobs
+if [[ "$EVENT_TYPE" == "checkpoint_write" ]]; then
+  CHECKPOINT_DIR="$MATRIX_DIR/brain/state/checkpoints"
+  if [[ -d "$CHECKPOINT_DIR" ]]; then
+    CHECKPOINT_COUNT=$(ls -1 "$CHECKPOINT_DIR"/*.yaml 2>/dev/null | wc -l)
+    # Keep last 30 checkpoints, remove older ones
+    if [[ $CHECKPOINT_COUNT -gt 30 ]]; then
+      ls -1t "$CHECKPOINT_DIR"/*.yaml 2>/dev/null | tail -n +$((CHECKPOINT_COUNT - 30 + 1)) | xargs -r rm -f
+    fi
+  fi
+fi
+
 exit 0
