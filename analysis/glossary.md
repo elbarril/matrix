@@ -893,3 +893,36 @@ Possible Meaning:
 Mapped Abstractions:
 * LLM-driven state machine
 * Natural language orchestration
+
+### LLM-Evaluated State Machine
+
+Status: INFERRED
+Confidence: HIGH
+
+Observed References:
+* `<activation>` block in `SKILL.md`
+* `routing-rules.md`
+
+Possible Meaning:
+* A system architecture where state transitions (e.g., executing validation scripts, picking an agent, logging) are not hardcoded in Python/Bash loops, but are instead sequentially evaluated and executed by an LLM strictly following a prompt.
+
+Mapped Abstractions:
+* Prompt-driven orchestration
+* LLM CPU
+
+### File-System as Database (FSaDB)
+
+Status: INFERRED
+Confidence: HIGH
+
+Observed References:
+* `brain/state/`
+* `workspace.yaml`
+* `.registry.json`
+
+Possible Meaning:
+* The deliberate architectural choice to avoid RDBMS or SQLite in favor of storing all system state, logs, and contexts as raw YAML/JSON files, allowing easy inspection and symlink portability.
+
+Mapped Abstractions:
+* File-based State
+* Flat-file memory
