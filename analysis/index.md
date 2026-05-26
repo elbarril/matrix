@@ -28,7 +28,7 @@ Reverse engineer the orchestration architecture, execution model, provider coupl
 | Phase 1 — Repository Mapping     | Complete  | phase1_repository_mapping.md     |
 | Phase 2 — Execution Flow         | Complete  | phase2_execution_flow.md         |
 | Phase 3 — Agent Analysis         | Complete  | phase3_agents.md                 |
-| Phase 4 — Provider Coupling      | Pending   | phase4_provider_coupling.md      |
+| Phase 4 — Provider Coupling      | Complete  | phase4_provider_coupling.md      |
 | Phase 5 — State & Memory         | Pending   | phase5_state_memory.md           |
 | Phase 6 — Prompt Architecture    | Pending   | phase6_prompt_architecture.md    |
 | Phase 7 — Architecture Synthesis | Pending   | phase7_architecture_synthesis.md |
@@ -57,3 +57,7 @@ Reverse engineer the orchestration architecture, execution model, provider coupl
 * [Phase 3 Agents Analysis](phase3_agents.md)
 * [Agent Dependency Graph](agent_dependency_graph.md)
 * [Agent Capabilities JSON](agent_capabilities.json)
+
+### Phase 4 Artifacts
+* [Phase 4 Provider Coupling](phase4_provider_coupling.md)
+* [Provider Coupling JSON](provider_coupling.json)

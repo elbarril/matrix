@@ -825,3 +825,39 @@ Possible Meaning:
 Mapped Abstractions:
 * Autonomous agent loop
 * Self-directed executor
+
+### run_subagent
+
+Status: EXPLICIT
+Confidence: HIGH
+
+Observed References:
+* `.devin/agents/wachowski/AGENT.md`
+* `specialist-specific-rules.md`
+* `specialist-triggers.md`
+
+Possible Meaning:
+* Proprietary Devin tool used to spawn specialist agents as stateless sub-tasks.
+* The sole mechanism Deus Ex Machina uses to invoke specialists.
+
+Mapped Abstractions:
+* Provider-specific subagent router
+* Thread spawner
+* Task delegator
+
+### todo_write
+
+Status: EXPLICIT
+Confidence: HIGH
+
+Observed References:
+* `.devin/agents/trinity/AGENT.md`
+* `.devin/agents/smith/AGENT.md`
+* `SKILL.md` (Deus Ex Machina)
+
+Possible Meaning:
+* Proprietary Devin tool for creating and managing a structured task list in the agent's UI.
+
+Mapped Abstractions:
+* Provider-specific task manager
+* UI state integration

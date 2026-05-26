@@ -1,0 +1,43 @@
+{
+  "provider": "Devin / Windsurf",
+  "dependencies": {
+    "runtime": [
+      "bash (shell execution)",
+      "jq (JSON processing in bin/matrix)",
+      "sed, grep, mktemp, date (POSIX utils)"
+    ],
+    "filesystem": [
+      "absolute paths mapping to ~/www/emisrepos/matrix",
+      "_brain symlinking capability",
+      "POSIX file locking (flock in system-errors.log lock)"
+    ],
+    "devin_specific_tools": [
+      "run_subagent",
+      "read_subagent",
+      "skill invoke",
+      "todo_write",
+      "ask_user_question",
+      "mcp_call_tool (assumed if MCP servers are used, though Matrix core focuses on file states)"
+    ],
+    "agent_format": [
+      "Markdown files with YAML frontmatter",
+      "XML blocks for persona, activation, domain",
+      "allowed-tools YAML array",
+      "permissions YAML block (Read(**), Write(**))"
+    ]
+  },
+  "abstraction_assessment": {
+    "portability": "Moderate to High Effort",
+    "blockers": [
+      "run_subagent tool is a proprietary Devin capability for spawning stateless subagents. Other runtimes like Claude Code or OpenHands have different subagent mechanisms.",
+      "The 'skill' construct (.devin/skills vs .devin/agents) is native to Devin.",
+      "Permissions strings 'Read(**)', 'Write(matrix/**)' are parsed by the Devin/Windsurf runtime."
+    ],
+    "portable_elements": [
+      "bin/matrix bash orchestration",
+      "File-based state management (brain/state, .context.yaml, checkpoints)",
+      "Markdown prompt formats (easily injected into any LLM context)",
+      "Routing logic documented in routing-rules.md"
+    ]
+  }
+}
