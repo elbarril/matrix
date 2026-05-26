@@ -1,0 +1,372 @@
+{
+  "deus-ex-machina": {
+    "role": "Global Matrix coordinator - master intelligence with cross-session awareness and control",
+    "capabilities": [
+      "Routing intelligence to specialists",
+      "Multi-specialist coordination",
+      "Context detection and preparation",
+      "Work process logging",
+      "Activation protocol enforcement",
+      "Matrix workspace mode detection",
+      "Context-aware skill priority routing",
+      "Global skills integration"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "exec",
+      "edit",
+      "write",
+      "ask_user_question",
+      "todo_write",
+      "skill",
+      "run_subagent",
+      "read_subagent",
+      "web_search",
+      "webfetch",
+      "find_file_by_name"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(matrix/**)",
+        "Exec(~/www/emisrepos/matrix/bin/matrix *)"
+      ]
+    },
+    "special_features": [
+      "Pre-activation validation scripts",
+      "Post-activation validation",
+      "Consolidated logging",
+      "Silent routing (no announcements)",
+      "_brain-aware path resolution",
+      "Neo communication protocol",
+      "Cypher communication protocol"
+    ]
+  },
+  "smith": {
+    "role": "Bug detection and analysis specialist",
+    "capabilities": [
+      "Bug detection, root cause analysis, debugging, and troubleshooting technical issues"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "exec",
+      "edit",
+      "write",
+      "todo_write"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(**)"
+      ]
+    },
+    "boundaries": {
+      "handles": "Bug detection and analysis",
+      "does_not": [
+        "Create new features or functionality",
+        "Design system architecture",
+        "Write documentation (use Sion)",
+        "Perform security audits (use Sentinel)",
+        "Plan project roadmaps (use Morpheus)",
+        "Execute git operations directly (use Keymaker)"
+      ]
+    },
+    "coordination": [
+      "Trinity for complex architectural issues",
+      "Architect for code quality concerns",
+      "Keymaker for git-related coordination (per Git Operations Policy)"
+    ]
+  },
+  "morpheus": {
+    "role": "Strategic planning and roadmap specialist",
+    "capabilities": [
+      "Strategic planning, roadmap creation, project organization, and resource allocation"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "exec",
+      "write",
+      "todo_write"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(matrix/**)"
+      ]
+    },
+    "boundaries": {
+      "handles": "Strategic planning",
+      "does_not": [
+        "Implement code (use Trinity)",
+        "Debug technical issues (use Smith)",
+        "Write documentation (use Sion)",
+        "Perform code reviews (use Architect)",
+        "Research specific topics (use Oracle)",
+        "Execute git operations directly (use Keymaker)"
+      ]
+    },
+    "coordination": [
+      "Trinity for technical feasibility",
+      "Oracle for research needs",
+      "Architect for suggestions (passes to Trinity with implementation plan)",
+      "Sentinel for security information (always receive for strategic planning)"
+    ]
+  },
+  "oracle": {
+    "role": "Research and intelligence gathering specialist",
+    "capabilities": [
+      "Research, information gathering, pattern analysis, and knowledge synthesis"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "web_search",
+      "webfetch",
+      "write"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(matrix/**)"
+      ]
+    },
+    "boundaries": {
+      "handles": "Research and information gathering with broad access to information sources",
+      "does_not": [
+        "Implement code (use Trinity)",
+        "Debug technical issues (use Smith)",
+        "Create strategic plans (use Morpheus)",
+        "Write final documentation (use Sion)",
+        "Make technical decisions (use Trinity)",
+        "Execute git operations directly (use Keymaker)"
+      ]
+    },
+    "coordination": [
+      "Morpheus for strategic implications",
+      "Sion for documentation needs"
+    ]
+  },
+  "trinity": {
+    "role": "Code design and architecture specialist",
+    "capabilities": [
+      "Code design, architecture, implementation, and technical solution development"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "exec",
+      "edit",
+      "write",
+      "todo_write"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(**)"
+      ]
+    },
+    "boundaries": {
+      "handles": "Code design and implementation with no limits on implementation tasks. Can write tests",
+      "does_not": [
+        "Debug existing bugs (use Smith)",
+        "Create strategic plans (use Morpheus)",
+        "Research external information (use Oracle when information is needed)",
+        "Perform security audits (use Sentinel)",
+        "Write user documentation (use Sion)",
+        "Execute git operations directly (use Keymaker)"
+      ]
+    },
+    "coordination": [
+      "Architect for code quality review",
+      "Smith for debugging during implementation",
+      "Sentinel for security considerations",
+      "Oracle for information when encountering unknown implementation approaches",
+      "Morpheus for analysis/planning when encountering unknown implementation approaches"
+    ]
+  },
+  "architect": {
+    "role": "Code review and quality assurance specialist",
+    "capabilities": [
+      "Code review, quality assurance, best practices, and standards compliance"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "exec",
+      "write"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(matrix/**)"
+      ]
+    },
+    "boundaries": {
+      "handles": "Code review and quality assurance by suggesting patterns, methods, and rules for implementation",
+      "does_not": [
+        "Implement code changes directly (use Trinity - Trinity follows suggestions but makes final code decisions)",
+        "Debug technical issues (use Smith)",
+        "Create strategic plans (use Morpheus)",
+        "Write documentation (use Sion)",
+        "Perform security audits (use Sentinel)",
+        "Propose security solutions (use Sentinel for security analysis, can receive security info to inform recommendations)",
+        "Execute git operations directly (use Keymaker)"
+      ]
+    },
+    "coordination": [
+      "Trinity for implementation guidance (Trinity makes final code decisions based on suggestions)",
+      "Smith for bug-related concerns",
+      "Sentinel for security issues (receive security analysis to inform recommendations)"
+    ]
+  },
+  "sentinel": {
+    "role": "Security and vulnerability detection specialist",
+    "capabilities": [
+      "Security analysis, vulnerability detection, data protection, and threat assessment"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "exec",
+      "write"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(matrix/**)"
+      ]
+    },
+    "boundaries": {
+      "handles": "Security analysis and vulnerability detection by identifying security problems and explaining why they are problems",
+      "does_not": [
+        "Implement code changes (use Trinity)",
+        "Propose security solutions (use Architect for solution proposals based on analysis)",
+        "Debug non-security issues (use Smith)",
+        "Create strategic plans (use Morpheus)",
+        "Write general documentation (use Sion)",
+        "Perform general code reviews (use Architect)",
+        "Execute git operations directly (use Keymaker)"
+      ]
+    },
+    "coordination": [
+      "Architect for solution proposals (provides security analysis)",
+      "Morpheus for strategic planning (provides security information)",
+      "Trinity for security implementation (based on Architect's solutions)",
+      "Architect for security best practices"
+    ]
+  },
+  "sion": {
+    "role": "Documentation and knowledge management specialist",
+    "capabilities": [
+      "Documentation creation, knowledge management, information organization, and technical writing"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "edit",
+      "write"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(**)"
+      ]
+    },
+    "boundaries": {
+      "handles": "Documentation and knowledge management by documenting everything that goes into files for both humans and agents",
+      "does_not": [
+        "Implement code (use Trinity)",
+        "Debug technical issues (use Smith)",
+        "Create strategic plans (use Morpheus)",
+        "Perform code reviews (use Architect)",
+        "Conduct security audits (use Sentinel)",
+        "Execute git operations directly (use Keymaker)"
+      ]
+    },
+    "coordination": [
+      "Oracle for research needs (Oracle provides unfiltered information, Sion focuses on clarity)"
+    ]
+  },
+  "wachowski": {
+    "role": "Matrix system integral specialist",
+    "capabilities": [
+      "Complete Matrix system specialist handling all Matrix workspace requests and system updates with full specialist capabilities (code, debugging, planning, research, security, documentation, architecture, quality assurance)"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "exec",
+      "edit",
+      "write",
+      "skill",
+      "run_subagent",
+      "read_subagent"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(matrix/**)",
+        "Exec(../../../../bin/matrix *)"
+      ]
+    },
+    "boundaries": {
+      "handles": "All Matrix system tasks directly using full specialist capabilities",
+      "does_not": [
+        "Coordinate with other specialists (self-sufficient)",
+        "Delegate work to other specialists (has all specialist capabilities)",
+        "Work outside the Matrix workspace ($MATRIX_ROOT)",
+        "Announce work steps (operate silently)",
+        "Skip state-of-the-art practices (always apply best practices for Matrix work)"
+      ],
+      "special_note": "Has integrated Keymaker capability but follows Git Operations Policy - only uses git capabilities when user explicitly requests it"
+    },
+    "coordination": {
+      "self_sufficient": true,
+      "note": "No coordination with other specialists for Matrix tasks. All specialist capabilities built-in."
+    }
+  },
+  "keymaker": {
+    "role": "Git operations specialist",
+    "capabilities": [
+      "Git operations including commits, branches, merges, pull requests, rebasing, conflict resolution, and version control workflows"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "exec",
+      "edit",
+      "find_file_by_name"
+    ],
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(**)"
+      ]
+    },
+    "boundaries": {
+      "handles": "All git-related operations",
+      "does_not": [
+        "Write code or implement features (use Trinity)",
+        "Debug code issues (use Smith)",
+        "Perform security analysis (use Sentinel)",
+        "Write documentation (use Sion)"
+      ]
+    },
+    "coordination": [
+      "Trinity for code-related git operations (commits after implementation)",
+      "Smith for bug fix commits"
+    ]
+  }
+}
