@@ -30,7 +30,7 @@ Reverse engineer the orchestration architecture, execution model, provider coupl
 | Phase 3 — Agent Analysis         | Complete  | phase3_agents.md                 |
 | Phase 4 — Provider Coupling      | Complete  | phase4_provider_coupling.md      |
 | Phase 5 — State | Phase 5 — State & Memory         | Pending   | phase5_state_memory.md           | Memory         | Complete  | phase5_state_memory.md           |
-| Phase 6 — Prompt Architecture    | Pending   | phase6_prompt_architecture.md    |
+| Phase 6 — Prompt Architecture    | Complete  | phase6_prompt_architecture.md    |
 | Phase 7 — Architecture Synthesis | Pending   | phase7_architecture_synthesis.md |
 | Phase 8 — Refactor Preparation   | Pending   | phase8_refactor_strategy.md      |
 
@@ -65,3 +65,7 @@ Reverse engineer the orchestration architecture, execution model, provider coupl
 ### Phase 5 Artifacts
 * [Phase 5 State & Memory Analysis](phase5_state_memory.md)
 * [State Flow JSON](state_flow.json)
+
+### Phase 6 Artifacts
+* [Phase 6 Prompt Architecture](phase6_prompt_architecture.md)
+* [Prompt Inventory JSON](prompt_inventory.json)

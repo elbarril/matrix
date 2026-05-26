@@ -877,3 +877,19 @@ Possible Meaning:
 Mapped Abstractions:
 * Ephemeral run state
 * Activation audit artifact
+
+### Prompt-Driven Orchestration
+
+Status: INFERRED
+Confidence: HIGH
+
+Observed References:
+* `routing-rules.md`
+* `SKILL.md` (<activation> block)
+
+Possible Meaning:
+* Control flow and routing logic that exists as natural language instructions parsed by the LLM context, rather than hardcoded in bash/python scripts. The LLM determines execution sequence by reading markdown files.
+
+Mapped Abstractions:
+* LLM-driven state machine
+* Natural language orchestration
