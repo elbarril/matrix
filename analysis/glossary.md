@@ -861,3 +861,19 @@ Possible Meaning:
 Mapped Abstractions:
 * Provider-specific task manager
 * UI state integration
+
+### validation-report.yaml
+
+Status: EXPLICIT
+Confidence: HIGH
+
+Observed References:
+* `brain/state/validation-report.yaml`
+* `AGENTS.md` (Protocol Violation Troubleshooting)
+
+Possible Meaning:
+* An ephemeral file generated post-activation to confirm the agent followed the `<activation>` protocol correctly. Records the user request and missing steps.
+
+Mapped Abstractions:
+* Ephemeral run state
+* Activation audit artifact
