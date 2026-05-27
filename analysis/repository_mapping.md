@@ -61,15 +61,16 @@ matrix/
 │   │   ├── global-skills.yaml  # Global skills configuration
 │   │   └── projects/           # Project-specific configurations
 │   ├── workflows/              # Workflow definitions
-│   ├── data/                   # Reference documentation
 │   └── state/                  # Runtime state
 │       ├── workspace.yaml      # Active projects state
-│       ├── work-process-log.yaml
-│       ├── validation-report.yaml
-│       ├── checkpoints/
+│       ├── work-process-log.jsonl  # Append-only audit trail (JSONL format)
+│       ├── validation-report.json  # Activation validation report (JSON format)
+│       ├── checkpoints.jsonl   # Timestamped checkpoints (JSONL format)
 │       ├── sessions/
-│       ├── system-errors.log
-│       └── work-process-log-archive/
+│       ├── work-process-log-archive/  # Rotated log files
+│       ├── work-process-log-legacy.jsonl  # Legacy YAML→JSONL migration file
+│       ├── work-process-log.lock  # Concurrency lock for logging
+│       └── pas-tools-index.yaml  # PAS tools index
 ├── docs/ (removed)             # Analysis methodology (no longer needed)
 ├── analysis/                   # Analysis artifacts
 ├── clients/                    # GITIGNORED: Pulled project repos
@@ -80,14 +81,12 @@ matrix/
 
 | Directory | Purpose | Confidence |
 |-----------|---------|------------|
-
 | `bin/` | CLI orchestration and project management | HIGH |
 | `.devin/skills/` | Devin skill definitions (master agent) | HIGH |
 | `.devin/agents/` | Devin subagent definitions (specialists) | HIGH |
 | `brain/config/` | System and project configuration | HIGH |
-| `brain/state/` | Runtime state and logging | HIGH |
+| `brain/state/` | Runtime state and logging (JSONL format) | HIGH |
 | `brain/workflows/` | Workflow definitions | HIGH |
-| `brain/data/` | Reference documentation | HIGH |
 | `analysis/` | Analysis artifacts and outputs | HIGH |
 | `clients/` | Gitignored project clones | HIGH |
 
@@ -111,7 +110,7 @@ matrix/
 - Project registry system (.registry.json)
 - Context management (.context.yaml)
 - Brain state structure (brain/state/)
-- Checkpoint system (brain/state/checkpoints/)
+- Checkpoint system (brain/state/checkpoints.jsonl)
 
 **Operations provided**:
 
@@ -209,8 +208,8 @@ matrix/
 **Evidence**:
 
 - brain/state/ contains all runtime state
-- Checkpoints stored as timestamped YAML files
-- Work process log as YAML file
+- Checkpoints stored as JSONL file (O(1) append performance)
+- Work process log as JSONL file (append-only audit trail)
 - Configuration as YAML files
 - No database dependencies in V1 constraints
 
@@ -608,7 +607,7 @@ The `prompts/` directory and `docs/analysis_protocol.md` were used during the re
 
 **Role**: Post-activation validation compliance check  
 **Who references it**: Deus Ex Machina skill (post-activation-validation block)  
-**What it validates**: Activation protocol compliance, writes validation-report.yaml
+**What it validates**: Activation protocol compliance, writes validation-report.json
 
 ### State Management Scripts
 
@@ -616,7 +615,7 @@ The `prompts/` directory and `docs/analysis_protocol.md` were used during the re
 
 **Role**: Initialize brain state directory structure  
 **Who references it**: Deus Ex Machina skill (pre-activation-checks block)  
-**What it does**: Creates required directories in brain/state/
+**What it does**: Creates work-process-log.jsonl if missing, creates validation-report.json if missing, creates checkpoints.jsonl if missing
 
 ### Logging Scripts
 
@@ -624,12 +623,13 @@ The `prompts/` directory and `docs/analysis_protocol.md` were used during the re
 
 **Role**: Work process logging with consolidated event structure  
 **Who references it**: Deus Ex Machina skill (work-process-logging block)  
-**What it does**: Writes structured log entries to work-process-log.yaml  
+**What it does**: Writes structured log entries to work-process-log.jsonl  
 **Features**:
 
 - `_brain`-aware (auto-detects _brain symlink)
 - Consolidated event structure
 - Log level filtering
+- Aggressive filtering (drops routine activation events without errors)
 - File locking for concurrent access
 
 #### matrix-log-metrics.sh
@@ -650,7 +650,9 @@ The `prompts/` directory and `docs/analysis_protocol.md` were used during the re
 
 **Role**: Command execution wrapper with error logging and retry support  
 **Who references it**: Other scripts for reliable command execution  
-**What it does**: Executes commands with error logging, retry logic, and failure handling
+**What it does**: Executes commands with error logging (legacy, references removed system-errors.log), retry logic, and failure handling
+
+**Note**: This script references system-errors.log which no longer exists. Error logging was removed from the system but this script was not updated. The script is functionally obsolete.
 
 #### matrix-run-script.sh
 
@@ -754,14 +756,14 @@ The `prompts/` directory and `docs/analysis_protocol.md` were used during the re
 **Components**:
 
 - `workspace.yaml`: Active projects state
-- `work-process-log.yaml`: Work process logging
-- `validation-report.yaml`: Activation validation reports
-- `checkpoints/`: Timestamped checkpoint files
+- `work-process-log.jsonl`: Work process logging (JSONL format)
+- `validation-report.json`: Activation validation reports (JSON format)
+- `checkpoints.jsonl`: Timestamped checkpoints (JSONL format)
 - `sessions/`: Session state (placeholder)
-- `system-errors.log`: System error logging
-- `system-errors-archive/`: Archived error logs
-- `work-process-log-archive/`: Archived work process logs
-- `pas-tools-index.yaml`: PAS tools index (when PAS tools enabled)
+- `work-process-log-archive/`: Archived work process logs (JSONL format)
+- `work-process-log-legacy.jsonl`: Legacy YAML→JSONL migration file
+- `work-process-log.lock`: Concurrency lock for logging
+- `pas-tools-index.yaml`: PAS tools index
 
 ### Workspace State
 
@@ -794,8 +796,8 @@ system_status: "initialized"
 
 ### Work Process Log
 
-**File**: `brain/state/work-process-log.yaml`  
-**Role**: Comprehensive logging of all work processes  
+**File**: `brain/state/work-process-log.jsonl`  
+**Role**: Comprehensive logging of all work processes (JSONL format)  
 **Confidence**: HIGH
 
 **Who references it**:
@@ -828,8 +830,8 @@ system_status: "initialized"
 
 ### Validation Report
 
-**File**: `brain/state/validation-report.yaml`  
-**Role**: Post-activation validation compliance  
+**File**: `brain/state/validation-report.json`  
+**Role**: Post-activation validation compliance (JSON format)  
 **Confidence**: HIGH
 
 **Who references it**:
@@ -857,8 +859,8 @@ user_request: "..."
 
 ### Checkpoints
 
-**Location**: `brain/state/checkpoints/`  
-**Purpose**: Timestamped progress markers  
+**File**: `brain/state/checkpoints.jsonl`  
+**Purpose**: Timestamped progress markers (JSONL format)  
 **Confidence**: HIGH
 
 **Who references it**:
@@ -876,56 +878,17 @@ user_request: "..."
 - Context (active_agents, current_focus, blockers, next_actions)
 - Changes (optional list of specific changes)
 
-**Structure**:
+**Format**: JSONL (one JSON object per line)
 
-```yaml
-timestamp: "ISO-8601-timestamp"
-user: "Emiliano"
-project: "project-name"
-note: "Brief accomplishment description"
-context:
-  active_agents: []
-  current_focus: ""
-  blockers: []
-  next_actions: []
-changes:
-  - "Updated file X"
-  - "Fixed bug Y"
+```json
+{"timestamp": "ISO-8601-timestamp", "user": "Emiliano", "project": "project-name", "note": "Brief accomplishment description", "context": {"active_agents": [], "current_focus": "", "blockers": [], "next_actions": []}, "changes": ["Updated file X", "Fixed bug Y"]}
 ```
-
-### System Errors Log
-
-**File**: `brain/state/system-errors.log`  
-**Role**: System error logging with file locking  
-**Confidence**: HIGH
-
-**Who references it**:
-
-- bin/matrix (error logging via trap)
-- Troubleshooting
-- Manual inspection
-
-**What depends on it**:
-
-- Script failures
-- Exit codes
-- Error messages
-- Timestamps
-
-**Format**:
-
-```text
-[ISO-8601-timestamp] bin/matrix [EXIT_CODE:code] | ERROR: error_message
-```
-
-**Security**: chmod 600 (restrictive permissions)
 
 ### Archived Logs
 
-**Locations**:
+**Location**:
 
-- `brain/state/work-process-log-archive/`: Archived work process logs
-- `brain/state/system-errors-archive/`: Archived system error logs
+- `brain/state/work-process-log-archive/`: Archived work process logs (JSONL format)
 
 **Purpose**: Log rotation and historical retention  
 **Confidence**: HIGH
@@ -984,10 +947,9 @@ graph TD
     K --> K2[projects/*.yaml]
     
     F --> F1[workspace.yaml]
-    F --> F2[work-process-log.yaml]
-    F --> F3[validation-report.yaml]
-    F --> F4[checkpoints/]
-    F --> F5[system-errors.log]
+    F --> F2[work-process-log.jsonl]
+    F --> F3[validation-report.json]
+    F --> F4[checkpoints.jsonl]
     
     E --> L[_brain symlink]
     L --> K
@@ -1011,7 +973,7 @@ graph TD
 | `.registry.json` | Project registry | CLI | None | HIGH |
 | `.context.yaml` | Active project context | All agents, CLI | CLI operations | HIGH |
 | `brain/state/workspace.yaml` | Workspace state | CLI, agents | .context.yaml | HIGH |
-| `brain/state/work-process-log.yaml` | Work process logging | Logging scripts | None | HIGH |
+| `brain/state/work-process-log.jsonl` | Work process logging | Logging scripts | None | HIGH |
 | `brain/config/global-skills.yaml` | Global skills config | Master agent | None | HIGH |
 | `brain/config/projects/*.yaml` | Project configs | Master agent | None | HIGH |
 
@@ -1031,15 +993,15 @@ graph TD
 | `matrix-validate-config.sh` | Config validation | pre-activation-checks | brain/config.yaml | HIGH |
 | `matrix-validate-context.sh` | Context validation | pre-activation-checks | .context.yaml | HIGH |
 | `matrix-validate-routing-resources.sh` | Routing validation | pre-activation-checks | Routing resources | HIGH |
-| `matrix-validate-activation.sh` | Activation validation | Post-activation | work-process-log.yaml | HIGH |
+| `matrix-validate-activation.sh` | Activation validation | Post-activation | work-process-log.jsonl | HIGH |
 | `matrix-pre-activation-checks.sh` | Consolidated checks | Deus Ex Machina | All validation scripts | HIGH |
 
 ### Logging Scripts Summary
 
 | File | Role | Referenced By | Depends On | Confidence |
 |-----|------|---------------|------------|------------|
-| `matrix-log-entry.sh` | Log entry writer | Deus Ex Machina | brain/state/work-process-log.yaml | HIGH |
-| `matrix-log-metrics.sh` | Metrics calculator | Manual execution | work-process-log.yaml | HIGH |
+| `matrix-log-entry.sh` | Log entry writer | Deus Ex Machina | brain/state/work-process-log.jsonl | HIGH |
+| `matrix-log-metrics.sh` | Metrics calculator | Manual execution | work-process-log.jsonl | HIGH |
 
 ---
 

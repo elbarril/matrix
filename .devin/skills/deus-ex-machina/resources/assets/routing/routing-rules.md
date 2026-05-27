@@ -120,18 +120,24 @@ Deus Ex Machina prepares the request for context by:
 
 When context is loaded and has skill_priority configured, apply the following routing logic:
 
-1. **local_first** (default for PAS and Chronicle):
+1. **matrix_specialists_only** (default for all contexts):
+   - Route ONLY to Matrix specialists
+   - NO generic subagents allowed (subagent_explore, subagent_general, etc.)
+   - Use specialist triggers from specialist-triggers.md
+   - Allow user to override and request Matrix specialists explicitly
+
+2. **local_first** (legacy mode - deprecated):
    - Check if local skills match the request
    - If local skill match found, use local skills
    - If no local skill match, fall back to Matrix specialists
    - Allow user to override and request Matrix specialists explicitly
 
-2. **matrix_first**:
+3. **matrix_first**:
    - Route to Matrix specialists directly
    - Local skills only if user explicitly requests them
    - Use for contexts that prefer Matrix specialists for most tasks
 
-3. **hybrid** (default for Chronicle):
+4. **hybrid** (default for Chronicle):
    - Check context's primary_skills list
    - If request matches primary_skills, use local skills
    - Otherwise, route to Matrix specialists
@@ -143,6 +149,9 @@ When context is loaded and has skill_priority configured, apply the following ro
 - Extract skill_priority setting from context.working_model.skill_priority
 - Extract primary_skills list from context.working_model.primary_skills
 - Apply routing logic based on skill_priority mode
+- **CRITICAL**: If skill_priority is not set or is invalid, default to "matrix_specialists_only"
+- **FORBIDDEN**: Never route to generic subagents (subagent_explore, subagent_general, etc.) when Matrix is active
+- **VALIDATION**: Check that target agent exists in .devin/agents/ directory before routing
 - Log routing decision with context and priority mode
 - Allow user override for all modes
 
@@ -154,7 +163,7 @@ When routing, also check brain/config/global-skills.yaml for usage patterns:
 2. Check if request matches any usage_pattern.pattern
 3. If pattern matches and context is in pattern.contexts (or "all"):
    - Include global skills from pattern.skills in routing options
-   - Apply priority: local skills > global skills > Matrix specialists
+   - Apply priority: Matrix specialists > global skills > local skills
 4. If pattern.contexts is ["all"], apply to all contexts
 5. If pattern.contexts lists specific contexts, apply only to those
 
@@ -162,7 +171,7 @@ When routing, also check brain/config/global-skills.yaml for usage patterns:
 
 - Check global-skills.yaml for matching patterns
 - If pattern matches, include global skills in routing options
-- Respect priority: local skills > global skills > Matrix specialists
+- Respect priority: Matrix specialists > global skills > local skills
 - Log global skills usage when applicable
 - Allow user to override global skills suggestion
 
@@ -182,6 +191,8 @@ Route to single specialist when:
 
 - Route to specialist silently (no announcement)
 - Use run_subagent with agent name from .devin/agents/
+- **VALIDATION**: Verify agent exists in .devin/agents/ before routing
+- **FORBIDDEN**: Never route to generic subagents (subagent_explore, subagent_general, etc.)
 - Pass original request with full context (context.yaml, system state)
 - Wait for specialist completion
 - Synthesize results for user
@@ -208,6 +219,8 @@ Route to multiple specialists when:
 - Identify coordination pattern from coordination-patterns.md
 - Execute specialists sequentially in defined order (silently, no upfront announcement)
 - Pass context and previous specialist outputs between specialists
+- **VALIDATION**: Verify all agents exist in .devin/agents/ before routing
+- **FORBIDDEN**: Never use generic subagents (subagent_explore, subagent_general, etc.)
 - Synthesize unified summary combining all contributions
 - Handle conflicts by presenting both perspectives with recommendations
 - Never use skill invoke for specialists

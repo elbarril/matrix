@@ -14,7 +14,7 @@ This document summarizes the dependency risk analysis and portability assessment
 
 ### 1.3 Low-Risk Dependencies
 * **Markdown Configuration**: Storing agent configurations as Markdown files with YAML frontmatter is highly resilient and universally parseable.
-* **File-Based State (FSaDB)**: Storing state in YAML/JSON files rather than SQLite makes the system incredibly portable and easy to version control.
+* **File-Based State (FSaDB)**: Storing state in JSONL/JSON files rather than SQLite makes the system incredibly portable and easy to version control.
 
 ## 2. Portability Assessment
 

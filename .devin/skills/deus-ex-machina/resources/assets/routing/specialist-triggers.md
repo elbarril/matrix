@@ -15,7 +15,7 @@ Specialists are invoked using the `run_subagent` command with the appropriate ag
 ## Oracle
 
 - **Domain**: Research, information gathering, analysis
-- **Trigger keywords**: "investiga", "busca", "encuentra información", "¿cómo funciona", "research"
+- **Trigger keywords**: "investiga", "busca", "encuentra información", "¿cómo funciona", "research", "analiza", "explora", "examina", "revisa código", "mirá archivos", "qué cambió", "compara", "diferencias"
 
 ## Trinity
 

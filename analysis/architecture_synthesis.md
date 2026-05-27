@@ -15,7 +15,7 @@ Because the orchestration lives inside the LLM prompt rather than code, it is hi
 ## 2. Architectural Patterns
 
 1. **Star Topology (Hierarchical Dispatch):** `Deus Ex Machina` is the sole entry point. It fans out tasks to Specialists (`Smith`, `Trinity`, etc.) and aggregates their responses.
-2. **File-System as Database (FSaDB):** There is no RDBMS. State (`.context.yaml`, checkpoints, logs) is stored in YAML/JSON. Concurrency is handled poorly or using basic bash `flock`.
+2. **File-System as Database (FSaDB):** There is no RDBMS. State (`.context.yaml`, checkpoints, logs) is stored in JSONL/JSON. Concurrency is handled poorly or using basic bash `flock`.
 3. **Workspace Override Pattern:** Specialized routing overrides standard context. The `Wachowski` agent takes over entirely if the user is operating in the `~/www/emisrepos/matrix` directory.
 4. **Symlink Bridging (`_brain`):** Provides a portable execution context. Agents running in remote directories can access global Matrix state by following the `_brain` symlink back to the root repository.
 
@@ -32,18 +32,18 @@ Because the orchestration lives inside the LLM prompt rather than code, it is hi
 3. **Evaluation (LLM-Driven):** The Master LLM decides which Specialist is needed.
 4. **Delegation (Provider-Driven):** Master invokes `run_subagent`.
 5. **Specialist Loop (Agent-Driven):** The Specialist reads its `<activation>`, uses tools (`grep`, `edit`, `todo_write`), and returns.
-6. **Finalization (Code/Prompt-Driven):** Master writes to `work-process-log.yaml` and reports back via Neo/Cypher protocols.
+6. **Finalization (Code/Prompt-Driven):** Master writes to `work-process-log.jsonl` and reports back via Neo/Cypher protocols.
 
 ## 4. Responsibility Separation & Mixed Concerns
 
 **Verified Separation:**
 * **Git Operations:** Strictly isolated to `Keymaker`.
 * **Matrix Maintenance:** Strictly isolated to `Wachowski`.
-* **State vs. Orchestration:** State is neatly separated into YAML files (`brain/state/`), while orchestration rules are in Markdown (`resources/assets/routing/`).
+* **State vs. Orchestration:** State is neatly separated into JSONL/JSON files (`brain/state/`), while orchestration rules are in Markdown (`resources/assets/routing/`).
 
 **Mixed Concerns (Hidden Complexity):**
 * **Prompt/Code Coupling:** `<activation>` blocks mix natural language commands (e.g., "Understand the problem") with hardcoded bash script execution commands. 
-* **State Manipulation:** The Master LLM is trusted to manually append logs to `work-process-log.yaml` using `matrix-log-entry.sh`. If the LLM hallucinates the bash command parameters, the log corrupts.
+* **State Manipulation:** The Master LLM is trusted to manually append logs to `work-process-log.jsonl` using `matrix-log-entry.sh`. If the LLM hallucinates the bash command parameters, the log corrupts.
 
 ## 5. Summary of Certainty
 

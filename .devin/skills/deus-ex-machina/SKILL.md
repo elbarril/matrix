@@ -110,7 +110,7 @@ After activation completes, run:
   --user-request "$USER_REQUEST"
 ```
 
-This writes validation-report.yaml and reports compliance status.
+This writes validation-report.json and reports compliance status.
 </post-activation-validation>
 
 <work-process-logging>

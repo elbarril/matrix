@@ -104,9 +104,9 @@ graph LR
 
 4. **matrix-init-brain-state.sh**
    - Initializes brain/state/ directory structure
-   - Creates work-process-log.yaml if missing
-   - Creates validation-report.yaml if missing
-   - Sets up checkpoints directory
+   - Creates work-process-log.jsonl if missing
+   - Creates validation-report.json if missing
+   - Creates checkpoints.jsonl if missing
 
 **Stopping Condition**: Any validation script failure halts activation and reports error to user.
 
@@ -656,7 +656,7 @@ graph TD
     F --> I
     G --> I
     H --> I
-    I --> J[Write to brain/state/work-process-log.yaml]
+    I --> J[Write to brain/state/work-process-log.jsonl]
     J --> K{Log Rotation Needed?}
     K -->|Yes| L[Archive to work-process-log-archive/]
     K -->|No| M[Keep in Active Log]
@@ -667,6 +667,13 @@ graph TD
 - Rotates after 100 entries
 - Archives to work-process-log-archive/
 - Maintains recent entries in active log
+
+**Aggressive Filtering** (HIGH confidence):
+
+- matrix-log-entry.sh implements aggressive filtering to drop routine activation events
+- Drops activation events with status "success" to reduce log verbosity
+- Only logs activation events with errors or failures
+- This filtering is not documented in the original analysis but is present in the implementation
 
 **Evidence**: matrix-log-entry.sh script, AGENTS.md Work Process Logging section
 
@@ -691,7 +698,7 @@ graph LR
     G -->|No| J[Activation Non-Compliant]
     H -->|Yes| I
     H -->|No| J
-    I --> K[Write validation-report.yaml]
+    I --> K[Write validation-report.json]
     J --> K
     K --> L[Report Compliance Status]
 ```
@@ -817,15 +824,14 @@ graph TD
 
 ```mermaid
 graph LR
-    A[matrix-log-entry.sh] --> B[brain/state/work-process-log.yaml]
-    A --> C[brain/state/system-errors.log]
+    A[matrix-log-entry.sh] --> B[brain/state/work-process-log.jsonl]
 ```
 
 **Validation Script Dependencies** (HIGH confidence):
 
 ```mermaid
 graph LR
-    A[matrix-validate-activation.sh] --> B[brain/state/validation-report.yaml]
+    A[matrix-validate-activation.sh] --> B[brain/state/validation-report.json]
 ```
 
 **Evidence**: dependency_inventory.json, script file contents

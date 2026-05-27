@@ -8,7 +8,7 @@ The Matrix system employs a **Hierarchical Master-Specialist Architecture**.
 
 * **Topology**: Star topology (Master in center, Specialists at edges).
 * **Execution Model**: Hierarchical, Planner/Executor at the master level, with Reactive and Sequential execution at the specialist level.
-* **Statefulness**: The system itself is **stateful**, utilizing file-based storage (`brain/state/checkpoints/`, `.context.yaml`, `work-process-log.yaml`), but individual agents are mostly **stateless** across invocations, picking up context from the file system.
+* **Statefulness**: The system itself is **stateful**, utilizing file-based storage (`brain/state/checkpoints.jsonl`, `.context.yaml`, `work-process-log.jsonl`), but individual agents are mostly **stateless** across invocations, picking up context from the file system.
 * **Autonomy**: High within constrained boundaries. Agents perform self-directed loops but cannot autonomously cross domain boundaries.
 
 ## 2. Agent Profiles

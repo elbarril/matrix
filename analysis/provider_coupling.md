@@ -36,7 +36,7 @@ The system orchestration via the CLI (`bin/matrix`) assumes a standard POSIX env
 ## 3. Portability Assessment
 
 ### 3.1 Portable Abstractions (Keep as-is)
-* **State Management**: The file-based checkpointing (`brain/state/checkpoints/`) and `.context.yaml` mechanism is 100% portable.
+* **State Management**: The file-based checkpointing (`brain/state/checkpoints.jsonl`) and `.context.yaml` mechanism is 100% portable.
 * **Persona and Activation Prompts**: The XML tag structure (`<persona>`, `<activation>`, `<boundaries>`) can be fed directly into any LLM system prompt.
 * **CLI Orchestrator**: The `bin/matrix` script will run natively in any Unix environment.
 
