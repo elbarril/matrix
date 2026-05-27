@@ -1,0 +1,51 @@
+context:
+  name: "pas"
+  display_name: "Portal-Templates-Group (PAS)"
+  path: "/home/emiliano/www/Portal-Templates-Group/"
+  type: "independent_project"
+
+project_config:
+  agents_md: "templatesTools/aiScripts/cognition/AGENTS.md"
+  agents_path: "templatesTools/aiScripts/cognition/.agents/"
+  skills_path: "templatesTools/aiScripts/cognition/skills/"
+  rules_path: "templatesTools/aiScripts/cognition/rules/"
+  workflows_path: null
+  windsurf_rules: null
+  windsurf_workflows: null
+
+working_model:
+  primary_skills: []
+  skill_priority: "local_first"
+  matrix_integration:
+    enabled: true
+    mode: "hybrid"
+    available_specialists:
+      - "oracle"
+      - "sentinel"
+      - "smith"
+      - "morpheus"
+      - "trinity"
+      - "architect"
+      - "sion"
+      - "keymaker"
+    auto_routing: true
+
+language_policy:
+  internal: "spanish"
+  user_facing: "spanish"
+  policy_file: null
+
+domain_specific:
+  project_type: "web_app"
+  tech_stack: "Portal templates system"
+  persistence: "File-based"
+  main_flows:
+    - "Template management"
+    - "Code review"
+    - "Git workflow"
+
+pas_tools:
+  enabled: true
+  tools_index: "brain/state/pas-tools-index.yaml"
+
+subprojects: []

@@ -43,8 +43,13 @@ if [[ -z "$MATRIX_DIR" ]]; then
   fi
 fi
 
+# Strip trailing slashes to prevent double slash issues in path concatenation
+MATRIX_DIR="${MATRIX_DIR%/}"
+
 # SCRIPT_DIR is still needed for routing resources (relative to script location)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Strip trailing slashes to prevent double slash issues in path concatenation
+SCRIPT_DIR="${SCRIPT_DIR%/}"
 ROUTING_DIR="$SCRIPT_DIR/../resources/assets/routing"
 
 # Check if routing directory exists
@@ -58,6 +63,7 @@ REQUIRED_FILES=(
   "specialist-triggers.md"
   "coordination-patterns.md"
   "routing-rules.md"
+  "rules/specialist-specific-rules.md"
 )
 
 MISSING_FILES=()

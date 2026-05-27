@@ -1,0 +1,499 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-05-26T11:32:00-03:00",
+  "repository": "matrix",
+  "description": "Dependency inventory for Matrix intelligence engine",
+  "dependencies": {
+    "file_dependencies": {
+      "bin/matrix": {
+        "type": "executable",
+        "depends_on": [
+          ".registry.json",
+          ".context.yaml",
+          "brain/state/",
+          "jq"
+        ],
+        "referenced_by": [
+          "users",
+          "agents (via exec tool)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/SKILL.md": {
+        "type": "skill_definition",
+        "depends_on": [
+          ".devin/agents/*/AGENT.md",
+          ".devin/skills/deus-ex-machina/resources/assets/routing/",
+          ".devin/skills/deus-ex-machina/scripts/",
+          "brain/config.yaml",
+          ".context.yaml",
+          "brain/state/"
+        ],
+        "referenced_by": [
+          "users (via /deus-ex-machina)",
+          "users (via skill invoke)",
+          "Devin runtime"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/smith/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/morpheus/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/oracle/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/trinity/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/architect/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/sentinel/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/sion/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/wachowski/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml",
+          "bin/matrix"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/agents/keymaker/AGENT.md": {
+        "type": "subagent_definition",
+        "depends_on": [
+          "brain/config.yaml",
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      "brain/config.yaml": {
+        "type": "configuration",
+        "depends_on": [],
+        "referenced_by": [
+          "all agents (via _brain-aware pattern)",
+          "Deus Ex Machina",
+          "validation scripts"
+        ],
+        "confidence": "HIGH"
+      },
+      ".registry.json": {
+        "type": "data",
+        "depends_on": [],
+        "referenced_by": [
+          "bin/matrix",
+          "CLI operations"
+        ],
+        "confidence": "HIGH"
+      },
+      ".context.yaml": {
+        "type": "state",
+        "depends_on": [
+          "bin/matrix (updates)"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina",
+          "all agents (via _brain-aware pattern)",
+          "CLI",
+          "validation scripts"
+        ],
+        "confidence": "HIGH"
+      },
+      "brain/config/global-skills.yaml": {
+        "type": "configuration",
+        "depends_on": [],
+        "referenced_by": [
+          "Deus Ex Machina (context preparation)",
+          "routing system"
+        ],
+        "confidence": "HIGH"
+      },
+      "brain/config/projects/chronicle.yaml": {
+        "type": "configuration",
+        "depends_on": [],
+        "referenced_by": [
+          "Deus Ex Machina (context detection)",
+          "routing system"
+        ],
+        "confidence": "HIGH"
+      },
+      "brain/config/projects/pas.yaml": {
+        "type": "configuration",
+        "depends_on": [],
+        "referenced_by": [
+          "Deus Ex Machina (context detection)",
+          "routing system"
+        ],
+        "confidence": "HIGH"
+      },
+      "brain/state/workspace.yaml": {
+        "type": "state",
+        "depends_on": [
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "bin/matrix",
+          "Deus Ex Machina",
+          "validation scripts"
+        ],
+        "confidence": "HIGH"
+      },
+      "brain/state/work-process-log.yaml": {
+        "type": "state",
+        "depends_on": [],
+        "referenced_by": [
+          "matrix-log-entry.sh",
+          "matrix-log-metrics.sh",
+          "validation scripts"
+        ],
+        "confidence": "HIGH"
+      },
+      "brain/state/validation-report.yaml": {
+        "type": "state",
+        "depends_on": [
+          "matrix-validate-activation.sh"
+        ],
+        "referenced_by": [
+          "troubleshooting",
+          "manual inspection"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md": {
+        "type": "routing_resource",
+        "depends_on": [],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md": {
+        "type": "routing_resource",
+        "depends_on": [],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/resources/assets/routing/routing-rules.md": {
+        "type": "routing_resource",
+        "depends_on": [
+          ".devin/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (routing)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md": {
+        "type": "routing_resource",
+        "depends_on": [],
+        "referenced_by": [
+          "routing-rules.md"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-validate-config.sh": {
+        "type": "script",
+        "depends_on": [
+          "brain/config.yaml"
+        ],
+        "referenced_by": [
+          "matrix-pre-activation-checks.sh"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-validate-context.sh": {
+        "type": "script",
+        "depends_on": [
+          ".context.yaml"
+        ],
+        "referenced_by": [
+          "matrix-pre-activation-checks.sh"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh": {
+        "type": "script",
+        "depends_on": [
+          ".devin/skills/deus-ex-machina/resources/assets/routing/"
+        ],
+        "referenced_by": [
+          "matrix-pre-activation-checks.sh"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-validate-activation.sh": {
+        "type": "script",
+        "depends_on": [
+          "brain/state/work-process-log.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (post-activation-validation)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-pre-activation-checks.sh": {
+        "type": "script",
+        "depends_on": [
+          "matrix-validate-config.sh",
+          "matrix-validate-context.sh",
+          "matrix-validate-routing-resources.sh",
+          "matrix-init-brain-state.sh"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (pre-activation-checks)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh": {
+        "type": "script",
+        "depends_on": [
+          "brain/state/"
+        ],
+        "referenced_by": [
+          "matrix-pre-activation-checks.sh"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh": {
+        "type": "script",
+        "depends_on": [
+          "brain/state/work-process-log.yaml"
+        ],
+        "referenced_by": [
+          "Deus Ex Machina (work-process-logging)"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-log-metrics.sh": {
+        "type": "script",
+        "depends_on": [
+          "brain/state/work-process-log.yaml"
+        ],
+        "referenced_by": [
+          "manual execution"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-execute-with-error-logging.sh": {
+        "type": "script",
+        "depends_on": [
+          "brain/state/system-errors.log"
+        ],
+        "referenced_by": [
+          "other scripts"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/scripts/matrix-run-script.sh": {
+        "type": "script",
+        "depends_on": [],
+        "referenced_by": [
+          "agents"
+        ],
+        "confidence": "HIGH"
+      },
+      ".devin/skills/deus-ex-machina/resources/assets/logging/log-entry-structure.md": {
+        "type": "documentation",
+        "depends_on": [],
+        "referenced_by": [
+          "matrix-log-entry.sh",
+          "matrix-log-metrics.sh"
+        ],
+        "confidence": "HIGH"
+      }
+    },
+    "runtime_dependencies": {
+      "devin_runtime": {
+        "type": "platform",
+        "description": "Devin AI development environment",
+        "required_by": [
+          ".devin/skills/deus-ex-machina/SKILL.md",
+          ".devin/agents/*/AGENT.md"
+        ],
+        "confidence": "HIGH"
+      },
+      "bash": {
+        "type": "shell",
+        "description": "Bash 4.0+ for script execution",
+        "required_by": [
+          "bin/matrix",
+          ".devin/skills/deus-ex-machina/scripts/*"
+        ],
+        "confidence": "HIGH"
+      },
+      "jq": {
+        "type": "utility",
+        "description": "JSON processor for registry operations",
+        "required_by": [
+          "bin/matrix"
+        ],
+        "confidence": "HIGH"
+      },
+      "git": {
+        "type": "version_control",
+        "description": "Git for version control operations",
+        "required_by": [
+          "Keymaker specialist",
+          "bin/matrix (remote project cloning)"
+        ],
+        "confidence": "HIGH"
+      },
+      "flock": {
+        "type": "utility",
+        "description": "File locking for concurrent access",
+        "required_by": [
+          "bin/matrix",
+          "matrix-log-entry.sh"
+        ],
+        "confidence": "HIGH"
+      }
+    },
+    "external_integrations": {
+      "global_skills": {
+        "type": "skills_integration",
+        "configuration": "brain/config/global-skills.yaml",
+        "path": "/opt/aiad-common/skills/",
+        "symlink_location": "~/.config/devin/skills/",
+        "used_by": [
+          "Deus Ex Machina (context preparation)",
+          "routing system"
+        ],
+        "confidence": "HIGH"
+      },
+      "web_search": {
+        "type": "api_integration",
+        "tools": [
+          "web_search",
+          "webfetch"
+        ],
+        "used_by": [
+          "Oracle specialist"
+        ],
+        "confidence": "HIGH"
+      }
+    }
+  },
+  "dependency_graph": {
+    "nodes": [
+      {"id": "bin/matrix", "type": "executable"},
+      {"id": "SKILL.md", "type": "skill"},
+      {"id": "agents", "type": "subagents"},
+      {"id": "routing_resources", "type": "routing"},
+      {"id": "validation_scripts", "type": "validation"},
+      {"id": "logging_scripts", "type": "logging"},
+      {"id": "brain_config", "type": "config"},
+      {"id": "registry", "type": "data"},
+      {"id": "context", "type": "state"},
+      {"id": "workspace", "type": "state"},
+      {"id": "work_process_log", "type": "state"},
+      {"id": "validation_report", "type": "state"},
+      {"id": "checkpoints", "type": "state"},
+      {"id": "global_skills_config", "type": "config"},
+      {"id": "project_configs", "type": "config"},
+      {"id": "devin_runtime", "type": "platform"},
+      {"id": "bash", "type": "shell"},
+      {"id": "jq", "type": "utility"},
+      {"id": "git", "type": "vcs"},
+      {"id": "flock", "type": "utility"}
+    ],
+    "edges": [
+      {"from": "bin/matrix", "to": "registry"},
+      {"from": "bin/matrix", "to": "context"},
+      {"from": "bin/matrix", "to": "workspace"},
+      {"from": "bin/matrix", "to": "checkpoints"},
+      {"from": "SKILL.md", "to": "agents"},
+      {"from": "SKILL.md", "to": "routing_resources"},
+      {"from": "SKILL.md", "to": "validation_scripts"},
+      {"from": "SKILL.md", "to": "logging_scripts"},
+      {"from": "SKILL.md", "to": "brain_config"},
+      {"from": "SKILL.md", "to": "context"},
+      {"from": "agents", "to": "brain_config"},
+      {"from": "agents", "to": "context"},
+      {"from": "validation_scripts", "to": "brain_config"},
+      {"from": "validation_scripts", "to": "context"},
+      {"from": "validation_scripts", "to": "routing_resources"},
+      {"from": "validation_scripts", "to": "work_process_log"},
+      {"from": "logging_scripts", "to": "work_process_log"},
+      {"from": "context", "to": "workspace"},
+      {"from": "SKILL.md", "to": "global_skills_config"},
+      {"from": "SKILL.md", "to": "project_configs"},
+      {"from": "SKILL.md", "to": "devin_runtime"},
+      {"from": "bin/matrix", "to": "bash"},
+      {"from": "bin/matrix", "to": "jq"},
+      {"from": "bin/matrix", "to": "flock"},
+      {"from": "bin/matrix", "to": "git"},
+      {"from": "agents", "to": "devin_runtime"}
+    ]
+  }
+}

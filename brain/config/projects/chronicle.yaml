@@ -1,0 +1,58 @@
+context:
+  name: "chronicle"
+  display_name: "Chronicle"
+  path: "/home/emiliano/www/emisrepos/chronicle"
+  type: "independent_project"
+
+project_config:
+  agents_md: "AGENTS.md"
+  agents_path: ".agents/"
+  skills_path: ".agents/skills/"
+  rules_path: ".agents/rules/"
+  workflows_path: ".agents/workflows/"
+  windsurf_rules: ".windsurf/rules/"
+  windsurf_workflows: ".windsurf/workflows/"
+
+working_model:
+  primary_skills:
+    - "change-planner"
+    - "change-implementer"
+    - "change-closeout"
+    - "test-fix"
+    - "update-project-docs"
+  skill_priority: "local_first"
+  matrix_integration:
+    enabled: true
+    mode: "hybrid"
+    available_specialists:
+      - "oracle"
+      - "sentinel"
+      - "smith"
+      - "morpheus"
+      - "trinity"
+      - "architect"
+      - "sion"
+      - "keymaker"
+    auto_routing: true
+
+language_policy:
+  internal: "english"
+  user_facing: "rioplatense_spanish"
+  policy_file: ".agents/rules/language-policy.md"
+
+domain_specific:
+  project_type: "web_app"
+  tech_stack: "Vite + React + TypeScript, Dexie.js/IndexedDB, PWA"
+  persistence: "Dexie.js (IndexedDB)"
+  main_flows:
+    - "Form building"
+    - "Project management"
+    - "Encounter registration"
+    - "Observation capture"
+    - "Chronicle generation"
+
+pas_tools:
+  enabled: false
+  tools_index: null
+
+subprojects: []

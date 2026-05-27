@@ -1,6 +1,6 @@
-# Phase 7: Architecture Synthesis
+# Architecture Synthesis
 
-This document synthesizes the findings from the previous six phases into a cohesive conceptual model of the Matrix Intelligence Engine.
+This document synthesizes the findings from the analysis artifacts into a cohesive conceptual model of the Matrix Intelligence Engine.
 
 ## 1. The True Orchestration Model
 
@@ -10,7 +10,7 @@ The Matrix system is an **LLM-Evaluated State Machine** driven by a **Hierarchic
 Unlike traditional software orchestration where a central process (like a Python loop or temporal workflow) dictates execution, Matrix delegates the orchestration entirely to the LLM's context window. The `Deus Ex Machina` agent acts as the CPU. It "boots" by executing bash validation scripts, reads external markdown files (`routing-rules.md`, `coordination-patterns.md`) into its context, and then evaluates the user's prompt against these textual rules to determine its next action (typically invoking `run_subagent`).
 
 **Inferred Architecture:**
-Because the orchestration lives inside the LLM prompt rather than code, it is highly dependent on the model's reasoning capabilities (`swe-1-6`). The system assumes the LLM will rigidly follow the sequence defined in `<activation>`.
+Because the orchestration lives inside the LLM prompt rather than code, it is highly dependent on the model's reasoning capabilities (`swe-1-5`). The system assumes the LLM will rigidly follow the sequence defined in `<activation>`.
 
 ## 2. Architectural Patterns
 

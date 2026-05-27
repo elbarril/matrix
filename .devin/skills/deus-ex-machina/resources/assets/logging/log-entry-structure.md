@@ -178,7 +178,7 @@ Default production level: INFO (filters out DEBUG and TRACE events, reducing log
 Use `matrix-log-metrics.sh` to monitor log quality:
 
 ```bash
-./.devin/skills/deus-ex-machina/scripts/matrix-log-metrics.sh
+$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-metrics.sh
 ```
 
 ### Metrics Tracked

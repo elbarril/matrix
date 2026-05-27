@@ -1,4 +1,4 @@
-# Phase 3: Agent System Analysis
+# Agent System Analysis
 
 This document analyzes all agent-like entities in the Matrix system, detailing their execution models, capabilities, statefulness, and dependencies.
 
@@ -21,7 +21,7 @@ The Matrix system employs a **Hierarchical Master-Specialist Architecture**.
 * **Statefulness**: Stateful (manages and interacts with `brain/state/` and `.context.yaml`).
 * **Inputs**: User prompts, system state files, validation scripts, Neo/Cypher protocols.
 * **Outputs**: Routed tasks (via `run_subagent`), checkpoints, aggregated user responses.
-* **Provider Assumptions**: `swe` model class. Assumes capability for complex intent parsing and multi-step tool execution.
+* **Provider Assumptions**: `swe-1-5` model class. Assumes capability for complex intent parsing and multi-step tool execution.
 * **Dependencies**: `brain/config.yaml`, `.context.yaml`, specialist agent markdown definitions, routing assets.
 
 ### 2.2 Smith (Specialist)

@@ -1,4 +1,4 @@
-# Phase 5: State and Memory Analysis
+# State and Memory Analysis
 
 This document analyzes where state lives, how memory propagates through the Matrix system, and how continuity is preserved across sessions and agents.
 

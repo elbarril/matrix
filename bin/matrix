@@ -18,7 +18,6 @@ REGISTRY_FILE="$MATRIX_DIR/.registry.json"
 CONTEXT_FILE="$MATRIX_DIR/.context.yaml"
 BRAIN_DIR="$MATRIX_DIR/brain"
 CLIENTS_DIR="$MATRIX_DIR/clients"
-CHECKPOINTS_DIR="$BRAIN_DIR/state/checkpoints"
 
 # Helper functions
 log_info() {
@@ -74,9 +73,63 @@ update_context() {
     local project="$1"
     local path="$2"
     
+    # Strip trailing slashes from path to prevent double slash issues
+    path="${path%/}"
+    
     sed -i "s/active_project:.*/active_project: $project/" "$CONTEXT_FILE"
     sed -i "s|active_project_path:.*|active_project_path: $path|" "$CONTEXT_FILE"
     sed -i "s/last_updated:.*/last_updated: $(date -Iseconds)/" "$CONTEXT_FILE"
+}
+
+# Update workspace state to sync with context
+update_workspace() {
+    local workspace_file="$BRAIN_DIR/state/workspace.yaml"
+    
+    # Ensure workspace file exists
+    if [[ ! -f "$workspace_file" ]]; then
+        mkdir -p "$(dirname "$workspace_file")"
+        cat > "$workspace_file" << 'EOF'
+# Matrix Workspace State
+# Tracks active projects and system state
+
+active_projects: []
+last_updated: "TIMESTAMP"
+system_status: "initialized"
+EOF
+    fi
+    
+    # Read current context
+    local active_project=$(grep "active_project:" "$CONTEXT_FILE" | cut -d' ' -f2)
+    local active_path=$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)
+    local timestamp=$(date -Iseconds)
+    
+    # Update workspace.yaml based on context
+    if [[ "$active_project" != "null" && -n "$active_project" ]]; then
+        # Project is active, update workspace with active project
+        cat > "$workspace_file" << EOF
+# Matrix Workspace State
+# Tracks active projects and system state
+
+active_projects:
+  - name: $active_project
+    path: $active_path
+    activated: $timestamp
+last_updated: "$timestamp"
+system_status: "initialized"
+EOF
+    else
+        # No active project, clear workspace
+        cat > "$workspace_file" << 'EOF'
+# Matrix Workspace State
+# Tracks active projects and system state
+
+active_projects: []
+last_updated: "TIMESTAMP"
+system_status: "initialized"
+EOF
+        # Update timestamp
+        sed -i "s/TIMESTAMP/$(date -Iseconds)/" "$workspace_file"
+    fi
 }
 
 # Add project to registry
@@ -112,6 +165,11 @@ add_project() {
     local type="local"
     if [[ "$path_or_url" =~ ^https?:// ]] || [[ "$path_or_url" =~ ^git@ ]]; then
         type="remote"
+    fi
+    
+    # Strip trailing slashes from local paths to prevent double slash issues
+    if [[ "$type" == "local" ]]; then
+        path_or_url="${path_or_url%/}"
     fi
     
     # Add to registry
@@ -173,6 +231,9 @@ select_project() {
     # Expand tilde in path
     proj_path="${proj_path/#\~/$HOME}"
     
+    # Strip trailing slashes to prevent double slash issues
+    proj_path="${proj_path%/}"
+    
     # Handle remote projects
     if [[ "$proj_type" == "remote" ]]; then
         local project_dir="$CLIENTS_DIR/$name"
@@ -208,6 +269,9 @@ select_project() {
     # Update context
     update_context "$name" "$proj_path"
     
+    # Update workspace to sync with context
+    update_workspace
+    
     log_success "Selected project '$name'"
     log_info "Brain symlink created at: $brain_link"
 }
@@ -224,6 +288,8 @@ deselect_project() {
     # Get active path from context
     local active_path=$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)
     active_path="${active_path/#\~/$HOME}"
+    # Strip trailing slashes to prevent double slash issues
+    active_path="${active_path%/}"
     
     # Remove brain symlink if it exists
     if [[ -n "$active_path" && -L "$active_path/_brain" ]]; then
@@ -233,6 +299,9 @@ deselect_project() {
     
     # Clear context
     update_context "null" "null"
+    
+    # Update workspace to sync with context
+    update_workspace
     
     log_success "Deselected project '$active'"
 }
@@ -247,6 +316,8 @@ show_status() {
     if [[ "$active" != "null" && -n "$active" ]]; then
         local active_path=$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)
         active_path="${active_path/#\~/$HOME}"
+        # Strip trailing slashes to prevent double slash issues
+        active_path="${active_path%/}"
         echo "Active Project: $active"
         echo "Path: $active_path"
         echo "Brain Link: $active_path/_brain"
@@ -266,11 +337,10 @@ show_status() {
     echo
     
     # Recent checkpoints
-    if [[ -d "$CHECKPOINTS_DIR" ]]; then
+    if [[ -f "$BRAIN_DIR/state/checkpoints.jsonl" ]]; then
         echo "Recent Checkpoints:"
-        ls -1t "$CHECKPOINTS_DIR"/*.yaml 2>/dev/null | head -3 | while read -r checkpoint; do
-            local basename=$(basename "$checkpoint" .yaml)
-            echo "  $basename"
+        tail -n 3 "$BRAIN_DIR/state/checkpoints.jsonl" | jq -r '(.timestamp + " - " + .note)' | while read -r checkpoint; do
+            echo "  $checkpoint"
         done
     else
         echo "No checkpoints yet"
@@ -280,32 +350,52 @@ show_status() {
 # Write checkpoint
 write_checkpoint() {
     local note="$1"
-    
+
     if [[ -z "$note" ]]; then
         log_error "Usage: matrix checkpoint \"<note>\""
         return 1
     fi
-    
-    mkdir -p "$CHECKPOINTS_DIR"
-    
-    local timestamp=$(date +"%Y-%m-%d-%H-%M-%S")
-    local checkpoint_file="$CHECKPOINTS_DIR/checkpoint-$timestamp.yaml"
-    
+
+    local timestamp=$(date -Iseconds)
     local active=$(read_context)
+    local checkpoints_file="$BRAIN_DIR/state/checkpoints.jsonl"
     
-    cat > "$checkpoint_file" << EOF
-timestamp: "$(date -Iseconds)"
-user: "Emiliano"
-project: $active
-note: "$note"
-context:
-  active_agents: []
-  current_focus: ""
-  blockers: []
-  next_actions: []
-EOF
-    
-    log_success "Checkpoint written: checkpoint-$timestamp.yaml"
+    # Ensure checkpoints file exists
+    if [[ ! -f "$checkpoints_file" ]]; then
+        touch "$checkpoints_file"
+        chmod 600 "$checkpoints_file" 2>/dev/null || true
+    fi
+
+    jq -n -c \
+        --arg ts "$timestamp" \
+        --arg user "Emiliano" \
+        --arg proj "$active" \
+        --arg note "$note" \
+        '{timestamp: $ts, user: $user, project: $proj, note: $note, context: {active_agents: [], current_focus: "", blockers: [], next_actions: []}}' \
+        >> "$checkpoints_file"
+
+    if [[ $? -ne 0 ]]; then
+        log_error "Failed to create checkpoint entry in JSONL"
+        return 1
+    fi
+
+    log_success "Checkpoint written to checkpoints.jsonl"
+
+    # Log checkpoint to work-process-log.jsonl
+    local log_script="$MATRIX_DIR/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh"
+    if [[ -x "$log_script" ]]; then
+        "$log_script" \
+            --event-type "checkpoint_write" \
+            --status "success" \
+            --level "INFO" \
+            --details "Checkpoint creado: $note" \
+            --user-request "$note" \
+            --checkpoint-note "$note" \
+            --matrix-dir "$MATRIX_DIR"
+        log_info "Checkpoint registrado en work-process-log.jsonl"
+    else
+        log_warning "No se pudo registrar checkpoint en work-process-log.jsonl (script no encontrado)"
+    fi
 }
 
 # Show help

@@ -1,0 +1,588 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-05-26T11:32:00-03:00",
+  "repository": "matrix",
+  "description": "Agent inventory for Matrix intelligence engine",
+  "master_agent": {
+    "name": "deus-ex-machina",
+    "type": "skill",
+    "file": ".devin/skills/deus-ex-machina/SKILL.md",
+    "model": "swe-1-5",
+    "min_model_tested": "swe-1-5",
+    "recommended_model": "swe-1-5",
+    "last_tested": "2026-05-20",
+    "role": "Global Matrix coordinator - master intelligence with cross-session awareness and control",
+    "description": "Master agent that coordinates all specialists and serves as sole user interface",
+    "confidence": "HIGH",
+    "invocation": {
+      "methods": [
+        "/deus-ex-machina",
+        "skill invoke deus-ex-machina"
+      ],
+      "triggers": ["user", "model"]
+    },
+    "permissions": {
+      "allow": [
+        "Read(**)",
+        "Write(matrix/**)",
+        "Exec(~/www/emisrepos/matrix/bin/matrix *)"
+      ]
+    },
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob",
+      "exec",
+      "edit",
+      "write",
+      "ask_user_question",
+      "todo_write",
+      "skill",
+      "run_subagent",
+      "read_subagent",
+      "web_search",
+      "webfetch",
+      "find_file_by_name"
+    ],
+    "capabilities": [
+      "Routing intelligence to specialists",
+      "Multi-specialist coordination",
+      "Context detection and preparation",
+      "Work process logging",
+      "Activation protocol enforcement",
+      "Matrix workspace mode detection",
+      "Context-aware skill priority routing",
+      "Global skills integration"
+    ],
+    "dependencies": [
+      ".devin/agents/*/AGENT.md",
+      ".devin/skills/deus-ex-machina/resources/assets/routing/",
+      ".devin/skills/deus-ex-machina/scripts/",
+      "brain/config.yaml",
+      ".context.yaml",
+      "brain/state/"
+    ],
+    "special_features": [
+      "Pre-activation validation scripts",
+      "Post-activation validation",
+      "Consolidated logging",
+      "Silent routing (no announcements)",
+      "_brain-aware path resolution",
+      "Neo communication protocol",
+      "Cypher communication protocol"
+    ]
+  },
+  "specialist_agents": [
+    {
+      "name": "smith",
+      "type": "subagent",
+      "file": ".devin/agents/smith/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Bug detection and analysis specialist",
+      "description": "Finds, diagnoses and resolves technical issues",
+      "confidence": "HIGH",
+      "domain": "Bug detection, root cause analysis, debugging, and troubleshooting technical issues",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "glob",
+        "exec",
+        "edit",
+        "write",
+        "todo_write"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(**)"]
+      },
+      "key_paths": [
+        "Root cause analysis reports",
+        "Bug fix implementations",
+        "Debugging session logs",
+        "Solution proposals",
+        "Test cases for verification"
+      ],
+      "boundaries": {
+        "handles": "Bug detection and analysis",
+        "does_not": [
+          "Create new features or functionality",
+          "Design system architecture",
+          "Write documentation (use Sion)",
+          "Perform security audits (use Sentinel)",
+          "Plan project roadmaps (use Morpheus)",
+          "Execute git operations directly (use Keymaker)"
+        ]
+      },
+      "coordination": [
+        "Trinity for complex architectural issues",
+        "Architect for code quality concerns",
+        "Keymaker for git-related coordination (per Git Operations Policy)"
+      ],
+      "trigger_keywords": ["bug", "error", "problema técnico", "no funciona", "falla", "debug", "arreglar"]
+    },
+    {
+      "name": "morpheus",
+      "type": "subagent",
+      "file": ".devin/agents/morpheus/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Strategic planning and roadmap specialist",
+      "description": "Organizes complex projects and workflows",
+      "confidence": "HIGH",
+      "domain": "Strategic planning, roadmap creation, project organization, and resource allocation",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "glob",
+        "exec",
+        "write",
+        "todo_write"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(matrix/**)"]
+      },
+      "key_paths": [
+        "Project roadmaps",
+        "Strategic plans",
+        "Workflow definitions",
+        "Resource allocation plans",
+        "Priority matrices"
+      ],
+      "boundaries": {
+        "handles": "Strategic planning",
+        "does_not": [
+          "Implement code (use Trinity)",
+          "Debug technical issues (use Smith)",
+          "Write documentation (use Sion)",
+          "Perform code reviews (use Architect)",
+          "Research specific topics (use Oracle)",
+          "Execute git operations directly (use Keymaker)"
+        ]
+      },
+      "coordination": [
+        "Trinity for technical feasibility",
+        "Oracle for research needs",
+        "Architect for suggestions (passes to Trinity with implementation plan)",
+        "Sentinel for security information (always receive for strategic planning)"
+      ],
+      "trigger_keywords": ["plan", "estrategia", "roadmap", "cómo organizamos", "pasos a seguir", "organizar", "proceso"]
+    },
+    {
+      "name": "oracle",
+      "type": "subagent",
+      "file": ".devin/agents/oracle/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Research and intelligence gathering specialist",
+      "description": "Finds information and analyzes patterns",
+      "confidence": "HIGH",
+      "domain": "Research, information gathering, pattern analysis, and knowledge synthesis",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "glob",
+        "web_search",
+        "webfetch",
+        "write"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(matrix/**)"]
+      },
+      "key_paths": [
+        "Research reports",
+        "Information synthesis",
+        "Pattern analysis",
+        "Source documentation",
+        "Insight summaries"
+      ],
+      "boundaries": {
+        "handles": "Research and information gathering with broad access to information sources",
+        "does_not": [
+          "Implement code (use Trinity)",
+          "Debug technical issues (use Smith)",
+          "Create strategic plans (use Morpheus)",
+          "Write final documentation (use Sion)",
+          "Make technical decisions (use Trinity)",
+          "Execute git operations directly (use Keymaker)"
+        ]
+      },
+      "coordination": [
+        "Morpheus for strategic implications",
+        "Sion for documentation needs"
+      ],
+      "trigger_keywords": ["investiga", "busca", "encuentra información", "¿cómo funciona", "research"]
+    },
+    {
+      "name": "trinity",
+      "type": "subagent",
+      "file": ".devin/agents/trinity/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Code design and architecture specialist",
+      "description": "Designs and implements technical solutions",
+      "confidence": "HIGH",
+      "domain": "Code design, architecture, implementation, and technical solution development",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "glob",
+        "exec",
+        "edit",
+        "write",
+        "todo_write"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(**)"]
+      },
+      "key_paths": [
+        "Architecture designs",
+        "Implementation code",
+        "Technical specifications",
+        "Design patterns",
+        "Best practice guidelines"
+      ],
+      "boundaries": {
+        "handles": "Code design and implementation with no limits on implementation tasks. Can write tests",
+        "does_not": [
+          "Debug existing bugs (use Smith)",
+          "Create strategic plans (use Morpheus)",
+          "Research external information (use Oracle when information is needed)",
+          "Perform security audits (use Sentinel)",
+          "Write user documentation (use Sion)",
+          "Execute git operations directly (use Keymaker)"
+        ]
+      },
+      "coordination": [
+        "Architect for code quality review",
+        "Smith for debugging during implementation",
+        "Sentinel for security considerations",
+        "Oracle for information when encountering unknown implementation approaches",
+        "Morpheus for analysis/planning when encountering unknown implementation approaches"
+      ],
+      "trigger_keywords": ["diseña", "arquitectura", "estructura", "cómo debería ser", "mejor manera de", "implementar"]
+    },
+    {
+      "name": "architect",
+      "type": "subagent",
+      "file": ".devin/agents/architect/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Code review and quality assurance specialist",
+      "description": "Ensures best practices and quality standards",
+      "confidence": "HIGH",
+      "domain": "Code review, quality assurance, best practices, and standards compliance",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "glob",
+        "exec",
+        "write"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(matrix/**)"]
+      },
+      "key_paths": [
+        "Code review reports",
+        "Quality assessments",
+        "Best practice recommendations",
+        "Standards compliance checks",
+        "Improvement suggestions"
+      ],
+      "boundaries": {
+        "handles": "Code review and quality assurance by suggesting patterns, methods, and rules for implementation",
+        "does_not": [
+          "Implement code changes directly (use Trinity - Trinity follows suggestions but makes final code decisions)",
+          "Debug technical issues (use Smith)",
+          "Create strategic plans (use Morpheus)",
+          "Write documentation (use Sion)",
+          "Perform security audits (use Sentinel)",
+          "Propose security solutions (use Sentinel for security analysis, can receive security info to inform recommendations)",
+          "Execute git operations directly (use Keymaker)"
+        ]
+      },
+      "coordination": [
+        "Trinity for implementation guidance (Trinity makes final code decisions based on suggestions)",
+        "Smith for bug-related concerns",
+        "Sentinel for security issues (receive security analysis to inform recommendations)"
+      ],
+      "trigger_keywords": ["revisa", "mejora", "optimiza", "qué opinas de", "calidad", "best practices"]
+    },
+    {
+      "name": "sentinel",
+      "type": "subagent",
+      "file": ".devin/agents/sentinel/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Security and vulnerability detection specialist",
+      "description": "Protects systems and data",
+      "confidence": "HIGH",
+      "domain": "Security analysis, vulnerability detection, data protection, and threat assessment",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "glob",
+        "exec",
+        "write"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(matrix/**)"]
+      },
+      "key_paths": [
+        "Security audit reports",
+        "Vulnerability assessments",
+        "Risk analysis",
+        "Security recommendations",
+        "Protection guidelines"
+      ],
+      "boundaries": {
+        "handles": "Security analysis and vulnerability detection by identifying security problems and explaining why they are problems",
+        "does_not": [
+          "Implement code changes (use Trinity)",
+          "Propose security solutions (use Architect for solution proposals based on analysis)",
+          "Debug non-security issues (use Smith)",
+          "Create strategic plans (use Morpheus)",
+          "Write general documentation (use Sion)",
+          "Perform general code reviews (use Architect)",
+          "Execute git operations directly (use Keymaker)"
+        ]
+      },
+      "coordination": [
+        "Architect for solution proposals (provides security analysis)",
+        "Morpheus for strategic planning (provides security information)",
+        "Trinity for security implementation (based on Architect's solutions)",
+        "Architect for security best practices"
+      ],
+      "trigger_keywords": ["seguridad", "vulnerabilidad", "hack", "protección", "datos sensibles", "security"]
+    },
+    {
+      "name": "sion",
+      "type": "subagent",
+      "file": ".devin/agents/sion/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Documentation and knowledge management specialist",
+      "description": "Creates and organizes documentation",
+      "confidence": "HIGH",
+      "domain": "Documentation creation, knowledge management, information organization, and technical writing",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "glob",
+        "edit",
+        "write"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(**)"]
+      },
+      "key_paths": [
+        "Technical documentation",
+        "User guides",
+        "API documentation",
+        "Knowledge base articles",
+        "Process documentation"
+      ],
+      "boundaries": {
+        "handles": "Documentation and knowledge management by documenting everything that goes into files for both humans and agents",
+        "does_not": [
+          "Implement code (use Trinity)",
+          "Debug technical issues (use Smith)",
+          "Create strategic plans (use Morpheus)",
+          "Perform code reviews (use Architect)",
+          "Conduct security audits (use Sentinel)",
+          "Execute git operations directly (use Keymaker)"
+        ]
+      },
+      "coordination": [
+        "Oracle for research needs (Oracle provides unfiltered information, Sion focuses on clarity)"
+      ],
+      "trigger_keywords": ["documenta", "explica", "crea docs", "guía", "manual", "archivo markdown", "markdown", "formato"]
+    },
+    {
+      "name": "wachowski",
+      "type": "subagent",
+      "file": ".devin/agents/wachowski/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Matrix system integral specialist",
+      "description": "Handles all Matrix workspace and system update tasks with full specialist capabilities",
+      "confidence": "HIGH",
+      "domain": "Complete Matrix system specialist handling all Matrix workspace requests and system updates with full specialist capabilities (code, debugging, planning, research, security, documentation, architecture, quality assurance)",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "glob",
+        "exec",
+        "edit",
+        "write",
+        "skill",
+        "run_subagent",
+        "read_subagent"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(matrix/**)", "Exec(../../../../bin/matrix *)"]
+      },
+      "key_paths": [
+        "Matrix system implementations and debugging",
+        "Matrix system strategic planning and research",
+        "Matrix system security and documentation",
+        "Matrix system architecture and code quality",
+        "Improvement proposals and system evolution"
+      ],
+      "boundaries": {
+        "handles": "All Matrix system tasks directly using full specialist capabilities",
+        "does_not": [
+          "Coordinate with other specialists (self-sufficient)",
+          "Delegate work to other specialists (has all specialist capabilities)",
+          "Work outside the Matrix workspace ($MATRIX_ROOT)",
+          "Announce work steps (operate silently)",
+          "Skip state-of-the-art practices (always apply best practices for Matrix work)"
+        ],
+        "special_note": "Has integrated Keymaker capability but follows Git Operations Policy - only uses git capabilities when user explicitly requests it"
+      },
+      "coordination": {
+        "self_sufficient": true,
+        "note": "No coordination with other specialists for Matrix tasks. All specialist capabilities built-in."
+      },
+      "integrated_capacities": [
+        "Code (Trinity)",
+        "Debugging (Smith)",
+        "Planning (Morpheus)",
+        "Research (Oracle)",
+        "Security (Sentinel)",
+        "Documentation (Sion)",
+        "Architecture (Architect)",
+        "Git (Keymaker)"
+      ],
+      "special_features": [
+        "Integrated execution pattern (analyze → plan → implement → verify → document)",
+        "Multi-call protocol for genuinely complex tasks",
+        "Matrix workspace mode trigger",
+        "State-of-the-art practices for Matrix work",
+        "Proactive improvement proposals",
+        "Checkpoint discipline (significant milestones only)",
+        "Consolidated logging",
+        "Minimal confirmations"
+      ],
+      "trigger_keywords": ["matrix", "actualizar matrix", "update matrix", "mejorar matrix", "matrix workspace", "sistema matrix"],
+      "special_trigger_condition": "When request originates from Matrix workspace (~/www/emisrepos/matrix)",
+      "complexity_criteria": {
+        "multi_call_when": [
+          "Request length > 300 characters",
+          "3+ action verbs present",
+          "Explicit fases/etapas keyword",
+          "System-wide modification affecting >5 files"
+        ],
+        "integrated_execution_default": true
+      }
+    },
+    {
+      "name": "keymaker",
+      "type": "subagent",
+      "file": ".devin/agents/keymaker/AGENT.md",
+      "model": "swe-1-5",
+      "role": "Git operations specialist",
+      "description": "Handles all git-related tasks and version control operations",
+      "confidence": "HIGH",
+      "domain": "Git operations including commits, branches, merges, pull requests, rebasing, conflict resolution, and version control workflows",
+      "allowed_tools": [
+        "read",
+        "grep",
+        "exec",
+        "edit",
+        "find_file_by_name"
+      ],
+      "permissions": {
+        "allow": ["Read(**)", "Write(**)"]
+      },
+      "key_paths": [
+        "Git commit messages",
+        "Branch creation and management",
+        "Merge operations and conflict resolution",
+        "Pull request creation and management",
+        "Git history and log analysis",
+        "Repository status updates"
+      ],
+      "boundaries": {
+        "handles": "All git-related operations",
+        "does_not": [
+          "Write code or implement features (use Trinity)",
+          "Debug code issues (use Smith)",
+          "Perform security analysis (use Sentinel)",
+          "Write documentation (use Sion)"
+        ]
+      },
+      "coordination": [
+        "Trinity for code-related git operations (commits after implementation)",
+        "Smith for bug fix commits"
+      ],
+      "trigger_keywords": ["git", "commit", "branch", "merge", "pull request", "push", "rebase", "cherry-pick", "stash", "checkout", "git status", "git log", "git history", "version control", "repositorio", "commitear", "hacer commit", "crear rama", "fusionar"],
+      "special_routing_constraint": "Only routed to when user explicitly requests git operations. Keywords alone are insufficient."
+    }
+  ],
+  "agent_structure": {
+    "common_elements": [
+      "YAML frontmatter with metadata",
+      "Activation sequence",
+      "Persona (Spanish)",
+      "Domain",
+      "Key paths",
+      "Boundaries",
+      "Rules"
+    ],
+    "yaml_frontmatter_fields": [
+      "name",
+      "description",
+      "model",
+      "allowed-tools",
+      "permissions"
+    ],
+    "activation_pattern": [
+      "Load configuration using _brain-aware pattern",
+      "Read context from .context.yaml",
+      "Understand request",
+      "Execute domain-specific work",
+      "Report findings"
+    ],
+    "persona_components": [
+      "Rol (Spanish role description)",
+      "Dominio (Spanish domain expertise)",
+      "Identidad (Spanish personality)",
+      "Estilo de comunicación (Spanish communication style)"
+    ]
+  },
+  "routing_system": {
+    "master_agent": "Deus Ex Machina",
+    "routing_method": "Keyword-based routing with coordination patterns",
+    "routing_resources": [
+      "specialist-triggers.md",
+      "coordination-patterns.md",
+      "routing-rules.md",
+      "specialist-specific-rules.md"
+    ],
+    "special_modes": {
+      "matrix_workspace_mode": {
+        "trigger": "Current working directory is ~/www/emisrepos/matrix",
+        "behavior": "Route all requests to Wachowski, skip context loading",
+        "priority": "Highest"
+      },
+      "keymaker_explicit_request": {
+        "trigger": "User explicitly requests git operations",
+        "behavior": "Route to Keymaker only",
+        "constraint": "Keywords alone insufficient"
+      }
+    },
+    "coordination_patterns": [
+      "Secure Development (Trinity + Sentinel + Architect)",
+      "Research + Action (Oracle + Any Specialist)",
+      "Planning + Execution (Morpheus + Multiple Specialists)",
+      "Debug + Fix (Smith + Trinity)",
+      "Documentation + Implementation (Sion + Trinity)",
+      "Planning + Documentation (Morpheus + Sion)",
+      "Implementation + Git Operations (Trinity/Smith + Keymaker)"
+    ]
+  },
+  "communication_protocols": {
+    "neo": {
+      "purpose": "Final confirmations and success messages",
+      "delegate_for": ["task completion", "production deploy announcements", "error fix verification", "implementation certainty"],
+      "never_delegate_for": ["routing announcements", "status updates", "intermediate results"]
+    },
+    "cypher": {
+      "purpose": "Problem communication and error reporting",
+      "delegate_for": ["errors", "failures", "issues", "blockers", "when something is going wrong"],
+      "never_delegate_for": ["routing announcements", "status updates", "success announcements", "final confirmations"]
+    }
+  }
+}

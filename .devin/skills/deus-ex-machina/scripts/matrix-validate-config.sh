@@ -38,10 +38,16 @@ if [[ -z "$MATRIX_DIR" ]]; then
   else
     # Fallback to dynamic resolution from script location
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # Strip trailing slashes to prevent double slash issues in path concatenation
+    SCRIPT_DIR="${SCRIPT_DIR%/}"
     MATRIX_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+    # Strip trailing slashes to prevent double slash issues in path concatenation
+    MATRIX_DIR="${MATRIX_DIR%/}"
     CONFIG_FILE="$MATRIX_DIR/brain/config.yaml"
   fi
 else
+  # Strip trailing slashes to prevent double slash issues in path concatenation
+  MATRIX_DIR="${MATRIX_DIR%/}"
   CONFIG_FILE="$MATRIX_DIR/brain/config.yaml"
 fi
 

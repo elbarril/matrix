@@ -21,18 +21,17 @@ Reverse engineer the orchestration architecture, execution model, provider coupl
 
 ---
 
-## Phase Status
+## Analysis Artifacts
 
-| Phase                            | Status    | Artifact                         |
-| -------------------------------- | --------- | -------------------------------- |
-| Phase 1 — Repository Mapping     | Complete  | phase1_repository_mapping.md     |
-| Phase 2 — Execution Flow         | Complete  | phase2_execution_flow.md         |
-| Phase 3 — Agent Analysis         | Complete  | phase3_agents.md                 |
-| Phase 4 — Provider Coupling      | Complete  | phase4_provider_coupling.md      |
-| Phase 5 — State | Phase 5 — State & Memory         | Pending   | phase5_state_memory.md           | Memory         | Complete  | phase5_state_memory.md           |
-| Phase 6 — Prompt Architecture    | Complete  | phase6_prompt_architecture.md    |
-| Phase 7 — Architecture Synthesis | Complete  | phase7_architecture_synthesis.md |
-| Phase 8 — Refactor Preparation   | Pending   | phase8_refactor_strategy.md      |
+| Artifact                        | Status    |
+| ------------------------------- | --------- |
+| Repository Mapping              | Complete  |
+| Execution Flow Reconstruction   | Complete  |
+| Agent System Analysis           | Complete  |
+| Provider Coupling Analysis      | Complete  |
+| State and Memory Analysis       | Complete  |
+| Prompt Architecture Analysis     | Complete  |
+| Architecture Synthesis          | Complete  |
 
 ---
 
@@ -51,26 +50,24 @@ Reverse engineer the orchestration architecture, execution model, provider coupl
 
 ## Canonical Findings
 
-(To be populated incrementally)
-
-### Phase 3 Artifacts
-* [Phase 3 Agents Analysis](phase3_agents.md)
+### Agent System Analysis
+* [Agent System Analysis](agents.md)
 * [Agent Dependency Graph](agent_dependency_graph.md)
 * [Agent Capabilities JSON](agent_capabilities.json)
 
-### Phase 4 Artifacts
-* [Phase 4 Provider Coupling](phase4_provider_coupling.md)
+### Provider Coupling Analysis
+* [Provider Coupling Analysis](provider_coupling.md)
 * [Provider Coupling JSON](provider_coupling.json)
 
-### Phase 5 Artifacts
-* [Phase 5 State & Memory Analysis](phase5_state_memory.md)
+### State and Memory Analysis
+* [State and Memory Analysis](state_memory.md)
 * [State Flow JSON](state_flow.json)
 
-### Phase 6 Artifacts
-* [Phase 6 Prompt Architecture](phase6_prompt_architecture.md)
+### Prompt Architecture Analysis
+* [Prompt Architecture Analysis](prompt_architecture.md)
 * [Prompt Inventory JSON](prompt_inventory.json)
 
-### Phase 7 Artifacts
-* [Phase 7 Architecture Synthesis](phase7_architecture_synthesis.md)
+### Architecture Synthesis
+* [Architecture Synthesis](architecture_synthesis.md)
 * [Runtime Interaction Graph](runtime_interaction_graph.md)
 * [Architecture Summary](architecture_summary.md)

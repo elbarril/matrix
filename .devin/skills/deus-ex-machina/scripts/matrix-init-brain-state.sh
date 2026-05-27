@@ -39,18 +39,22 @@ if [[ -z "$MATRIX_DIR" ]]; then
   else
     # Fallback to dynamic resolution from script location
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # Strip trailing slashes to prevent double slash issues in path concatenation
+    SCRIPT_DIR="${SCRIPT_DIR%/}"
     MATRIX_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
   fi
 fi
 
+# Strip trailing slashes to prevent double slash issues in path concatenation
+MATRIX_DIR="${MATRIX_DIR%/}"
+
 BRAIN_STATE_DIR="$MATRIX_DIR/brain/state"
-CHECKPOINTS_DIR="$BRAIN_STATE_DIR/checkpoints"
 SESSIONS_DIR="$BRAIN_STATE_DIR/sessions"
 WORKSPACE_FILE="$BRAIN_STATE_DIR/workspace.yaml"
 ARCHIVE_DIR="$BRAIN_STATE_DIR/work-process-log-archive"
 
 # Create directories if they don't exist
-mkdir -p "$CHECKPOINTS_DIR" "$SESSIONS_DIR" "$ARCHIVE_DIR" 2>/dev/null || {
+mkdir -p "$SESSIONS_DIR" "$ARCHIVE_DIR" 2>/dev/null || {
   echo "ERROR: Failed to create brain state directories" >&2
   exit 1
 }
@@ -67,15 +71,18 @@ session_count: 0
 EOF
 fi
 
-# Create work-process-log.yaml if it doesn't exist
-LOG_FILE="$BRAIN_STATE_DIR/work-process-log.yaml"
-if [[ ! -f "$LOG_FILE" ]]; then
-  cat > "$LOG_FILE" << 'EOF'
-# Matrix Work Process Log
-# Tracks all work processes and activation steps
+# Create checkpoints.jsonl if it doesn't exist
+CHECKPOINTS_FILE="$BRAIN_STATE_DIR/checkpoints.jsonl"
+if [[ ! -f "$CHECKPOINTS_FILE" ]]; then
+  touch "$CHECKPOINTS_FILE"
+  chmod 600 "$CHECKPOINTS_FILE"
+fi
 
-entries: []
-EOF
+# Create work-process-log.jsonl if it doesn't exist
+LOG_FILE="$BRAIN_STATE_DIR/work-process-log.jsonl"
+if [[ ! -f "$LOG_FILE" ]]; then
+  touch "$LOG_FILE"
+  chmod 600 "$LOG_FILE"
 fi
 
 # Brain state structure initialized

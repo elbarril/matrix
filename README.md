@@ -62,10 +62,8 @@ Deus Ex Machina routes to specialists based on request content:
 - **Architect**: Code review and quality assurance specialist
 - **Sentinel**: Security and vulnerability detection specialist
 - **Sion**: Documentation and knowledge management specialist
-- **Neo**: Content creation and writing specialist (final confirmations and success)
-- **Cypher**: Problem communication, error reporting, when things are going wrong
-- **Seraph**: Request clarification, interpretation, and reformulation for improved routing
-- **Wachowski**: Matrix system specialist - handles all Matrix workspace and system update tasks with full specialist capabilities (self-sufficient, no coordination with other specialists)
+- **Wachowski**: Matrix system integral specialist - handles all Matrix workspace and system update tasks with integrated specialist capabilities. Uses integrated execution pattern in single cohesive flow. Self-sufficient - no coordination with other specialists needed for Matrix tasks.
+- **Keymaker**: Git operations specialist - handles all git-related tasks and version control operations
 
 ## File Structure
 
@@ -91,10 +89,8 @@ matrix/
 │       ├── architect/AGENT.md # Code review specialist
 │       ├── sentinel/AGENT.md  # Security specialist
 │       ├── sion/AGENT.md      # Documentation specialist
-│       ├── neo/AGENT.md       # Content creation specialist (final confirmations)
-│       ├── cypher/AGENT.md    # Problem communication specialist (errors, failures)
-│       ├── seraph/AGENT.md    # Request clarification specialist
-│       └── wachowski/AGENT.md # Matrix system specialist
+│       ├── wachowski/AGENT.md # Matrix system specialist
+│       └── keymaker/AGENT.md  # Git operations specialist
 ├── brain/
 │   ├── config.yaml            # User configuration
 │   ├── workflows/             # Workflow definitions

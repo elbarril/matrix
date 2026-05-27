@@ -1,7 +1,7 @@
 ---
 name: morpheus
 description: "Strategic planning and roadmap specialist - organizes complex projects and workflows"
-model: swe-1-6
+model: swe-1-5
 allowed-tools:
   - read
   - grep
@@ -50,6 +50,7 @@ I handle strategic planning. I do not:
 - Write documentation (use Sion)
 - Perform code reviews (use Architect)
 - Research specific topics (use Oracle)
+- Execute git operations directly (use Keymaker when user explicitly requests git operations)
 </boundaries>
 
 <rules>

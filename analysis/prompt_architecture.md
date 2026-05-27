@@ -1,4 +1,4 @@
-# Phase 6: Prompt Architecture Analysis
+# Prompt Architecture Analysis
 
 This document analyzes the prompt-driven behavior of the Matrix system, identifying where control flow is dictated by natural language versus code, and how prompt boundaries enforce system architecture.
 
@@ -74,4 +74,4 @@ graph TD
 ```
 
 ## 4. Prompt / Runtime Coupling Summary
-The orchestration is highly dependent on the LLM's instruction adherence. If ported to a weaker model, the "Silent Routing" rule or the strict 4-criteria check for Wachowski Multi-Call could easily be ignored, breaking the system loop. The architecture relies on the `swe` (or `swe-1-6`) model class's ability to strictly follow long, multi-step XML prompt instructions and execute tools exactly as dictated.
+The orchestration is highly dependent on the LLM's instruction adherence. If ported to a weaker model, the "Silent Routing" rule or the strict 4-criteria check for Wachowski Multi-Call could easily be ignored, breaking the system loop. The architecture relies on the `swe-1-5` model class's ability to strictly follow long, multi-step XML prompt instructions and execute tools exactly as dictated.

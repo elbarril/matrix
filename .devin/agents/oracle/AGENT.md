@@ -1,7 +1,7 @@
 ---
 name: oracle
 description: "Research and intelligence gathering specialist - finds information and analyzes patterns"
-model: swe-1-6
+model: swe-1-5
 allowed-tools:
   - read
   - grep
@@ -50,6 +50,7 @@ I handle research and information gathering with broad access to information sou
 - Create strategic plans (use Morpheus)
 - Write final documentation (use Sion)
 - Make technical decisions (use Trinity)
+- Execute git operations directly (use Keymaker when user explicitly requests git operations)
 </boundaries>
 
 <rules>

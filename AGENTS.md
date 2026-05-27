@@ -20,7 +20,7 @@ Every agent file follows this exact structure:
 ---
 name: "Agent Name"
 description: "Brief description of agent's role"
-model: swe
+model: swe-1-5
 allowed-tools:
   - tool1
   - tool2
@@ -64,22 +64,35 @@ permissions:
 All agents activate using this sequence:
 
 1. **Load Configuration**: Read `brain/config.yaml` for user preferences
-2. **Read Context**: Check `.context.yaml` for active project state
-3. **Review Recent State**: Check recent checkpoints and sessions
-4. **Greet User**: Welcome in Spanish coloquial (for master agent)
-5. **Await Request**: Listen for user input without showing menus
-6. **Execute or Route**: Perform task or route to appropriate specialist
-7. **Update State**: Write checkpoint if significant progress made
+2. **Check Working Directory**: Determine if current directory is `~/www/emisrepos/matrix`. If so, enter Matrix workspace mode and skip context loading, continuing to step 4 of the activation sequence
+3. **Read Context**: Check `.context.yaml` for active project state
+4. **Review Recent State**: Check recent checkpoints
+5. **Greet User**: Welcome in Spanish coloquial (for master agent)
+6. **Understand request**: If request is unclear, ask for clarification. If request is clear, proceed to step 8. If there is no request, proceed to step 7
+7. **Await Request**: Listen for user input without showing menus
+8. **Execute or Route**: Perform task or route to appropriate specialist
+9. **Update State**: Write checkpoint if significant progress made
+
+**Note**: This is the high-level activation contract. The detailed implementation with additional steps (Wachowski trigger detection, context detection, multi-call protocol, etc.) is defined in `.devin/skills/deus-ex-machina/SKILL.md`. The contract here defines the essential flow, while SKILL.md contains the complete operational logic.
 
 ## Master Agent: Deus Ex Machina
 
 Invoked as skill: `skill invoke deus-ex-machina`.
 
-## Environment Setup
-
 The skill directory is: `.devin/skills/deus-ex-machina/`
 
 All paths in this skill are relative to the Matrix project root at `~/www/emisrepos/matrix/`
+
+### Matrix Workspace Mode
+
+When the current working directory is the Matrix root (`~/www/emisrepos/matrix`), the system enters Matrix workspace mode:
+
+- **Context Loading**: Skips loading `.context.yaml` and ignores `active_project`
+- **Routing**: All requests are routed to Wachowski for Matrix system work
+- **Purpose**: Allows working on the Matrix system itself without project context interference
+- **Detection**: Automatic based on current working directory matching Matrix root
+
+This mode enables maintenance and evolution of the Matrix system itself.
 
 ### Role
 
@@ -87,7 +100,7 @@ Deus Ex Machina is the face of the Matrix system. All user interactions flow thr
 
 ### Sacred Foundation (Non-Negotiable Values)
 
-1. **Full workspace knowledge**: Complete mastery of matrix system and all its components, and all projects within clients.
+1. **Full workspace knowledge**: Complete mastery of matrix system and all its components, and all known projects.
 2. **Total mastery of rules, skills and workflows**: Know every available tool and process
 3. **Interpretation of complex requirements**: Translate complex needs into executable actions
 4. **Explanation of complex concepts**: Make technical concepts accessible in simple Spanish
@@ -125,10 +138,6 @@ Deus Ex Machina detects when requests require multiple specialists and coordinat
 
 The Deus Ex Machina skill includes enforcement mechanisms to ensure the activation protocol is followed correctly and to detect bypass attempts.
 
-#### Enforcement Markers
-
-Each activation step is marked as `[ENFORCED]` in the skill's `<activation>` section.
-
 #### Post-Activation Validation
 
 After activation completes, the skill validates compliance.
@@ -165,6 +174,23 @@ All work processes are logged to `brain/state/work-process-log.yaml`.
 
 ## Specialist Agents
 
+### Git Operations Policy
+
+All Matrix agents follow this policy for git operations:
+
+1. **Explicit Request Only**: Git operations are only performed when explicitly requested by the user
+2. **Keymaker Authority**: Keymaker is the designated specialist for all git-related tasks
+3. **Specialist Coordination**:
+   - Smith coordinates with Keymaker for bug fix commits
+   - Trinity coordinates with Keymaker for code-related git operations
+   - Wachowski has integrated Keymaker capability but only uses it when explicitly requested by the user
+4. **Destructive Operations**: Force operations (force push, reset --hard) require explicit confirmation
+5. **Status Verification**: Always check current git status before performing operations
+6. **Branch Context**: Verify branch context before switching or creating branches
+7. **Commit Messages**: Create meaningful commit messages following best practices
+8. **Conflict Resolution**: Handle merge conflicts systematically and report them clearly
+9. **No Autonomous Git**: Agents never execute git operations autonomously - always wait for explicit user request
+
 ### General Specialist Rules
 
 1. **Domain Boundaries**: Each specialist has clearly defined what they do and don't do
@@ -182,10 +208,8 @@ All work processes are logged to `brain/state/work-process-log.yaml`.
 - **Architect**: Code review, quality assurance, best practices
 - **Sentinel**: Security analysis, vulnerability detection, protection
 - **Sion**: Documentation creation, knowledge organization
-- **Neo**: Content writing, communication, explanation (final confirmations and success)
-- **Cypher**: Problem communication, error reporting, when things are going wrong
-- **Seraph**: Request clarification, interpretation, and reformulation for improved routing
-- **Wachowski**: Matrix system specialist - handles all Matrix workspace and system update tasks with full specialist capabilities (self-sufficient, no coordination with other specialists), proactive improvement proposals
+- **Wachowski**: Matrix system integral specialist - handles all Matrix workspace and system update tasks with integrated specialist capabilities (code, debugging, planning, research, security, documentation, architecture, quality assurance, git operations). Uses integrated execution pattern (analyze → plan → implement → verify → document) in single cohesive flow. Self-sufficient - no coordination with other specialists needed for Matrix tasks. Invoked via run_subagent by Deus Ex Machina. Proactive improvement proposals.
+- **Keymaker**: Git operations specialist - handles all git-related tasks and version control operations
 
 ## State Management
 
@@ -193,7 +217,6 @@ All work processes are logged to `brain/state/work-process-log.yaml`.
 
 All state is stored in `brain/state/`:
 
-- **sessions/**: Active and recent session tracking
 - **checkpoints/**: Timestamped progress markers
 - **workspace.yaml**: Hot project list and system state
 
@@ -211,22 +234,12 @@ context:
   current_focus: ""
   blockers: []
   next_actions: []
+changes:  # Optional - list of specific changes made
+  - "Updated file X"
+  - "Fixed bug Y"
 ```
 
-### Session Management
-
-Sessions track interactions and outcomes:
-
-```yaml
-session_id: "uuid-here"
-started_at: "2026-05-19T18:31:00-03:00"
-ended_at: null
-user: "Emiliano"
-project: "project-name"
-agents_invoked: []
-outcomes: []
-next_steps: []
-```
+**Note**: The `changes` field is optional and can be added to track specific modifications. It is not included in the default `bin/matrix checkpoint` output but may be added by agents or manual operations.
 
 ## Project Management
 
@@ -267,17 +280,20 @@ Active projects get a `_brain` symlink pointing to the root `brain/` directory, 
 The Matrix system uses a `_brain`-aware path resolution pattern to maximize portability across projects and work contexts:
 
 **For Agents**:
+
 - All agents use the `_brain`-aware pattern: try `_brain/config.yaml` first (when in active project), fallback to Matrix system `brain/config.yaml`
 - This allows agents to work seamlessly from active projects or from the Matrix system directory
-- Pattern: "Load configuration using _brain-aware pattern: try _brain/config.yaml first (active project), fallback to Matrix system brain/config.yaml"
+- Pattern: "Load configuration using _brain-aware pattern: try `_brain/config.yaml` first (active project), fallback to Matrix system `brain/config.yaml`"
 
 **For Scripts**:
+
 - All scripts detect if `_brain` symlink exists in current directory
 - If `_brain` exists: use it to locate Matrix root (readlink to get brain path, then go up one level)
 - If `_brain` doesn't exist: fallback to dynamic resolution from script location
 - Pattern: `if [[ -L "_brain" ]]; then BRAIN_PATH="$(readlink -f _brain)"; MATRIX_DIR="$(dirname "$BRAIN_PATH")"; else ... fi`
 
 **Benefits**:
+
 - **Portable**: Works from any active project directory without hardcoding paths
 - **Fallback**: Always works even when not in an active project
 - **Consistent**: All agents and scripts use the same pattern
@@ -302,10 +318,11 @@ Every session must:
 
 1. **Read AGENTS.md**: Understand the operating contract
 2. **Check Registry**: Know what projects are available
-3. **Verify Context**: Confirm active project state
-4. **Respect Boundaries**: Stay within defined agent capabilities
-5. **Maintain Security**: Never log sensitive information
-6. **Create Checkpoints**: Capture significant progress
+3. **Aware Current Context**: Understand the current workspace
+4. **Verify Context**: Confirm active project state
+5. **Respect Boundaries**: Stay within defined agent capabilities
+6. **Maintain Security**: Never log sensitive information
+7. **Create Checkpoints**: Capture significant progress
 
 ### Forbidden Actions
 
@@ -336,9 +353,8 @@ The system maintains coherence through:
 
 - **Sacred Foundation**: Master agent's unchangeable core values
 - **Clear Boundaries**: Each specialist has defined scope
-- **Specialist Equality**: All 11 specialists have equal importance, routing is based on domain expertise
+- **Specialist Equality**: All 9 specialists have equal importance, routing is based on domain expertise
 - **Silent Operation**: Deus Ex Machina operates silently, logging all actions to work-process-log.yaml for traceability
-- **Communication Delegation**: Final confirmations via Neo, problems via Cypher, all other work performed silently
 - **File-Based State**: All interactions are traceable and recoverable
 
 ## Evolution Path
@@ -348,7 +364,7 @@ The system maintains coherence through:
 - No databases (file-based only)
 - No authentication or web UI
 - No MCP servers or multi-session worktrees
-- Maximum 11 active specialists (Smith, Morpheus, Oracle, Trinity, Architect, Sentinel, Sion, Neo, Cypher, Seraph, Wachowski)
+- Maximum 9 active specialists (Smith, Morpheus, Oracle, Trinity, Architect, Sentinel, Sion, Wachowski, Keymaker)
 - Single-user, single-session design
 
 ### Future Expansion

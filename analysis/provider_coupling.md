@@ -1,4 +1,4 @@
-# Phase 4: Provider Coupling Analysis
+# Provider Coupling Analysis
 
 This document identifies how tightly the Matrix system is coupled to its current runtime (Devin / Windsurf) and outlines the abstractions required to port it to other agentic runtimes (e.g., Claude Code, OpenHands, Gemini CLI).
 

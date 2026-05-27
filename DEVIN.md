@@ -76,6 +76,22 @@ The Deus Ex Machina skill includes built-in enforcement mechanisms to ensure the
 
 **Important**: Enforcement happens at the skill level, not the CLI level.
 
+### Validation Scripts
+
+The system includes several validation scripts in `.devin/skills/deus-ex-machina/scripts/`:
+
+- **matrix-pre-activation-checks.sh**: Consolidated pre-activation validation (config, context, routing resources, brain state)
+- **matrix-validate-config.sh**: Validates brain/config.yaml exists and is valid YAML
+- **matrix-validate-context.sh**: Validates .context.yaml exists and has active project
+- **matrix-validate-routing-resources.sh**: Validates routing resources exist (specialist-triggers.md, coordination-patterns.md, routing-rules.md)
+- **matrix-validate-activation.sh**: Post-activation validation compliance check
+- **matrix-init-brain-state.sh**: Initializes brain state directory structure
+- **matrix-log-entry.sh**: Work process logging with consolidated event structure
+- **matrix-log-metrics.sh**: Log quality metrics calculation
+- **matrix-execute-with-error-logging.sh**: Command execution wrapper with error logging and retry support
+
+All scripts are _brain-aware and auto-detect _brain symlink when running from active projects.
+
 - The Matrix CLI (`bin/matrix`) does NOT invoke agents
 - Agents (skills) are invoked through Devin (e.g., `/deus-ex-machina` or skill trigger)
 - See [SKILL.md](.devin/skills/deus-ex-machina/SKILL.md) for complete enforcement implementation details

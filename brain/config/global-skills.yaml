@@ -1,0 +1,31 @@
+global_skills:
+  path: "/opt/aiad-common/skills/"
+  symlink_location: "~/.config/devin/skills/"
+  availability: "all_under_home"
+  priority: "after_local"
+  
+  usage_patterns:
+    - pattern: "avature_platform"
+      description: "Avature platform-specific operations"
+      contexts: ["pas"]
+      skills: ["ask-avature", "iats-tools", "teg-case-api"]
+      
+    - pattern: "gitlab_operations"
+      description: "GitLab repository operations"
+      contexts: ["all"]
+      skills: ["gitlab-xcade", "gitlab-xcade-mr-handling"]
+      
+    - pattern: "git_workflow"
+      description: "General git workflow operations"
+      contexts: ["all"]
+      skills: ["git-branch-analysis", "git-commit-formatting"]
+      
+    - pattern: "documentation"
+      description: "Documentation generation and publishing"
+      contexts: ["all"]
+      skills: ["feature-documentation-writer", "wiki-publishing", "wiki-retrieval"]
+      
+    - pattern: "accessibility"
+      description: "Accessibility review and testing"
+      contexts: ["all"]
+      skills: ["accessibility-product-review"]

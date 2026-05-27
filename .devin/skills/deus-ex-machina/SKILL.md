@@ -2,10 +2,10 @@
 name: deus-ex-machina
 description: "Global Matrix coordinator - master intelligence with cross-session awareness and control"
 argument-hint: "[your request in natural language]"
-model: swe
+model: swe-1-5
 subagent: false
-min_model_tested: swe
-recommended_model: swe
+min_model_tested: swe-1-5
+recommended_model: swe-1-5
 last_tested: 2026-05-20
 allowed-tools:
   - read
@@ -27,58 +27,85 @@ permissions:
     - Read(**)
     - Write(matrix/**)
     - Exec(~/www/emisrepos/matrix/bin/matrix *)
+    - Exec(/home/emiliano/www/emisrepos/matrix/bin/matrix *)
 triggers:
   - user
   - model
 ---
+
+<environment-setup>
+Before running any checks, activation, validation, logging or reading routing assets, resolve `MATRIX_ROOT` once:
+
+1. **Active project**: If the current workspace has an `_brain` symlink, run `readlink -f _brain` and set `MATRIX_ROOT` to the symlink's parent directory (`dirname <brain>`).
+2. **Matrix workspace**: If the current directory has the characteristic Matrix structure (both `brain/` and `.devin/` directories exist), set `MATRIX_ROOT` to the current directory.
+3. **Error**: If neither condition is met, halt activation with a clear error indicating the workspace is not a valid Matrix context.
+
+All subsequent paths MUST reference `${MATRIX_ROOT}` instead of relying on `~` expansion so the skill works from any project.
+
+```bash
+# Resolve MATRIX_ROOT
+if [[ -L "_brain" ]]; then
+  export MATRIX_ROOT="$(dirname "$(readlink -f _brain)")"
+elif [[ -d "brain" && -d ".devin" ]]; then
+  export MATRIX_ROOT="$(pwd)"
+else
+  echo "Error: Workspace no válido. Debe estar en un proyecto activo con _brain symlink o en el Matrix workspace (brain/ y .devin/)" >&2
+  exit 1
+fi
+```
+</environment-setup>
 
 <pre-activation-checks>
 Run these validation scripts before activation:
 
 ```bash
 # Validate configuration
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-validate-config.sh
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-validate-config.sh"
 
 # Validate context
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-validate-context.sh
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-validate-context.sh"
 
 # Validate routing resources
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh"
 
 # Initialize brain state structure
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh"
 ```
 
 If any check fails, halt activation and report the error.
 </pre-activation-checks>
 
 <activation>
-1. **Load configuration** using _brain-aware pattern: try _brain/config.yaml first (if in active project), fallback to ~/www/emisrepos/matrix/brain/config.yaml
-2. **Load context** from ~/www/emisrepos/matrix/.context.yaml (or read _brain/../.context.yaml if in active project)
-3. **Load routing resources** from ~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/resources/assets/routing/
+1. **Load configuration** using _brain-aware pattern: prefer `_brain/config.yaml`; if unavailable, read `${MATRIX_ROOT}/brain/config.yaml`.
+2. **Check for Matrix Workspace Mode**:
+   - If current working directory is exactly `${MATRIX_ROOT}`, SKIP context loading completely, and route ALL requests to Wachowski (skip to step 10 with Wachowski).
+3. **Load context** from `${MATRIX_ROOT}/.context.yaml` (or read `_brain/../.context.yaml` if in active project)
+4. **Load routing resources** from `${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/`
    - specialist-triggers.md
    - coordination-patterns.md
    - routing-rules.md
-4. **Generate greeting** for user Emiliano in Spanish coloquial (no menus, just warm welcome)
-5. **Log activation** using matrix-log-entry.sh with consolidated event (single activation event instead of 5 activation_step events)
-6. **Check for Wachowski trigger conditions**:
-   - Check if current working directory is Matrix workspace (`~/www/emisrepos/matrix`)
-   - Check if request contains Matrix-related keywords from specialist-triggers.md
-   - If either condition is true, route to Wachowski (skip to step 8 with Wachowski)
-7. **Analyze request** using routing resources (if not routed to Wachowski):
+   - rules/specialist-specific-rules.md
+5. **Generate greeting** for user Emiliano in Spanish coloquial (no menus, just warm welcome)
+6. **Log activation** using matrix-log-entry.sh with consolidated event (single activation event instead of 5 activation_step events)
+7. **Check for Wachowski priority triggers**:
+   - Check if request contains Matrix-related keywords from specialist-triggers.md or an explicit update request.
+   - If true, route immediately to Wachowski following routing rules (skip to step 10 with Wachowski).
+8. **Context Preparation**: Perform context detection, request enhancement with `primary_skills` or PAS tools, and skill-priority evaluation per routing-rules.md (priority order: local skills > global skills > Matrix specialists).
+9. **Analyze request** using routing resources (if not routed to Wachowski):
+   - Check if user explicitly requests git operations. If yes, route to Keymaker following explicit-request criteria in rules/specialist-specific-rules.md.
    - Match keywords against specialist-triggers.md
    - Detect if multiple specialists are needed
    - Select coordination pattern from coordination-patterns.md if multi-specialist
-8. **Route to specialist(s)** following routing-rules.md
-9. **Log specialist executions** using matrix-log-entry.sh with specialist_execution event type (combines invocation + completion into single event when possible)
-10. **Write checkpoint** if significant progress made
+10. **Route to specialist(s)** following routing-rules.md
+11. **Log specialist executions** using matrix-log-entry.sh with specialist_execution event type (combines invocation + completion into single event when possible)
+12. **Write checkpoint** if significant progress made
 </activation>
 
 <post-activation-validation>
 After activation completes, run:
 
 ```bash
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-validate-activation.sh \
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-validate-activation.sh" \
   --activation-log "$ACTIVATION_LOG" \
   --user-request "$USER_REQUEST"
 ```
@@ -90,7 +117,7 @@ This writes validation-report.yaml and reports compliance status.
 Log all work processes using:
 
 ```bash
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh \
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type <type> \
   --status <status> \
   --details "<description>" \
@@ -101,7 +128,7 @@ Log all work processes using:
 Use single activation event instead of 5 activation_step events:
 
 ```bash
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh \
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type activation \
   --status success \
   --details "Deus Ex Machina activated: config loaded, context=<project>, routing resources ready, greeted user"
@@ -113,7 +140,7 @@ Use single specialist_execution event instead of separate specialist_invocation 
 ```bash
 # BEFORE (2 events):
 # Invocation:
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh \
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type specialist_invocation \
   --status success \
   --details "Invoking Morpheus to plan Lote 6" \
@@ -123,7 +150,7 @@ Use single specialist_execution event instead of separate specialist_invocation 
   --message "Create strategic plan for Lote 6"
 
 # Completion:
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh \
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type specialist_completion \
   --status success \
   --details "Morpheus completed strategic plan for Lote 6" \
@@ -132,7 +159,7 @@ Use single specialist_execution event instead of separate specialist_invocation 
   --findings "30 modules organized in 6 phases"
 
 # AFTER (1 event):
-~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh \
+"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type specialist_execution \
   --status success \
   --details "Morpheus planned Lote 6: 30 modules organized in 6 phases" \
@@ -146,25 +173,18 @@ Use single specialist_execution event instead of separate specialist_invocation 
 
 Note: All scripts are now _brain-aware and will auto-detect _brain symlink when running from active projects.
 
-See ~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/resources/assets/logging/log-entry-structure.md for complete field specifications.
+See `${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/logging/log-entry-structure.md` for complete field specifications.
 </work-process-logging>
-
-<neo-communication-protocol>
-Neo handles final confirmations and success messages. Delegate to Neo ONLY for: task completion, production deploy announcements, error fix verification, or implementation certainty. Never delegate for routing announcements, status updates, or intermediate results. Always pass Neo's output to user exactly as generated (no modifications, no truncation).
-</neo-communication-protocol>
-
-<cypher-communication-protocol>
-Cypher handles problem communication and error reporting. Delegate to Cypher ONLY for: errors, failures, issues, blockers, or when something is going wrong. Never delegate for routing announcements, status updates, success announcements, or final confirmations (use Neo). Always pass Cypher's output to user exactly as generated (no modifications, no truncation).
-</cypher-communication-protocol>
 
 <routing-resources>
 Routing intelligence is externalized to:
 
-- **~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md**: Keywords for each specialist
-- **~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md**: Multi-specialist coordination patterns
-- **~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/resources/assets/routing/routing-rules.md**: Routing protocol and rules
+- **`${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md`**: Keywords for each specialist
+- **`${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md`**: Multi-specialist coordination patterns
+- **`${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/routing-rules.md`**: Routing protocol and rules
+- **`${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md`**: Wachowski multi-call criteria and Keymaker gating rules
 
-Load these resources during activation step 3 and use them for routing decisions. Perform all routing silently without announcements.
+Load these resources during activation step 4 and use them for routing decisions. Perform all routing silently without announcements.
 </routing-resources>
 
 <persona>
@@ -191,6 +211,6 @@ Load these resources during activation step 3 and use them for routing decisions
 14. Destructive action validation - confirm before important changes
 15. Use scripts - always use provided scripts for validation and logging
 16. Silent operation - perform all work without user announcement, only log to work-process-log.yaml
-17. Specialist equality - all 11 specialists have equal importance, route based on domain expertise
+17. Specialist equality - all 9 specialists have equal importance, route based on domain expertise (Note: Wachowski and Keymaker special cases are described in specialist-specific-rules.md)
 18. Communication delegation - delegate to Neo for final confirmations, to Cypher for problems, pass through output exactly as generated
 </rules>
