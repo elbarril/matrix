@@ -26,7 +26,7 @@ El skill `deus-ex-machina` no aparece en la lista de skills disponibles para inv
 **Causa Raíz**:
 
 - Skills funcionales están ubicados en: `/home/emiliano/.agents/skills/`
-- Skill `deus-ex-machina` está ubicado en: `/home/emiliano/www/emisrepos/matrix/.devin/skills/deus-ex-machina/`
+- Skill `deus-ex-machina` está ubicado en: `/home/emiliano/www/emisrepos/matrix/.agents/skills/deus-ex-machina/`
 - NO existe symlink conectando estas ubicaciones
 - Sistema de skills de Cascade busca únicamente en `~/.agents/skills/`
 
@@ -44,7 +44,7 @@ El skill `deus-ex-machina` no aparece en la lista de skills disponibles para inv
 El skill `deus-ex-machina` tiene una estructura de archivos completa y correcta:
 
 ```text
-.devin/skills/deus-ex-machina/
+.agents/skills/deus-ex-machina/
 ├── SKILL.md (9576 bytes) ✓
 ├── scripts/
 │   ├── matrix-execute-with-error-logging.sh
@@ -136,7 +136,7 @@ Link Status: ✓ Active
 Crear un symlink para hacer `deus-ex-machina` descubrible:
 
 ```bash
-ln -s /home/emiliano/www/emisrepos/matrix/.devin/skills/deus-ex-machina \
+ln -s /home/emiliano/www/emisrepos/matrix/.agents/skills/deus-ex-machina \
       /home/emiliano/.agents/skills/deus-ex-machina
 ```
 

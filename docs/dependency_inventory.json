@@ -19,12 +19,12 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/SKILL.md": {
+      ".agents/skills/deus-ex-machina/SKILL.md": {
         "type": "skill_definition",
         "depends_on": [
-          ".devin/agents/*/AGENT.md",
-          ".devin/skills/deus-ex-machina/resources/assets/routing/",
-          ".devin/skills/deus-ex-machina/scripts/",
+          ".agents/agents/*/AGENT.md",
+          ".agents/skills/deus-ex-machina/resources/assets/routing/",
+          ".agents/skills/deus-ex-machina/scripts/",
           "brain/config.yaml",
           ".context.yaml",
           "brain/state/"
@@ -36,7 +36,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/smith/AGENT.md": {
+      ".agents/agents/smith/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -47,7 +47,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/morpheus/AGENT.md": {
+      ".agents/agents/morpheus/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -58,7 +58,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/oracle/AGENT.md": {
+      ".agents/agents/oracle/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -69,7 +69,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/trinity/AGENT.md": {
+      ".agents/agents/trinity/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -80,7 +80,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/architect/AGENT.md": {
+      ".agents/agents/architect/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -91,7 +91,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/sentinel/AGENT.md": {
+      ".agents/agents/sentinel/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -102,7 +102,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/sion/AGENT.md": {
+      ".agents/agents/sion/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -113,7 +113,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/wachowski/AGENT.md": {
+      ".agents/agents/wachowski/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -125,7 +125,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/agents/keymaker/AGENT.md": {
+      ".agents/agents/keymaker/AGENT.md": {
         "type": "subagent_definition",
         "depends_on": [
           "brain/config.yaml",
@@ -228,7 +228,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md": {
+      ".agents/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md": {
         "type": "routing_resource",
         "depends_on": [],
         "referenced_by": [
@@ -236,7 +236,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md": {
+      ".agents/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md": {
         "type": "routing_resource",
         "depends_on": [],
         "referenced_by": [
@@ -244,17 +244,17 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/resources/assets/routing/routing-rules.md": {
+      ".agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md": {
         "type": "routing_resource",
         "depends_on": [
-          ".devin/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md"
+          ".agents/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md"
         ],
         "referenced_by": [
           "Deus Ex Machina (routing)"
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md": {
+      ".agents/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md": {
         "type": "routing_resource",
         "depends_on": [],
         "referenced_by": [
@@ -262,7 +262,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-validate-config.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-validate-config.sh": {
         "type": "script",
         "depends_on": [
           "brain/config.yaml"
@@ -272,7 +272,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-validate-context.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-validate-context.sh": {
         "type": "script",
         "depends_on": [
           ".context.yaml"
@@ -282,17 +282,17 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh": {
         "type": "script",
         "depends_on": [
-          ".devin/skills/deus-ex-machina/resources/assets/routing/"
+          ".agents/skills/deus-ex-machina/resources/assets/routing/"
         ],
         "referenced_by": [
           "matrix-pre-activation-checks.sh"
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-validate-activation.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-validate-activation.sh": {
         "type": "script",
         "depends_on": [
           "brain/state/work-process-log.yaml"
@@ -302,7 +302,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-pre-activation-checks.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-pre-activation-checks.sh": {
         "type": "script",
         "depends_on": [
           "matrix-validate-config.sh",
@@ -315,7 +315,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh": {
         "type": "script",
         "depends_on": [
           "brain/state/"
@@ -325,7 +325,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh": {
         "type": "script",
         "depends_on": [
           "brain/state/work-process-log.yaml"
@@ -335,7 +335,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-log-metrics.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-log-metrics.sh": {
         "type": "script",
         "depends_on": [
           "brain/state/work-process-log.yaml"
@@ -345,7 +345,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-execute-with-error-logging.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-execute-with-error-logging.sh": {
         "type": "script",
         "depends_on": [
           "brain/state/system-errors.log"
@@ -355,7 +355,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/scripts/matrix-run-script.sh": {
+      ".agents/skills/deus-ex-machina/scripts/matrix-run-script.sh": {
         "type": "script",
         "depends_on": [],
         "referenced_by": [
@@ -363,7 +363,7 @@
         ],
         "confidence": "HIGH"
       },
-      ".devin/skills/deus-ex-machina/resources/assets/logging/log-entry-structure.md": {
+      ".agents/skills/deus-ex-machina/resources/assets/logging/log-entry-structure.md": {
         "type": "documentation",
         "depends_on": [],
         "referenced_by": [
@@ -378,8 +378,8 @@
         "type": "platform",
         "description": "Devin AI development environment",
         "required_by": [
-          ".devin/skills/deus-ex-machina/SKILL.md",
-          ".devin/agents/*/AGENT.md"
+          ".agents/skills/deus-ex-machina/SKILL.md",
+          ".agents/agents/*/AGENT.md"
         ],
         "confidence": "HIGH"
       },
@@ -388,7 +388,7 @@
         "description": "Bash 4.0+ for script execution",
         "required_by": [
           "bin/matrix",
-          ".devin/skills/deus-ex-machina/scripts/*"
+          ".agents/skills/deus-ex-machina/scripts/*"
         ],
         "confidence": "HIGH"
       },

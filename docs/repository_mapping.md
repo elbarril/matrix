@@ -28,7 +28,6 @@ The Matrix repository is a personal intelligence engine implementing a QIE (Quan
 matrix/
 ├── .registry.json              # Project registry
 ├── .context.yaml               # Active project context
-├── .matrix-root                # Matrix root marker
 ├── .gitignore                  # Git ignore rules
 ├── AGENTS.md                   # Canonical operating contract
 ├── DEVIN.md                    # Devin integration notes
@@ -36,7 +35,7 @@ matrix/
 ├── onboarding.html             # Onboarding documentation
 ├── bin/
 │   └── matrix                  # Main CLI orchestrator
-├── .devin/
+├── .agents/
 │   ├── skills/
 │   │   └── deus-ex-machina/
 │   │       ├── SKILL.md        # Master agent skill definition
@@ -71,8 +70,7 @@ matrix/
 │       ├── work-process-log-legacy.jsonl  # Legacy YAML→JSONL migration file
 │       ├── work-process-log.lock  # Concurrency lock for logging
 │       └── pas-tools-index.yaml  # PAS tools index
-├── docs/ (removed)             # Analysis methodology (no longer needed)
-├── analysis/                   # Analysis artifacts
+├── docs/                       # Analysis and reverse-engineering artifacts
 ├── clients/                    # GITIGNORED: Pulled project repos
 └── .git/                       # Git repository
 ```
@@ -82,8 +80,8 @@ matrix/
 | Directory | Purpose | Confidence |
 |-----------|---------|------------|
 | `bin/` | CLI orchestration and project management | HIGH |
-| `.devin/skills/` | Devin skill definitions (master agent) | HIGH |
-| `.devin/agents/` | Devin subagent definitions (specialists) | HIGH |
+| `.agents/skills/` | Devin skill definitions (master agent) | HIGH |
+| `.agents/agents/` | Devin subagent definitions (specialists) | HIGH |
 | `brain/config/` | System and project configuration | HIGH |
 | `brain/state/` | Runtime state and logging (JSONL format) | HIGH |
 | `brain/workflows/` | Workflow definitions | HIGH |
@@ -123,7 +121,7 @@ matrix/
 
 ### Master Agent Entrypoint
 
-**File**: `.devin/skills/deus-ex-machina/SKILL.md`  
+**File**: `.agents/skills/deus-ex-machina/SKILL.md`  
 **Role**: Master agent skill definition - sole user interface  
 **Confidence**: HIGH
 
@@ -135,9 +133,9 @@ matrix/
 
 **What depends on it**:
 
-- All specialist agents (.devin/agents/*/AGENT.md)
-- Routing resources (.devin/skills/deus-ex-machina/resources/assets/routing/)
-- Validation scripts (.devin/skills/deus-ex-machina/scripts/)
+- All specialist agents (.agents/agents/*/AGENT.md)
+- Routing resources (.agents/skills/deus-ex-machina/resources/assets/routing/)
+- Validation scripts (.agents/skills/deus-ex-machina/scripts/)
 - Brain configuration (brain/config.yaml)
 - Context system (.context.yaml)
 - State management (brain/state/)
@@ -422,7 +420,7 @@ subprojects: []
 
 ### Master Agent
 
-**File**: `.devin/skills/deus-ex-machina/SKILL.md`  
+**File**: `.agents/skills/deus-ex-machina/SKILL.md`  
 **Type**: Devin Skill  
 **Model**: swe-1-5  
 **Confidence**: HIGH
@@ -458,7 +456,7 @@ subprojects: []
 
 All specialists follow the same structure:
 
-- Location: `.devin/agents/<name>/AGENT.md`
+- Location: `.agents/agents/<name>/AGENT.md`
 - Type: Devin Subagent
 - Model: swe-1-5
 - Activation: Via run_subagent by Deus Ex Machina only
@@ -575,7 +573,7 @@ The `prompts/` directory and `docs/analysis_protocol.md` were used during the re
 
 ### Validation Scripts
 
-**Location**: `.devin/skills/deus-ex-machina/scripts/`  
+**Location**: `.agents/skills/deus-ex-machina/scripts/`  
 **Purpose**: Pre-activation validation and post-activation compliance  
 **Confidence**: HIGH
 
@@ -653,12 +651,6 @@ The `prompts/` directory and `docs/analysis_protocol.md` were used during the re
 **What it does**: Executes commands with error logging (legacy, references removed system-errors.log), retry logic, and failure handling
 
 **Note**: This script references system-errors.log which no longer exists. Error logging was removed from the system but this script was not updated. The script is functionally obsolete.
-
-#### matrix-run-script.sh
-
-**Role**: Script execution wrapper  
-**Who references it**: Agents for script execution  
-**What it does**: Executes scripts with proper error handling and logging
 
 ### CLI Script
 
@@ -912,7 +904,7 @@ graph TD
     B --> E[.context.yaml]
     B --> F[brain/state/]
     
-    C --> G[.devin/agents/]
+    C --> G[.agents/agents/]
     C --> H[Routing Resources]
     C --> I[Validation Scripts]
     C --> J[Logging Scripts]
@@ -966,8 +958,8 @@ graph TD
 
 | File | Role | Referenced By | Depends On | Confidence |
 |-----|------|---------------|------------|------------|
-| `.devin/skills/deus-ex-machina/SKILL.md` | Master agent definition | Users, Devin runtime | All agents, routing resources, brain state | HIGH |
-| `.devin/agents/*/AGENT.md` | Specialist definitions | Deus Ex Machina | brain/config.yaml, .context.yaml | HIGH |
+| `.agents/skills/deus-ex-machina/SKILL.md` | Master agent definition | Users, Devin runtime | All agents, routing resources, brain state | HIGH |
+| `.agents/agents/*/AGENT.md` | Specialist definitions | Deus Ex Machina | brain/config.yaml, .context.yaml | HIGH |
 | `bin/matrix` | CLI orchestrator | Users, scripts | .registry.json, .context.yaml, brain/state/ | HIGH |
 | `brain/config.yaml` | System configuration | All agents | None | HIGH |
 | `.registry.json` | Project registry | CLI | None | HIGH |

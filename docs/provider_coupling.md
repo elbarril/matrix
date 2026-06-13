@@ -14,7 +14,7 @@ The Matrix system heavily relies on proprietary tools provided by the Devin envi
 ### 1.2 Agent Definition Format (High Coupling)
 Matrix specialist agents are defined using Devin's native Agent and Skill Markdown formats:
 * **YAML Frontmatter**: Defines `model`, `allowed-tools`, and `permissions` (e.g., `Read(**)`, `Write(matrix/**)`).
-* **Directory Structure**: Hardcoded reliance on `.devin/agents/` and `.devin/skills/`.
+* **Directory Structure**: Hardcoded reliance on `.agents/agents/` and `.agents/skills/`.
 
 ### 1.3 Memory and Session Lifecycle (Medium Coupling)
 While Matrix explicitly avoids databases in favor of its own `brain/state/` file-based system (which is highly portable), it still operates under Devin's session boundaries:
@@ -44,7 +44,7 @@ The system orchestration via the CLI (`bin/matrix`) assumes a standard POSIX env
 To run Matrix on OpenHands or Claude Code, the following abstractions must be built:
 1. **Subagent Router Shim**: A generic orchestrator to replace `run_subagent`, translating the intent into the target platform's multi-agent or thread-spawning API.
 2. **Tool Translation Layer**: Mapping `todo_write` to generic file writes or markdown task lists, and `ask_user_question` to standard terminal STDIN prompts.
-3. **Agent Parser**: A script that reads `.devin/agents/*/AGENT.md` and converts the YAML frontmatter into the target provider's expected configuration format (e.g., JSON schema for OpenHands).
+3. **Agent Parser**: A script that reads `.agents/agents/*/AGENT.md` and converts the YAML frontmatter into the target provider's expected configuration format (e.g., JSON schema for OpenHands).
 
 ## 4. Provider Interaction Diagram
 

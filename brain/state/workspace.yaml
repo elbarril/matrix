@@ -1,9 +1,6 @@
 # Matrix Workspace State
 # Tracks active projects and system state
 
-active_projects:
-  - name: providence
-    path: /home/emiliano/www/Portal-Templates-Group/providence
-    activated: 2026-05-27T00:23:48-03:00
-last_updated: "2026-05-27T00:23:48-03:00"
+active_projects: []
+last_updated: "2026-06-02T15:56:47-03:00"
 system_status: "initialized"

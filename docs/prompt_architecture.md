@@ -7,18 +7,18 @@ This document analyzes the prompt-driven behavior of the Matrix system, identify
 The Matrix system uses heavily structured Markdown files with XML tags to isolate prompt instructions.
 
 ### 1.1 Orchestration Prompts (Master Agent)
-* **Location**: `.devin/skills/deus-ex-machina/SKILL.md`
+* **Location**: `.agents/skills/deus-ex-machina/SKILL.md`
 * **Structure**: Uses `<activation>`, `<rules>`, and `<persona>` tags.
 * **Control Flow**: The `<activation>` block acts as a prompt-driven state machine. It dictates exact sequential steps (e.g., "1. Load configuration", "2. Load context", "3. Load routing resources"). It explicitly commands the LLM to execute bash validation scripts before proceeding.
 * **Communication Protocols**: Injects hidden `<neo-communication-protocol>` and `<cypher-communication-protocol>` to dictate tone and output verbatim constraints based on success/failure states.
 
 ### 1.2 Routing Prompts (Intelligence Layer)
-* **Location**: `.devin/skills/deus-ex-machina/resources/assets/routing/*.md`
+* **Location**: `.agents/skills/deus-ex-machina/resources/assets/routing/*.md`
 * **Mechanism**: These files are NOT executed by bash; they are loaded into the LLM context of Deus Ex Machina during activation.
 * **Hidden Control Flow**: The LLM reads `routing-rules.md` and uses the English logic (e.g., "Check for Wachowski priority", "Determine specialist count") to decide whether to invoke `run_subagent` once or sequentially. This is **Prompt-Driven Orchestration**, not code-driven.
 
 ### 1.3 Execution Prompts (Specialist Agents)
-* **Location**: `.devin/agents/*/AGENT.md`
+* **Location**: `.agents/agents/*/AGENT.md`
 * **Structure**: Each specialist uses identical XML blocks: `<activation>`, `<persona>`, `<domain>`, `<key_paths>`, `<boundaries>`, `<rules>`.
 * **Coupling**: The `<boundaries>` and `<rules>` blocks strictly define what the subagent *cannot* do, instructing it to return control or recommend coordination (e.g., Trinity's rule: "Coordinate with Architect for code quality review").
 

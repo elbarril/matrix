@@ -392,8 +392,8 @@
         "used_by": [
           "AGENTS.md",
           "README.md",
-          ".devin/agents/*/AGENT.md",
-          ".devin/skills/deus-ex-machina/SKILL.md",
+          ".agents/agents/*/AGENT.md",
+          ".agents/skills/deus-ex-machina/SKILL.md",
           "routing resources",
           "documentation files"
         ],

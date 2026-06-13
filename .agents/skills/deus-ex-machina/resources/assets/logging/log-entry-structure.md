@@ -178,7 +178,7 @@ Default production level: INFO (filters out DEBUG and TRACE events, reducing log
 Use `matrix-log-metrics.sh` to monitor log quality:
 
 ```bash
-$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-metrics.sh
+$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-log-metrics.sh
 ```
 
 ### Metrics Tracked
@@ -225,4 +225,4 @@ The script uses color-coded output to indicate metric status:
 - **GREEN**: Metric within acceptable threshold
 - **RED**: Metric exceeds threshold (requires attention)
 
-For detailed analysis and improvement recommendations, see `brain/data/LOG_ANALYSIS_IMPROVEMENTS.md`.
+Run this script periodically to monitor log quality and detect degradation.

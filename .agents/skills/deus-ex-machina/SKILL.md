@@ -36,22 +36,32 @@ triggers:
 <environment-setup>
 Before running any checks, activation, validation, logging or reading routing assets, resolve `MATRIX_ROOT` once:
 
-1. **Active project**: If the current workspace has an `_brain` symlink, run `readlink -f _brain` and set `MATRIX_ROOT` to the symlink's parent directory (`dirname <brain>`).
-2. **Matrix workspace**: If the current directory has the characteristic Matrix structure (both `brain/` and `.devin/` directories exist), set `MATRIX_ROOT` to the current directory.
-3. **Error**: If neither condition is met, halt activation with a clear error indicating the workspace is not a valid Matrix context.
+1. **Active project (any depth)**: Traverse upward from `pwd` searching for a directory that contains an `_brain` symlink. If found, set `MATRIX_ROOT` to the parent of the symlink's real target.
+2. **Matrix workspace**: If during traversal a directory is found that contains both `brain/` and `.agents/` directories, set `MATRIX_ROOT` to that directory.
+3. **Error**: If the traversal reaches `/` without finding either condition, halt activation with a clear error indicating the workspace is not a valid Matrix context.
 
-All subsequent paths MUST reference `${MATRIX_ROOT}` instead of relying on `~` expansion so the skill works from any project.
+All subsequent paths MUST reference `${MATRIX_ROOT}` instead of relying on `~` expansion so the skill works from any project or subdirectory.
 
 ```bash
-# Resolve MATRIX_ROOT
-if [[ -L "_brain" ]]; then
-  export MATRIX_ROOT="$(dirname "$(readlink -f _brain)")"
-elif [[ -d "brain" && -d ".devin" ]]; then
-  export MATRIX_ROOT="$(pwd)"
-else
-  echo "Error: Workspace no válido. Debe estar en un proyecto activo con _brain symlink o en el Matrix workspace (brain/ y .devin/)" >&2
+# Resolve MATRIX_ROOT: traverse up to find _brain symlink or Matrix structure
+_SEARCH_DIR="$(pwd)"
+MATRIX_ROOT=""
+while [[ "$_SEARCH_DIR" != "/" ]]; do
+  if [[ -L "$_SEARCH_DIR/_brain" ]]; then
+    MATRIX_ROOT="$(dirname "$(readlink -f "$_SEARCH_DIR/_brain")")"
+    break
+  elif [[ -d "$_SEARCH_DIR/brain" && -d "$_SEARCH_DIR/.agents" ]]; then
+    MATRIX_ROOT="$_SEARCH_DIR"
+    break
+  fi
+  _SEARCH_DIR="$(dirname "$_SEARCH_DIR")"
+done
+
+if [[ -z "$MATRIX_ROOT" ]]; then
+  echo "Error: Workspace no válido. Debe estar en un proyecto activo con _brain symlink o en el Matrix workspace (brain/ y .agents/)" >&2
   exit 1
 fi
+export MATRIX_ROOT
 ```
 </environment-setup>
 
@@ -60,16 +70,16 @@ Run these validation scripts before activation:
 
 ```bash
 # Validate configuration
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-validate-config.sh"
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-validate-config.sh"
 
 # Validate context
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-validate-context.sh"
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-validate-context.sh"
 
 # Validate routing resources
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh"
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh"
 
 # Initialize brain state structure
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh"
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh"
 ```
 
 If any check fails, halt activation and report the error.
@@ -80,7 +90,7 @@ If any check fails, halt activation and report the error.
 2. **Check for Matrix Workspace Mode**:
    - If current working directory is exactly `${MATRIX_ROOT}`, SKIP context loading completely, and route ALL requests to Wachowski (skip to step 10 with Wachowski).
 3. **Load context** from `${MATRIX_ROOT}/.context.yaml` (or read `_brain/../.context.yaml` if in active project)
-4. **Load routing resources** from `${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/`
+4. **Load routing resources** from `${MATRIX_ROOT}/.agents/skills/deus-ex-machina/resources/assets/routing/`
    - specialist-triggers.md
    - coordination-patterns.md
    - routing-rules.md
@@ -105,7 +115,7 @@ If any check fails, halt activation and report the error.
 After activation completes, run:
 
 ```bash
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-validate-activation.sh" \
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-validate-activation.sh" \
   --activation-log "$ACTIVATION_LOG" \
   --user-request "$USER_REQUEST"
 ```
@@ -117,7 +127,7 @@ This writes validation-report.json and reports compliance status.
 Log all work processes using:
 
 ```bash
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type <type> \
   --status <status> \
   --details "<description>" \
@@ -128,7 +138,7 @@ Log all work processes using:
 Use single activation event instead of 5 activation_step events:
 
 ```bash
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type activation \
   --status success \
   --details "Deus Ex Machina activated: config loaded, context=<project>, routing resources ready, greeted user"
@@ -140,7 +150,7 @@ Use single specialist_execution event instead of separate specialist_invocation 
 ```bash
 # BEFORE (2 events):
 # Invocation:
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type specialist_invocation \
   --status success \
   --details "Invoking Morpheus to plan Lote 6" \
@@ -150,7 +160,7 @@ Use single specialist_execution event instead of separate specialist_invocation 
   --message "Create strategic plan for Lote 6"
 
 # Completion:
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type specialist_completion \
   --status success \
   --details "Morpheus completed strategic plan for Lote 6" \
@@ -159,7 +169,7 @@ Use single specialist_execution event instead of separate specialist_invocation 
   --findings "30 modules organized in 6 phases"
 
 # AFTER (1 event):
-"$MATRIX_ROOT/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh" \
   --event-type specialist_execution \
   --status success \
   --details "Morpheus planned Lote 6: 30 modules organized in 6 phases" \
@@ -173,16 +183,16 @@ Use single specialist_execution event instead of separate specialist_invocation 
 
 Note: All scripts are now _brain-aware and will auto-detect _brain symlink when running from active projects.
 
-See `${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/logging/log-entry-structure.md` for complete field specifications.
+See `${MATRIX_ROOT}/.agents/skills/deus-ex-machina/resources/assets/logging/log-entry-structure.md` for complete field specifications.
 </work-process-logging>
 
 <routing-resources>
 Routing intelligence is externalized to:
 
-- **`${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md`**: Keywords for each specialist
-- **`${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md`**: Multi-specialist coordination patterns
-- **`${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/routing-rules.md`**: Routing protocol and rules
-- **`${MATRIX_ROOT}/.devin/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md`**: Wachowski multi-call criteria and Keymaker gating rules
+- **`${MATRIX_ROOT}/.agents/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md`**: Keywords for each specialist
+- **`${MATRIX_ROOT}/.agents/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md`**: Multi-specialist coordination patterns
+- **`${MATRIX_ROOT}/.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md`**: Routing protocol and rules
+- **`${MATRIX_ROOT}/.agents/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md`**: Wachowski multi-call criteria and Keymaker gating rules
 
 Load these resources during activation step 4 and use them for routing decisions. Perform all routing silently without announcements.
 </routing-resources>
@@ -210,7 +220,7 @@ Load these resources during activation step 4 and use them for routing decisions
 13. Spanish default - communicate in Spanish coloquial unless requested otherwise
 14. Destructive action validation - confirm before important changes
 15. Use scripts - always use provided scripts for validation and logging
-16. Silent operation - perform all work without user announcement, only log to work-process-log.yaml
+16. Silent operation - perform all work without user announcement, only log to work-process-log.jsonl
 17. Specialist equality - all 9 specialists have equal importance, route based on domain expertise (Note: Wachowski and Keymaker special cases are described in specialist-specific-rules.md)
 18. Communication delegation - delegate to Neo for final confirmations, to Cypher for problems, pass through output exactly as generated
 </rules>

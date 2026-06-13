@@ -13,6 +13,15 @@ Matrix is your personal intelligence layer - the operating system for managing p
 
 ## Quick Start
 
+### Initial Setup
+
+The IDE/Devin discovers skills from `~/.agents/skills/`. Create a symlink so `/deus-ex-machina` is invocable:
+
+```bash
+# Required once — makes the skill discoverable from ~
+ln -s ~/www/emisrepos/matrix/.agents/skills/deus-ex-machina ~/.agents/skills/deus-ex-machina
+```
+
 ### Project Management
 
 ```bash
@@ -77,7 +86,7 @@ matrix/
 ├── .gitignore                 # Ignore clients/, _brain symlinks, secrets
 ├── bin/
 │   └── matrix                 # CLI orchestrator
-├── .devin/
+├── .agents/
 │   ├── skills/
 │   │   └── deus-ex-machina/
 │   │       └── SKILL.md       # Master agent (Devin Skill)
@@ -94,7 +103,7 @@ matrix/
 ├── brain/
 │   ├── config.yaml            # User configuration
 │   ├── workflows/             # Workflow definitions
-│   ├── data/                  # Reference documentation
+│   ├── config/                # Project and global skills configuration
 │   └── state/                 # Sessions, checkpoints, workspace
 └── clients/                   # GITIGNORED: Pulled project repos
 ```
@@ -152,13 +161,13 @@ If any enforced step fails, the skill halts with an error.
 After activation completes, the skill validates compliance:
 
 - Checks log contains required markers for each enforced step
-- Writes validation report to `brain/state/validation-report.yaml`
+- Writes validation report to `brain/state/validation-report.json`
 - Flags non-compliant activations
 - Continues in degraded mode if non-compliant (allows work but flags as non-compliant)
 
 ### Work Process Logging
 
-All work processes are logged to `brain/state/work-process-log.yaml`:
+All work processes are logged to `brain/state/work-process-log.jsonl`:
 
 - Activation steps with timestamps and status
 - Routing decisions with detected specialists and patterns
@@ -166,15 +175,15 @@ All work processes are logged to `brain/state/work-process-log.yaml`:
 - Specialist completions with outcomes
 - Checkpoint writes
 
-Logs are rotated after 100 entries, with older logs archived to `brain/state/work-process-log-archive/`.
+Logs are rotated after 1000 entries, with older logs archived to `brain/state/work-process-log-archive/`.
 
 ### Troubleshooting Safeguard Issues
 
 **Validation report shows non-compliant activation**:
 
-- Check `brain/state/validation-report.yaml` for missing steps
-- Verify all routing resources exist in `.devin/skills/deus-ex-machina/resources/assets/routing/`
-- Review `brain/state/work-process-log.yaml` for incomplete logs
+- Check `brain/state/validation-report.json` for missing steps
+- Verify all routing resources exist in `.agents/skills/deus-ex-machina/resources/assets/routing/`
+- Review `brain/state/work-process-log.jsonl` for incomplete logs
 - Ensure skill is invoked via `/deus-ex-machina` or skill trigger
 - Re-invoke skill with proper Devin mechanism
 
@@ -188,7 +197,7 @@ Logs are rotated after 100 entries, with older logs archived to `brain/state/wor
 
 **Missing routing resources**:
 
-- Verify `.devin/skills/deus-ex-machina/resources/assets/routing/` directory exists
+- Verify `.agents/skills/deus-ex-machina/resources/assets/routing/` directory exists
 - Check that `specialist-triggers.md`, `coordination-patterns.md`, and `routing-rules.md` exist
 - If missing, restore from repository or create based on AGENTS.md specifications
 

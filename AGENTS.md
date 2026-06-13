@@ -73,13 +73,13 @@ All agents activate using this sequence:
 8. **Execute or Route**: Perform task or route to appropriate specialist
 9. **Update State**: Write checkpoint if significant progress made
 
-**Note**: This is the high-level activation contract. The detailed implementation with additional steps (Wachowski trigger detection, context detection, multi-call protocol, etc.) is defined in `.devin/skills/deus-ex-machina/SKILL.md`. The contract here defines the essential flow, while SKILL.md contains the complete operational logic.
+**Note**: This is the high-level activation contract. The detailed implementation with additional steps (Wachowski trigger detection, context detection, multi-call protocol, etc.) is defined in `.agents/skills/deus-ex-machina/SKILL.md`. The contract here defines the essential flow, while SKILL.md contains the complete operational logic.
 
 ## Master Agent: Deus Ex Machina
 
 Invoked as skill: `skill invoke deus-ex-machina`.
 
-The skill directory is: `.devin/skills/deus-ex-machina/`
+The skill directory is: `.agents/skills/deus-ex-machina/`
 
 All paths in this skill are relative to the Matrix project root at `~/www/emisrepos/matrix/`
 
@@ -144,7 +144,7 @@ After activation completes, the skill validates compliance.
 
 #### Work Process Logging
 
-All work processes are logged to `brain/state/work-process-log.yaml`.
+All work processes are logged to `brain/state/work-process-log.jsonl`.
 
 ### Protocol Violation Troubleshooting
 
@@ -159,9 +159,9 @@ All work processes are logged to `brain/state/work-process-log.yaml`.
 
 **Troubleshooting Steps**:
 
-1. Check `brain/state/validation-report.yaml` for missing steps
-2. Verify all routing resources exist in `.devin/skills/deus-ex-machina/resources/assets/routing/`
-3. Review `brain/state/work-process-log.yaml` for incomplete logs
+1. Check `brain/state/validation-report.json` for missing steps
+2. Verify all routing resources exist in `.agents/skills/deus-ex-machina/resources/assets/routing/`
+3. Review `brain/state/work-process-log.jsonl` for incomplete logs
 4. Ensure skill is invoked via `/deus-ex-machina` or skill trigger
 5. Check that all pre-invocation checks passed
 
@@ -354,7 +354,7 @@ The system maintains coherence through:
 - **Sacred Foundation**: Master agent's unchangeable core values
 - **Clear Boundaries**: Each specialist has defined scope
 - **Specialist Equality**: All 9 specialists have equal importance, routing is based on domain expertise
-- **Silent Operation**: Deus Ex Machina operates silently, logging all actions to work-process-log.yaml for traceability
+- **Silent Operation**: Deus Ex Machina operates silently, logging all actions to work-process-log.jsonl for traceability
 - **File-Based State**: All interactions are traceable and recoverable
 
 ## Evolution Path
@@ -365,6 +365,7 @@ The system maintains coherence through:
 - No authentication or web UI
 - No MCP servers or multi-session worktrees
 - Maximum 9 active specialists (Smith, Morpheus, Oracle, Trinity, Architect, Sentinel, Sion, Wachowski, Keymaker)
+- Log rotation after 1000 entries (not 100)
 - Single-user, single-session design
 
 ### Future Expansion
@@ -383,8 +384,8 @@ The system maintains coherence through:
 
 ```bash
 # Check skill paths
-ls -la .devin/skills/
-ls -la .devin/agents/
+ls -la .agents/skills/
+ls -la .agents/agents/
 ```
 
 **No active project**:
@@ -406,7 +407,7 @@ ls -la .devin/agents/
 
 ```bash
 # Check skill permissions
-cat .devin/skills/deus-ex-machina/SKILL.md | grep allowed-tools
+cat .agents/skills/deus-ex-machina/SKILL.md | grep allowed-tools
 ```
 
 ### Debug Commands
@@ -416,7 +417,7 @@ cat .devin/skills/deus-ex-machina/SKILL.md | grep allowed-tools
 ./bin/matrix status
 
 # Verify skills
-find .devin -name "*.md" | wc -l
+find .agents -name "*.md" | wc -l
 
 # Check brain link
 ls -la _brain

@@ -151,7 +151,7 @@ When context is loaded and has skill_priority configured, apply the following ro
 - Apply routing logic based on skill_priority mode
 - **CRITICAL**: If skill_priority is not set or is invalid, default to "matrix_specialists_only"
 - **FORBIDDEN**: Never route to generic subagents (subagent_explore, subagent_general, etc.) when Matrix is active
-- **VALIDATION**: Check that target agent exists in .devin/agents/ directory before routing
+- **VALIDATION**: Check that target agent exists in .agents/agents/ directory before routing
 - Log routing decision with context and priority mode
 - Allow user override for all modes
 
@@ -163,7 +163,7 @@ When routing, also check brain/config/global-skills.yaml for usage patterns:
 2. Check if request matches any usage_pattern.pattern
 3. If pattern matches and context is in pattern.contexts (or "all"):
    - Include global skills from pattern.skills in routing options
-   - Apply priority: Matrix specialists > global skills > local skills
+   - Apply priority: local skills > global skills > Matrix specialists
 4. If pattern.contexts is ["all"], apply to all contexts
 5. If pattern.contexts lists specific contexts, apply only to those
 
@@ -171,7 +171,7 @@ When routing, also check brain/config/global-skills.yaml for usage patterns:
 
 - Check global-skills.yaml for matching patterns
 - If pattern matches, include global skills in routing options
-- Respect priority: Matrix specialists > global skills > local skills
+- Respect priority: local skills > global skills > Matrix specialists
 - Log global skills usage when applicable
 - Allow user to override global skills suggestion
 
@@ -190,8 +190,8 @@ Route to single specialist when:
 ### Routing Process
 
 - Route to specialist silently (no announcement)
-- Use run_subagent with agent name from .devin/agents/
-- **VALIDATION**: Verify agent exists in .devin/agents/ before routing
+- Use run_subagent with agent name from .agents/agents/
+- **VALIDATION**: Verify agent exists in .agents/agents/ before routing
 - **FORBIDDEN**: Never route to generic subagents (subagent_explore, subagent_general, etc.)
 - Pass original request with full context (context.yaml, system state)
 - Wait for specialist completion
@@ -219,12 +219,12 @@ Route to multiple specialists when:
 - Identify coordination pattern from coordination-patterns.md
 - Execute specialists sequentially in defined order (silently, no upfront announcement)
 - Pass context and previous specialist outputs between specialists
-- **VALIDATION**: Verify all agents exist in .devin/agents/ before routing
+- **VALIDATION**: Verify all agents exist in .agents/agents/ before routing
 - **FORBIDDEN**: Never use generic subagents (subagent_explore, subagent_general, etc.)
 - Synthesize unified summary combining all contributions
 - Handle conflicts by presenting both perspectives with recommendations
 - Never use skill invoke for specialists
-- Always use run_subagent with local agents in .devin/agents/
+- Always use run_subagent with local agents in .agents/agents/
 
 ### Coordination Pattern Selection
 

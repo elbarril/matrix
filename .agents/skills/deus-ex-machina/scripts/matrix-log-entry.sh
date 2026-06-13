@@ -56,11 +56,6 @@ if [[ -z "$EVENT_TYPE" ]] || [[ -z "$STATUS" ]] || [[ -z "$DETAILS" ]]; then
   exit 2
 fi
 
-# Aggressive filtering: drop routine 'activation' events without errors
-if [[ "$EVENT_TYPE" == "activation" ]] && [[ "$STATUS" == "success" ]]; then
-  exit 0
-fi
-
 declare -A LOG_LEVEL_VALUES=( ["ERROR"]=0 ["WARNING"]=1 ["INFO"]=2 ["DEBUG"]=3 ["TRACE"]=4 )
 declare -A DEFAULT_EVENT_LEVELS=( ["activation"]="INFO" ["activation_step"]="DEBUG" ["checkpoint_write"]="DEBUG" ["checkpoint"]="DEBUG" ["routing_decision"]="INFO" ["specialist_invocation"]="INFO" ["specialist_completion"]="INFO" ["specialist_execution"]="INFO" ["problem"]="WARNING" ["validation"]="WARNING" ["error"]="ERROR" )
 

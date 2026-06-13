@@ -32,14 +32,14 @@ See [AGENTS.md](AGENTS.md#session-hygiene) for complete session hygiene requirem
 
 ### Master Agent (Skill)
 
-- **Location**: `.devin/skills/deus-ex-machina/SKILL.md`
+- **Location**: `.agents/skills/deus-ex-machina/SKILL.md`
 - **Type**: Devin Skill
 - **Access**: Invoked via `/deus-ex-machina` or skill trigger
 - **Permissions**: Full read access, Matrix write access, Matrix CLI execution
 
 ### Specialist Agents (Subagents)
 
-- **Location**: `.devin/agents/<name>/AGENT.md`
+- **Location**: `.agents/agents/<name>/AGENT.md`
 - **Type**: Devin Subagent
 - **Access**: Invoked only by Deus Ex Machina routing
 - **Permissions**: Varies by specialist domain
@@ -78,7 +78,7 @@ The Deus Ex Machina skill includes built-in enforcement mechanisms to ensure the
 
 ### Validation Scripts
 
-The system includes several validation scripts in `.devin/skills/deus-ex-machina/scripts/`:
+The system includes several validation scripts in `.agents/skills/deus-ex-machina/scripts/`:
 
 - **matrix-pre-activation-checks.sh**: Consolidated pre-activation validation (config, context, routing resources, brain state)
 - **matrix-validate-config.sh**: Validates brain/config.yaml exists and is valid YAML
@@ -94,7 +94,7 @@ All scripts are _brain-aware and auto-detect _brain symlink when running from ac
 
 - The Matrix CLI (`bin/matrix`) does NOT invoke agents
 - Agents (skills) are invoked through Devin (e.g., `/deus-ex-machina` or skill trigger)
-- See [SKILL.md](.devin/skills/deus-ex-machina/SKILL.md) for complete enforcement implementation details
+- See [SKILL.md](.agents/skills/deus-ex-machina/SKILL.md) for complete enforcement implementation details
 
 ### CLI vs Skill Responsibilities
 
@@ -111,7 +111,7 @@ All scripts are _brain-aware and auto-detect _brain symlink when running from ac
 - Work process logging and routing to specialist agents
 - Uses CLI for checkpoints, not for invocation
 
-See [SKILL.md](.devin/skills/deus-ex-machina/SKILL.md) for complete skill implementation including:
+See [SKILL.md](.agents/skills/deus-ex-machina/SKILL.md) for complete skill implementation including:
 
 - `<pre-invocation-checks>`: Validation scripts before activation
 - `<activation-protocol>`: Step-by-step activation sequence
@@ -141,7 +141,7 @@ skill invoke deus-ex-machina "your request here"
 /smith "debug this issue"  # WRONG - users only interact with Deus Ex Machina
 
 # DO NOT manually read SKILL.md and skip activation protocol
-cat .devin/skills/deus-ex-machina/SKILL.md  # WRONG - bypasses enforcement
+cat .agents/skills/deus-ex-machina/SKILL.md  # WRONG - bypasses enforcement
 ```
 
 ### Why Skill-Level Enforcement?
@@ -170,8 +170,8 @@ The `.registry.json` knows about all projects. Only projects being actively work
 
 Each agent uses Devin's native structure:
 
-- Master agent is a Skill (`.devin/skills/<name>/SKILL.md`)
-- Specialists are Subagents (`.devin/agents/<name>/AGENT.md`)
+- Master agent is a Skill (`.agents/skills/<name>/SKILL.md`)
+- Specialists are Subagents (`.agents/agents/<name>/AGENT.md`)
 - All have YAML frontmatter and structured Markdown/XML bodies
 
 ### Sacred Foundation

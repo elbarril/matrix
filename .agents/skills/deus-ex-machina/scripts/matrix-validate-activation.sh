@@ -49,7 +49,7 @@ if [[ -z "$ACTIVATION_LOG" ]] || [[ -z "$USER_REQUEST" ]]; then
   exit 2
 fi
 
-# Default matrix dir: scripts/ -> deus-ex-machina/ -> skills/ -> .devin/ -> matrix root
+# Default matrix dir: scripts/ -> deus-ex-machina/ -> skills/ -> .agents/ -> matrix root
 if [[ -z "$MATRIX_DIR" ]]; then
   # Check if _brain symlink exists in current directory (active project)
   if [[ -L "_brain" ]]; then

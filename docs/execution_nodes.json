@@ -19,7 +19,7 @@
           "pre_activation_validation"
         ],
         "evidence": [
-          ".devin/skills/deus-ex-machina/SKILL.md lines 30-32"
+          ".agents/skills/deus-ex-machina/SKILL.md lines 30-32"
         ]
       }
     },

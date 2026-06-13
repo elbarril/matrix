@@ -30,7 +30,7 @@
     "portability": "Moderate to High Effort",
     "blockers": [
       "run_subagent tool is a proprietary Devin capability for spawning stateless subagents. Other runtimes like Claude Code or OpenHands have different subagent mechanisms.",
-      "The 'skill' construct (.devin/skills vs .devin/agents) is native to Devin.",
+      "The 'skill' construct (.agents/skills vs .agents/agents) is native to Devin.",
       "Permissions strings 'Read(**)', 'Write(matrix/**)' are parsed by the Devin/Windsurf runtime."
     ],
     "portable_elements": [

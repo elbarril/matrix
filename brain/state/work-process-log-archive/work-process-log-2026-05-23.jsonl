@@ -2,7 +2,7 @@
 {"timestamp": "2026-05-22T00:02:02-03:00", "event_type": "activation", "level": "INFO", "status": "started", "details": "Deus Ex Machina activation started"}
 {"timestamp": "2026-05-22T00:02:06-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Configuration loaded from brain/config.yaml"}
 {"timestamp": "2026-05-22T00:02:06-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Context loaded from .context.yaml - active project: iats"}
-{"timestamp": "2026-05-22T00:02:07-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Routing resources loaded from .devin/skills/deus-ex-machina/resources/assets/routing/"}
+{"timestamp": "2026-05-22T00:02:07-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Routing resources loaded from .agents/skills/deus-ex-machina/resources/assets/routing/"}
 {"timestamp": "2026-05-22T00:02:07-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Greeting skipped - routed directly to Wachowski for Matrix system task"}
 {"timestamp": "2026-05-22T00:02:07-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "User request received: implement Fase 3 (Checkpoint Inteligente) from Matrix log analysis"}
 {"timestamp": "2026-05-22T00:02:08-03:00", "event_type": "routing", "level": "INFO", "status": "completed", "details": "Routed to Wachowski - Matrix workspace detected with Fase 3 (Checkpoint Inteligente) implementation request"}
@@ -22,7 +22,7 @@
 {"timestamp": "2026-05-22T00:05:45-03:00", "event_type": "activation", "level": "INFO", "status": "started", "details": "Deus Ex Machina activation started"}
 {"timestamp": "2026-05-22T00:05:50-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Configuration loaded from brain/config.yaml"}
 {"timestamp": "2026-05-22T00:05:50-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Context loaded from .context.yaml - active project: iats"}
-{"timestamp": "2026-05-22T00:05:50-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Routing resources loaded from .devin/skills/deus-ex-machina/resources/assets/routing/"}
+{"timestamp": "2026-05-22T00:05:50-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Routing resources loaded from .agents/skills/deus-ex-machina/resources/assets/routing/"}
 {"timestamp": "2026-05-22T00:05:50-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Greeting skipped - routed directly to Wachowski for Matrix system task"}
 {"timestamp": "2026-05-22T00:05:50-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "User request received: implement Fase 4 (Consolidaci\u00f3n de Specialists) from Matrix log analysis"}
 {"timestamp": "2026-05-22T00:05:52-03:00", "event_type": "routing", "level": "INFO", "status": "completed", "details": "Routed to Wachowski - Matrix workspace detected with Fase 4 (Consolidaci\u00f3n de Specialists) implementation request"}
@@ -35,7 +35,7 @@
 {"timestamp": "2026-05-22T00:09:29-03:00", "event_type": "activation", "level": "INFO", "status": "started", "details": "Deus Ex Machina activation started"}
 {"timestamp": "2026-05-22T00:09:34-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Configuration loaded from brain/config.yaml"}
 {"timestamp": "2026-05-22T00:09:34-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Context loaded from .context.yaml - active project: iats"}
-{"timestamp": "2026-05-22T00:09:34-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Routing resources loaded from .devin/skills/deus-ex-machina/resources/assets/routing/"}
+{"timestamp": "2026-05-22T00:09:34-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Routing resources loaded from .agents/skills/deus-ex-machina/resources/assets/routing/"}
 {"timestamp": "2026-05-22T00:09:34-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Greeting skipped - routed directly to Wachowski for Matrix system task"}
 {"timestamp": "2026-05-22T00:09:36-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "User request received: implement Fase 5 (M\u00e9tricas de Calidad) from Matrix log analysis - CRITICAL: user emphasized importance and system integrity must be preserved"}
 {"timestamp": "2026-05-22T00:09:37-03:00", "event_type": "routing", "level": "INFO", "status": "completed", "details": "Routed to Wachowski - Matrix workspace detected with Fase 5 (M\u00e9tricas de Calidad) implementation request - CRITICAL PRIORITY: user emphasized system integrity must be preserved"}

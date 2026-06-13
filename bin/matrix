@@ -382,7 +382,7 @@ write_checkpoint() {
     log_success "Checkpoint written to checkpoints.jsonl"
 
     # Log checkpoint to work-process-log.jsonl
-    local log_script="$MATRIX_DIR/.devin/skills/deus-ex-machina/scripts/matrix-log-entry.sh"
+    local log_script="$MATRIX_DIR/.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh"
     if [[ -x "$log_script" ]]; then
         "$log_script" \
             --event-type "checkpoint_write" \

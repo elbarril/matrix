@@ -38,7 +38,7 @@ graph TD
     E --> F
 ```
 
-**Evidence**: `.devin/skills/deus-ex-machina/SKILL.md` lines 30-32 (triggers: user, model)
+**Evidence**: `.agents/skills/deus-ex-machina/SKILL.md` lines 30-32 (triggers: user, model)
 
 ### 1.2 High-Level Execution Flow
 
@@ -161,7 +161,7 @@ graph TD
 
 - **Pattern**: _brain-aware path resolution
 - **Priority**: Try `_brain/../.context.yaml` first (if in active project)
-- **Fallback**: `~/www/emiliano/www/emisrepos/matrix/.context.yaml`
+- **Fallback**: `~/www/emisrepos/matrix/.context.yaml`
 - **Purpose**: Load active project state and configuration
 
 **Evidence**: SKILL.md line 57, AGENTS.md _brain-Aware Path Resolution Pattern
@@ -172,7 +172,7 @@ graph TD
   - `specialist-triggers.md` - Keywords for each specialist
   - `coordination-patterns.md` - Multi-specialist patterns
   - `routing-rules.md` - Routing protocol and rules
-- **Location**: `~/www/emisrepos/matrix/.devin/skills/deus-ex-machina/resources/assets/routing/`
+- **Location**: `~/www/emisrepos/matrix/.agents/skills/deus-ex-machina/resources/assets/routing/`
 - **Purpose**: Load routing intelligence for decision making
 
 **Evidence**: SKILL.md lines 58-61, routing-resources section (lines 160-168)
@@ -887,7 +887,7 @@ graph TD
 
 - Deus Ex Machina routes without announcements
 - Wachowski operates silently
-- All logging goes to work-process-log.yaml
+- All logging goes to work-process-log.jsonl
 - User-facing output only for final results
 
 **Evidence**: SKILL.md persona section (line 174), wachowski/AGENT.md persona section (line 65)

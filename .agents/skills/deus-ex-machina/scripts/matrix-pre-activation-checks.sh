@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Default matrix dir: scripts/ -> deus-ex-machina/ -> skills/ -> .devin/ -> matrix root
+# Default matrix dir: scripts/ -> deus-ex-machina/ -> skills/ -> .agents/ -> matrix root
 if [[ -z "$MATRIX_DIR" ]]; then
   # Check if _brain symlink exists in current directory (active project)
   if [[ -L "_brain" ]]; then

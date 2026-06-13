@@ -14,3 +14,5 @@
 {"timestamp":"2026-05-27T00:33:16-03:00","event_type":"system_update","level":"INFO","status":"success","details":"Iniciando eliminación de subagentes genéricos del sistema Matrix","specialist":"Deus Ex Machina"}
 {"timestamp":"2026-05-27T00:33:42-03:00","event_type":"system_update","level":"INFO","status":"success","details":"Eliminación de subagentes genéricos completada - routing rules actualizados","specialist":"Deus Ex Machina"}
 {"timestamp":"2026-05-27T00:33:45-03:00","event_type":"system_update","level":"INFO","status":"success","details":"Configuración de Matrix actualizada: eliminados subagentes genéricos, prioridad Matrix specialists only","specialist":"Deus Ex Machina"}
+{"timestamp":"2026-06-13T20:24:18-03:00","event_type":"activation","level":"INFO","status":"success","details":"Deus Ex Machina activated: config loaded, Matrix workspace mode, routing resources ready, greeted user"}
+{"timestamp":"2026-06-13T20:33:47-03:00","event_type":"activation","level":"INFO","status":"success","details":"Deus Ex Machina activated: config loaded, Matrix workspace mode, routing resources ready, greeted user"}

@@ -41,7 +41,7 @@
 {"timestamp": "2026-05-21T23:42:44-03:00", "event_type": "task_completion", "status": "completed", "details": "Lote 5: Content & Files completado exitosamente - 17 m\u00f3dulos actualizados, 5 creados desde cero, 12 cross-references bidireccionales verificadas - Roadmap actualizado - 99 m\u00f3dulos completados (71.2%), 40 pendientes (28.8%)"}
 {"timestamp": "2026-05-21T23:44:12-03:00", "event_type": "activation_step", "status": "success", "details": "Loaded configuration using _brain-aware pattern: user=Emiliano, language=es, timezone=America/Argentina/Buenos_Aires"}
 {"timestamp": "2026-05-21T23:44:23-03:00", "event_type": "activation_step", "status": "success", "details": "Loaded context from .context.yaml: active_project=iats, active_project_path=/home/emiliano/www/iats"}
-{"timestamp": "2026-05-21T23:44:23-03:00", "event_type": "activation_step", "status": "success", "details": "Loaded routing resources from .devin/skills/deus-ex-machina/resources/assets/routing/: specialist-triggers.md, coordination-patterns.md, routing-rules.md"}
+{"timestamp": "2026-05-21T23:44:23-03:00", "event_type": "activation_step", "status": "success", "details": "Loaded routing resources from .agents/skills/deus-ex-machina/resources/assets/routing/: specialist-triggers.md, coordination-patterns.md, routing-rules.md"}
 {"timestamp": "2026-05-21T23:44:23-03:00", "event_type": "activation_step", "status": "success", "details": "Spanish coloquial greeting generated for user Emiliano"}
 {"timestamp": "2026-05-21T23:44:23-03:00", "event_type": "activation_step", "status": "success", "details": "Received user request: continuemos trabajando con el lote 6"}
 {"timestamp": "2026-05-21T23:44:26-03:00", "event_type": "routing_decision", "status": "success", "details": "Single specialist routing: Morpheus for Lote 6 planning", "user_request": "continuemos trabajando con el lote 6", "specialists_detected": ["Morpheus"]}
@@ -60,7 +60,7 @@
 {"timestamp": "2026-05-21T23:49:30-03:00", "event_type": "routing", "status": "completed", "details": "Wachowski completed Matrix log analysis - found 34.6% verbosity, recurrent errors identified, 5 improvement proposals created"}
 {"timestamp": "2026-05-21T23:49:42-03:00", "event_type": "activation", "status": "completed", "details": "Configuration loaded from brain/config.yaml"}
 {"timestamp": "2026-05-21T23:49:42-03:00", "event_type": "activation", "status": "completed", "details": "Context loaded from .context.yaml - active project: iats"}
-{"timestamp": "2026-05-21T23:49:42-03:00", "event_type": "activation", "status": "completed", "details": "Routing resources loaded from .devin/skills/deus-ex-machina/resources/assets/routing/"}
+{"timestamp": "2026-05-21T23:49:42-03:00", "event_type": "activation", "status": "completed", "details": "Routing resources loaded from .agents/skills/deus-ex-machina/resources/assets/routing/"}
 {"timestamp": "2026-05-21T23:49:42-03:00", "event_type": "activation", "status": "completed", "details": "Greeting skipped - routed directly to Wachowski for Matrix system task"}
 {"timestamp": "2026-05-21T23:49:42-03:00", "event_type": "activation", "status": "completed", "details": "User request received: log analysis for Matrix system optimization"}
 {"timestamp": "2026-05-21T23:49:45-03:00", "event_type": "session", "status": "completed", "details": "Deus Ex Machina session completed - Wachowski executed Matrix log analysis, found 34.6% verbosity, created improvement proposals, Neo provided final confirmation to user"}
@@ -70,7 +70,7 @@
 {"timestamp": "2026-05-21T23:53:21-03:00", "event_type": "activation", "status": "started", "details": "Deus Ex Machina activation started"}
 {"timestamp": "2026-05-21T23:53:26-03:00", "event_type": "activation", "status": "completed", "details": "Configuration loaded from brain/config.yaml"}
 {"timestamp": "2026-05-21T23:53:26-03:00", "event_type": "activation", "status": "completed", "details": "Context loaded from .context.yaml - active project: iats"}
-{"timestamp": "2026-05-21T23:53:26-03:00", "event_type": "activation", "status": "completed", "details": "Routing resources loaded from .devin/skills/deus-ex-machina/resources/assets/routing/"}
+{"timestamp": "2026-05-21T23:53:26-03:00", "event_type": "activation", "status": "completed", "details": "Routing resources loaded from .agents/skills/deus-ex-machina/resources/assets/routing/"}
 {"timestamp": "2026-05-21T23:53:26-03:00", "event_type": "activation", "status": "completed", "details": "Greeting skipped - routed directly to Wachowski for Matrix system task"}
 {"timestamp": "2026-05-21T23:53:26-03:00", "event_type": "activation", "status": "completed", "details": "User request received: implement Fase 1 (Log Levels) from Matrix log analysis"}
 {"timestamp": "2026-05-21T23:53:28-03:00", "event_type": "routing", "status": "completed"}
@@ -88,7 +88,7 @@
 {"timestamp": "2026-05-21T23:57:26-03:00", "event_type": "specialist_completion", "level": "INFO", "status": "success", "details": "Sion updated DOCUMENTATION_UPDATE_ROADMAP.md - Lote 6 marked as completed, counters updated: 129 modules completed (92.8%), 10 modules pending (7.2%)", "user_request": "me parece bien", "specialist": "Sion", "outcome": "completed", "findings_summary": "DOCUMENTATION_UPDATE_ROADMAP.md actualizado: Versi\u00f3n 1.9 \u2192 1.10, \u00daltima Actualizaci\u00f3n 2026-05-21 \u2192 2026-05-22, M\u00f3dulos Completados 99 \u2192 129 (92.8%), M\u00f3dulos Pendientes 40 \u2192 10 (7.2%). Lote 6 marcado como \u2705 COMPLETADO con fecha 2026-05-22. Pr\u00f3ximo lote: Lote 7 (8 m\u00f3dulos)."}
 {"timestamp": "2026-05-21T23:57:28-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Configuration loaded from brain/config.yaml"}
 {"timestamp": "2026-05-21T23:57:28-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Context loaded from .context.yaml - active project: iats"}
-{"timestamp": "2026-05-21T23:57:28-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Routing resources loaded from .devin/skills/deus-ex-machina/resources/assets/routing/"}
+{"timestamp": "2026-05-21T23:57:28-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Routing resources loaded from .agents/skills/deus-ex-machina/resources/assets/routing/"}
 {"timestamp": "2026-05-21T23:57:28-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "Greeting skipped - routed directly to Wachowski for Matrix system task"}
 {"timestamp": "2026-05-21T23:57:28-03:00", "event_type": "activation", "level": "INFO", "status": "completed", "details": "User request received: implement Fase 2 (Optimizaci\u00f3n de Activaci\u00f3n) from Matrix log analysis"}
 {"timestamp": "2026-05-21T23:57:30-03:00", "event_type": "routing", "level": "INFO", "status": "completed", "details": "Routed to Wachowski - Matrix workspace detected with Fase 2 (Optimizaci\u00f3n de Activaci\u00f3n) implementation request"}

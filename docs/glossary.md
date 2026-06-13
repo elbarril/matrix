@@ -27,7 +27,7 @@ Confidence: HIGH
 
 Observed References:
 
-* `.devin/skills/deus-ex-machina/SKILL.md` (master agent skill definition)
+* `.agents/skills/deus-ex-machina/SKILL.md` (master agent skill definition)
 * `AGENTS.md` (master agent role and responsibilities)
 * `README.md` (system architecture description)
 * `DEVIN.md` (master agent interface)
@@ -53,7 +53,7 @@ Confidence: HIGH
 
 Observed References:
 
-* `.devin/agents/*/AGENT.md` (specialist agent definitions)
+* `.agents/agents/*/AGENT.md` (specialist agent definitions)
 * `AGENTS.md` (agent architecture and contract)
 * `README.md` (specialist agents list)
 
@@ -78,7 +78,7 @@ Confidence: HIGH
 
 Observed References:
 
-* `.devin/skills/deus-ex-machina/SKILL.md` (master agent as skill)
+* `.agents/skills/deus-ex-machina/SKILL.md` (master agent as skill)
 * `DEVIN.md` (skill structure)
 * `brain/config/global-skills.yaml` (global skills integration)
 
@@ -129,8 +129,8 @@ Confidence: HIGH
 Observed References:
 
 * `AGENTS.md` (Matrix Workspace Mode section)
-* `routing-rules.md` (Matrix Workspace Mode rule)
-* `specialist-specific-rules.md` (Wachowski special routing)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md` (Matrix Workspace Mode rule)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md` (Wachowski special routing)
 
 Possible Meaning:
 
@@ -204,14 +204,14 @@ Confidence: HIGH
 Observed References:
 
 * `AGENTS.md` (Work Process Logging section)
-* `brain/state/work-process-log.yaml` (log file)
-* `matrix-log-entry.sh` (logging script)
+* `brain/state/work-process-log.jsonl` (log file)
+* `.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh` (logging script)
 
 Possible Meaning:
 
 * Comprehensive logging of all work processes
 * Tracks activation, routing, specialist execution, checkpoints
-* Rotates after 100 entries
+* Rotates after 1000 entries
 
 Mapped Abstractions:
 
@@ -230,7 +230,7 @@ Observed References:
 
 * `.context.yaml` (active project context)
 * `brain/config/projects/*.yaml` (project-specific context)
-* `routing-rules.md` (context preparation)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md` (context preparation)
 
 Possible Meaning:
 
@@ -253,9 +253,9 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (routing-resources section)
-* `.devin/skills/deus-ex-machina/resources/assets/routing/` (routing files)
-* `routing-rules.md` (routing protocol)
+* `.agents/skills/deus-ex-machina/SKILL.md` (routing-resources section)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/` (routing files)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md` (routing protocol)
 
 Possible Meaning:
 
@@ -278,9 +278,9 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (activation section)
+* `.agents/skills/deus-ex-machina/SKILL.md` (activation section)
 * `AGENTS.md` (Activation Pattern section)
-* `matrix-validate-activation.sh` (validation script)
+* `.agents/skills/deus-ex-machina/scripts/matrix-validate-activation.sh` (validation script)
 
 Possible Meaning:
 
@@ -328,7 +328,7 @@ Confidence: HIGH
 Observed References:
 
 * `brain/config/global-skills.yaml` (configuration)
-* `routing-rules.md` (global skills integration)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md` (global skills integration)
 * `/opt/aiad-common/skills/` (skills path)
 
 Possible Meaning:
@@ -352,8 +352,8 @@ Confidence: HIGH
 
 Observed References:
 
-* `coordination-patterns.md` (pattern definitions)
-* `routing-rules.md` (multi-specialist routing)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md` (pattern definitions)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md` (multi-specialist routing)
 
 Possible Meaning:
 
@@ -376,9 +376,9 @@ Confidence: HIGH
 
 Observed References:
 
-* `.devin/agents/wachowski/AGENT.md` (agent definition)
-* `specialist-triggers.md` (trigger keywords)
-* `specialist-specific-rules.md` (special routing rules)
+* `.agents/agents/wachowski/AGENT.md` (agent definition)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md` (trigger keywords)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md` (special routing rules)
 
 Possible Meaning:
 
@@ -401,9 +401,9 @@ Confidence: HIGH
 
 Observed References:
 
-* `.devin/agents/keymaker/AGENT.md` (agent definition)
+* `.agents/agents/keymaker/AGENT.md` (agent definition)
 * `AGENTS.md` (Git Operations Policy)
-* `specialist-specific-rules.md` (explicit request rule)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md` (explicit request rule)
 
 Possible Meaning:
 
@@ -426,7 +426,7 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (neo-communication-protocol)
+* `.agents/skills/deus-ex-machina/SKILL.md` (neo-communication-protocol)
 
 Possible Meaning:
 
@@ -449,7 +449,7 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (cypher-communication-protocol)
+* `.agents/skills/deus-ex-machina/SKILL.md` (cypher-communication-protocol)
 
 Possible Meaning:
 
@@ -480,11 +480,11 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (pre-activation-checks section)
-* `matrix-validate-config.sh` (config validation)
-* `matrix-validate-context.sh` (context validation)
-* `matrix-validate-routing-resources.sh` (routing validation)
-* `matrix-init-brain-state.sh` (state initialization)
+* `.agents/skills/deus-ex-machina/SKILL.md` (pre-activation-checks section)
+* `.agents/skills/deus-ex-machina/scripts/matrix-validate-config.sh` (config validation)
+* `.agents/skills/deus-ex-machina/scripts/matrix-validate-context.sh` (context validation)
+* `.agents/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh` (routing validation)
+* `.agents/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh` (state initialization)
 
 Possible Meaning:
 
@@ -507,8 +507,8 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (work-process-logging section)
-* `matrix-log-entry.sh` (logging script)
+* `.agents/skills/deus-ex-machina/SKILL.md` (work-process-logging section)
+* `.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh` (logging script)
 * Activation logging (consolidated format)
 * Specialist execution logging (consolidated format)
 
@@ -534,9 +534,9 @@ Confidence: HIGH
 
 Observed References:
 
-* `routing-rules.md` (Context-Aware Skill Priority Routing section)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md` (Context-Aware Skill Priority Routing section)
 * `brain/config/projects/*.yaml` (skill_priority setting)
-* `global-skills.yaml` (global skills integration)
+* `brain/config/global-skills.yaml` (global skills integration)
 
 Possible Meaning:
 
@@ -559,8 +559,8 @@ Confidence: HIGH
 
 Observed References:
 
-* `wachowski/AGENT.md` (activation section, rule 11, rule 17)
-* `specialist-triggers.md` (Wachowski Execution Pattern)
+* `.agents/agents/wachowski/AGENT.md` (activation section, rule 11, rule 17)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md` (Wachowski Execution Pattern)
 * Wachowski capacity integration (Oracle → Morpheus → Trinity → Architect → Sion)
 
 Possible Meaning:
@@ -584,8 +584,8 @@ Confidence: HIGH
 
 Observed References:
 
-* `wachowski/AGENT.md` (multi-call-protocol section)
-* `specialist-specific-rules.md` (Wachowski Multi-Call Pattern)
+* `.agents/agents/wachowski/AGENT.md` (multi-call-protocol section)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md` (Wachowski Multi-Call Pattern)
 * Complexity criteria (>300 chars, 3+ verbs, explicit phases keyword, >5 files)
 
 Possible Meaning:
@@ -609,8 +609,8 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (rule 6: Context passing)
-* `coordination-patterns.md` (context passing between specialists)
+* `.agents/skills/deus-ex-machina/SKILL.md` (rule 6: Context passing)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md` (context passing between specialists)
 * Multi-specialist coordination patterns
 
 Possible Meaning:
@@ -634,15 +634,15 @@ Confidence: HIGH
 
 Observed References:
 
-* `matrix-validate-activation.sh` (validation script)
-* `brain/state/validation-report.yaml` (report output)
-* `SKILL.md` (post-activation-validation section)
+* `.agents/skills/deus-ex-machina/scripts/matrix-validate-activation.sh` (validation script)
+* `brain/state/validation-report.json` (report output)
+* `.agents/skills/deus-ex-machina/SKILL.md` (post-activation-validation section)
 
 Possible Meaning:
 
 * Post-activation compliance report
 * Contains activation status, missing steps, activation log, user request
-* Written by matrix-validate-activation.sh after activation completes
+* Written by .agents/skills/deus-ex-machina/scripts/matrix-validate-activation.sh after activation completes
 
 Mapped Abstractions:
 
@@ -660,12 +660,12 @@ Confidence: HIGH
 Observed References:
 
 * `AGENTS.md` (Work Process Logging section)
-* `matrix-log-entry.sh` (log rotation logic)
+* `.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh` (log rotation logic)
 * `brain/state/work-process-log-archive/` (archive directory)
 
 Possible Meaning:
 
-* Automatic rotation of work-process-log.yaml after 100 entries
+* Automatic rotation of work-process-log.jsonl after 1000 entries
 * Archives old entries to work-process-log-archive/
 * Maintains recent entries in active log
 
@@ -684,14 +684,14 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (persona section: "Silencio operativo")
-* `wachowski/AGENT.md` (persona section: "Opera en silencio")
+* `.agents/skills/deus-ex-machina/SKILL.md` (persona section: "Silencio operativo")
+* `.agents/agents/wachowski/AGENT.md` (persona section: "Opera en silencio")
 * Silent routing rule (no announcements)
 
 Possible Meaning:
 
 * Operating without announcing work steps
-* All logging goes to work-process-log.yaml
+* All logging goes to work-process-log.jsonl
 * User-facing output only for final results
 
 Mapped Abstractions:
@@ -709,8 +709,8 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (pre-activation-checks: "If any check fails, halt activation")
-* `coordination-patterns.md` (coordination failure handling)
+* `.agents/skills/deus-ex-machina/SKILL.md` (pre-activation-checks: "If any check fails, halt activation")
+* `.agents/skills/deus-ex-machina/resources/assets/routing/coordination-patterns.md` (coordination failure handling)
 * Specialist execution failures
 
 Possible Meaning:
@@ -735,9 +735,9 @@ Confidence: HIGH
 
 Observed References:
 
-* `SKILL.md` (rules section: routing boundaries)
+* `.agents/skills/deus-ex-machina/SKILL.md` (rules section: routing boundaries)
 * `AGENTS.md` (specialist boundaries)
-* `routing-rules.md` (Deus Ex Machina constraints)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md` (Deus Ex Machina constraints)
 
 Possible Meaning:
 
@@ -784,7 +784,7 @@ Confidence: HIGH
 
 Observed References:
 * `brain/config/global-skills.yaml`
-* `routing-rules.md`
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md`
 
 Possible Meaning:
 * The order of precedence Deus Ex Machina uses when resolving a request: Local Skills > Global Skills > Matrix Specialists.
@@ -793,31 +793,15 @@ Mapped Abstractions:
 * Tool selection priority
 * Agent resolution order
 
-### Integrated Execution Pattern
-
-Status: EXPLICIT
-Confidence: HIGH
-
-Observed References:
-* `AGENTS.md` (Wachowski capabilities)
-* `.devin/agents/wachowski/AGENT.md`
-
-Possible Meaning:
-* Wachowski's execution model (analyze → plan → implement → verify → document) occurring in a single cohesive flow.
-
-Mapped Abstractions:
-* Autonomous agent loop
-* Self-directed executor
-
 ### run_subagent
 
 Status: EXPLICIT
 Confidence: HIGH
 
 Observed References:
-* `.devin/agents/wachowski/AGENT.md`
-* `specialist-specific-rules.md`
-* `specialist-triggers.md`
+* `.agents/agents/wachowski/AGENT.md`
+* `.agents/skills/deus-ex-machina/resources/assets/routing/rules/specialist-specific-rules.md`
+* `.agents/skills/deus-ex-machina/resources/assets/routing/specialist-triggers.md`
 
 Possible Meaning:
 * Proprietary Devin tool used to spawn specialist agents as stateless sub-tasks.
@@ -834,9 +818,9 @@ Status: EXPLICIT
 Confidence: HIGH
 
 Observed References:
-* `.devin/agents/trinity/AGENT.md`
-* `.devin/agents/smith/AGENT.md`
-* `SKILL.md` (Deus Ex Machina)
+* `.agents/agents/trinity/AGENT.md`
+* `.agents/agents/smith/AGENT.md`
+* `.agents/skills/deus-ex-machina/SKILL.md` (Deus Ex Machina)
 
 Possible Meaning:
 * Proprietary Devin tool for creating and managing a structured task list in the agent's UI.
@@ -845,13 +829,13 @@ Mapped Abstractions:
 * Provider-specific task manager
 * UI state integration
 
-### validation-report.yaml
+### validation-report.json
 
 Status: EXPLICIT
 Confidence: HIGH
 
 Observed References:
-* `brain/state/validation-report.yaml`
+* `brain/state/validation-report.json`
 * `AGENTS.md` (Protocol Violation Troubleshooting)
 
 Possible Meaning:
@@ -867,8 +851,8 @@ Status: INFERRED
 Confidence: HIGH
 
 Observed References:
-* `routing-rules.md`
-* `SKILL.md` (<activation> block)
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md`
+* `.agents/skills/deus-ex-machina/SKILL.md` (<activation> block)
 
 Possible Meaning:
 * Control flow and routing logic that exists as natural language instructions parsed by the LLM context, rather than hardcoded in bash/python scripts. The LLM determines execution sequence by reading markdown files.
@@ -883,8 +867,8 @@ Status: INFERRED
 Confidence: HIGH
 
 Observed References:
-* `<activation>` block in `SKILL.md`
-* `routing-rules.md`
+* `<activation>` block in `.agents/skills/deus-ex-machina/SKILL.md`
+* `.agents/skills/deus-ex-machina/resources/assets/routing/routing-rules.md`
 
 Possible Meaning:
 * A system architecture where state transitions (e.g., executing validation scripts, picking an agent, logging) are not hardcoded in Python/Bash loops, but are instead sequentially evaluated and executed by an LLM strictly following a prompt.
