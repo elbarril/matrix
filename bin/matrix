@@ -1,466 +1,338 @@
 #!/bin/bash
 
-# Matrix CLI - Personal Intelligence Engine Orchestrator
-# Version 1.0.0
+# Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
+# Manages registry, projects, the warm-project set, checkpoints, the Link
+# ledger, Seraph hooks, and the Trainman build. It NEVER invokes agents.
+# Version 2.0.0
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Colors
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
-# Matrix paths
-MATRIX_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# --- Robust root resolution (_brain-aware, with traversal fallback) ---------
+resolve_root() {
+    # 1) If a _brain symlink exists in cwd, the Matrix root is its parent.
+    if [[ -L "_brain" ]]; then
+        local brain_path; brain_path="$(readlink -f _brain)"
+        dirname "$brain_path"; return 0
+    fi
+    # 2) Walk up from the script location until brain/ + AGENTS.md are found.
+    local dir; dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -d "$dir/brain" && -f "$dir/AGENTS.md" ]]; then echo "$dir"; return 0; fi
+        dir="$(dirname "$dir")"
+    done
+    # 3) Last resort: parent of bin/.
+    cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
+}
+
+MATRIX_DIR="$(resolve_root)"
 REGISTRY_FILE="$MATRIX_DIR/.registry.json"
 CONTEXT_FILE="$MATRIX_DIR/.context.yaml"
 BRAIN_DIR="$MATRIX_DIR/brain"
+STATE_DIR="$BRAIN_DIR/state"
 CLIENTS_DIR="$MATRIX_DIR/clients"
+WORKSPACE_FILE="$STATE_DIR/workspace.yaml"
+ACTIVITY_LOG="$STATE_DIR/activity.log"
+CHECKPOINTS_FILE="$STATE_DIR/checkpoints.jsonl"
+HOOKS_DIR="$MATRIX_DIR/hooks"
 
-# Helper functions
-log_info() {
-    echo -e "${BLUE}[MATRIX]${NC} $1"
-}
+log_info()    { echo -e "${BLUE}[MATRIX]${NC} $1"; }
+log_success() { echo -e "${GREEN}[MATRIX]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[MATRIX]${NC} $1"; }
+log_error()   { echo -e "${RED}[MATRIX]${NC} $1"; }
 
-log_success() {
-    echo -e "${GREEN}[MATRIX]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[MATRIX]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[MATRIX]${NC} $1"
-}
-
-# Initialize registry if it doesn't exist
+# --- Init -------------------------------------------------------------------
 init_registry() {
-    if [[ ! -f "$REGISTRY_FILE" ]]; then
-        echo '{"projects": [], "created": "'$(date -Iseconds)'", "version": "1.0.0"}' > "$REGISTRY_FILE"
-    fi
+    [[ -f "$REGISTRY_FILE" ]] || echo '{"projects": [], "created": "'$(date -Iseconds)'", "version": "2.0.0"}' > "$REGISTRY_FILE"
 }
-
-# Initialize context if it doesn't exist
 init_context() {
-    if [[ ! -f "$CONTEXT_FILE" ]]; then
-        cat > "$CONTEXT_FILE" << 'EOF'
-# Matrix Active Project Context
+    [[ -f "$CONTEXT_FILE" ]] || cat > "$CONTEXT_FILE" << 'EOF'
+# Matrix Active Project Context (primary binding)
 active_project: null
 active_project_path: null
 last_updated: null
 session_id: null
 EOF
-    fi
+}
+init_state() {
+    mkdir -p "$STATE_DIR/sessions"
+    [[ -f "$ACTIVITY_LOG" ]] || : > "$ACTIVITY_LOG"
+    [[ -f "$CHECKPOINTS_FILE" ]] || : > "$CHECKPOINTS_FILE"
+    [[ -f "$WORKSPACE_FILE" ]] || cat > "$WORKSPACE_FILE" << 'EOF'
+# Matrix Workspace State — the SET of warm projects (multi-project)
+active_projects: []
+last_updated: null
+system_status: "initialized"
+EOF
 }
 
-# Read registry
-read_registry() {
-    init_registry
-    jq -r '.projects[] | "\(.name):\(.path):\(.type)"' "$REGISTRY_FILE" 2>/dev/null || echo ""
+# --- Link ledger ------------------------------------------------------------
+# Append an event: link_append <event> <subject> <detail...>
+link_append() {
+    init_state
+    local event="$1"; shift
+    local subject="${1:-matrix}"; shift || true
+    local detail="$*"
+    printf '%s | %-12s | %-16s | %s\n' "$(date -Iseconds)" "$event" "$subject" "$detail" >> "$ACTIVITY_LOG"
 }
 
-# Read context
-read_context() {
-    init_context
-    grep "active_project:" "$CONTEXT_FILE" | cut -d' ' -f2 || echo "null"
-}
+read_registry() { init_registry; jq -r '.projects[] | "\(.name):\(.path):\(.type)"' "$REGISTRY_FILE" 2>/dev/null || echo ""; }
+read_context()  { init_context; grep "active_project:" "$CONTEXT_FILE" | head -1 | cut -d' ' -f2 || echo "null"; }
 
-# Update context
 update_context() {
-    local project="$1"
-    local path="$2"
-    
-    # Strip trailing slashes from path to prevent double slash issues
-    path="${path%/}"
-    
-    sed -i "s/active_project:.*/active_project: $project/" "$CONTEXT_FILE"
+    local project="$1" path="$2"; path="${path%/}"
+    sed -i "s|active_project:.*|active_project: $project|" "$CONTEXT_FILE"
     sed -i "s|active_project_path:.*|active_project_path: $path|" "$CONTEXT_FILE"
-    sed -i "s/last_updated:.*/last_updated: $(date -Iseconds)/" "$CONTEXT_FILE"
+    sed -i "s|last_updated:.*|last_updated: $(date -Iseconds)|" "$CONTEXT_FILE"
 }
 
-# Update workspace state to sync with context
-update_workspace() {
-    local workspace_file="$BRAIN_DIR/state/workspace.yaml"
-    
-    # Ensure workspace file exists
-    if [[ ! -f "$workspace_file" ]]; then
-        mkdir -p "$(dirname "$workspace_file")"
-        cat > "$workspace_file" << 'EOF'
-# Matrix Workspace State
-# Tracks active projects and system state
-
-active_projects: []
-last_updated: "TIMESTAMP"
-system_status: "initialized"
-EOF
-    fi
-    
-    # Read current context
-    local active_project=$(grep "active_project:" "$CONTEXT_FILE" | cut -d' ' -f2)
-    local active_path=$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)
-    local timestamp=$(date -Iseconds)
-    
-    # Update workspace.yaml based on context
-    if [[ "$active_project" != "null" && -n "$active_project" ]]; then
-        # Project is active, update workspace with active project
-        cat > "$workspace_file" << EOF
-# Matrix Workspace State
-# Tracks active projects and system state
-
-active_projects:
-  - name: $active_project
-    path: $active_path
-    activated: $timestamp
-last_updated: "$timestamp"
-system_status: "initialized"
-EOF
-    else
-        # No active project, clear workspace
-        cat > "$workspace_file" << 'EOF'
-# Matrix Workspace State
-# Tracks active projects and system state
-
-active_projects: []
-last_updated: "TIMESTAMP"
-system_status: "initialized"
-EOF
-        # Update timestamp
-        sed -i "s/TIMESTAMP/$(date -Iseconds)/" "$workspace_file"
-    fi
-}
-
-# Add project to registry
+# --- Project registry -------------------------------------------------------
 add_project() {
-    local name="$1"
-    local path_or_url="$2"
-    
-    if [[ -z "$name" ]]; then
-        log_error "Usage: matrix add <name> [path-or-url]"
-        return 1
-    fi
-    
-    # If no path provided, detect current directory and ask user
+    local name="$1" path_or_url="${2:-}"
+    [[ -z "$name" ]] && { log_error "Usage: matrix add <name> [path-or-url]"; return 1; }
     if [[ -z "$path_or_url" ]]; then
-        local current_dir=$(pwd)
+        local current_dir; current_dir="$(pwd)"
         log_info "No path provided. Current directory: $current_dir"
-        echo -n "Do you want to use this path? [y/N]: "
-        read -r response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
-            log_warning "Cancelled by user"
-            return 1
-        fi
+        echo -n "Use this path? [y/N]: "; read -r r
+        [[ "$r" =~ ^[Yy]$ ]] || { log_warning "Cancelled"; return 1; }
         path_or_url="$current_dir"
     fi
-    
-    # Check if project already exists
-    if read_registry | grep -q "^$name:"; then
-        log_error "Project '$name' already exists in registry"
-        return 1
-    fi
-    
-    # Determine if it's a local path or remote URL
+    read_registry | grep -q "^$name:" && { log_error "Project '$name' already exists"; return 1; }
     local type="local"
-    if [[ "$path_or_url" =~ ^https?:// ]] || [[ "$path_or_url" =~ ^git@ ]]; then
-        type="remote"
-    fi
-    
-    # Strip trailing slashes from local paths to prevent double slash issues
-    if [[ "$type" == "local" ]]; then
-        path_or_url="${path_or_url%/}"
-    fi
-    
-    # Add to registry
-    local temp_file=$(mktemp)
-    jq --arg name "$name" --arg path "$path_or_url" --arg type "$type" \
-       '.projects += [{"name": $name, "path": $path, "type": $type, "added": "'$(date -Iseconds)'"}]' \
-       "$REGISTRY_FILE" > "$temp_file"
-    mv "$temp_file" "$REGISTRY_FILE"
-    
-    log_success "Added project '$name' to registry"
+    [[ "$path_or_url" =~ ^https?:// || "$path_or_url" =~ ^git@ ]] && type="remote"
+    [[ "$type" == "local" ]] && path_or_url="${path_or_url%/}"
+    local tmp; tmp="$(mktemp)"
+    jq --arg n "$name" --arg p "$path_or_url" --arg t "$type" \
+       '.projects += [{"name": $n, "path": $p, "type": $t, "added": "'$(date -Iseconds)'"}]' \
+       "$REGISTRY_FILE" > "$tmp" && mv "$tmp" "$REGISTRY_FILE"
+    link_append "project:add" "$name" "$path_or_url"
+    log_success "Added project '$name'"
 }
 
-# List all projects
 list_projects() {
-    log_info "Known projects:"
-    echo
-    
-    local projects=$(read_registry)
-    if [[ -z "$projects" ]]; then
-        echo "  No projects registered"
-        return
-    fi
-    
-    local active=$(read_context)
+    log_info "Known projects:"; echo
+    local projects; projects="$(read_registry)"
+    [[ -z "$projects" ]] && { echo "  No projects registered"; return; }
+    local active; active="$(read_context)"
     while IFS=: read -r name path type; do
-        if [[ "$active" == "$name" ]]; then
-            echo "  ✓ $name ($type) - $path [active]"
-        else
-            echo "    $name ($type) - $path"
-        fi
+        if [[ "$active" == "$name" ]]; then echo "  ✓ $name ($type) - $path [primary]"
+        else echo "    $name ($type) - $path"; fi
     done <<< "$projects"
 }
 
-# Select active project
+resolve_project_path() {
+    local name="$1"
+    local info; info="$(read_registry | grep "^$name:" | head -1)"
+    [[ -z "$info" ]] && return 1
+    local p; p="$(echo "$info" | cut -d: -f2)"
+    p="${p/#\~/$HOME}"; echo "${p%/}"
+}
+
 select_project() {
     local name="$1"
-    
-    if [[ -z "$name" ]]; then
-        log_error "Usage: matrix select <name>"
-        return 1
+    [[ -z "$name" ]] && { log_error "Usage: matrix select <name>"; return 1; }
+    local info; info="$(read_registry | grep "^$name:" | head -1)"
+    [[ -z "$info" ]] && { log_error "Project '$name' not found"; return 1; }
+    IFS=: read -r pn pp pt <<< "$info"
+    local active; active="$(read_context)"
+    [[ "$active" != "null" && -n "$active" && "$active" != "$name" ]] && deselect_project
+    pp="${pp/#\~/$HOME}"; pp="${pp%/}"
+    if [[ "$pt" == "remote" ]]; then
+        local dir="$CLIENTS_DIR/$name"
+        [[ -d "$dir" ]] || { log_info "Cloning '$name'..."; mkdir -p "$CLIENTS_DIR"; git clone "$pp" "$dir"; }
+        pp="$dir"
     fi
-    
-    # Find project in registry
-    local project_info=$(read_registry | grep "^$name:" | head -1)
-    if [[ -z "$project_info" ]]; then
-        log_error "Project '$name' not found in registry"
-        return 1
-    fi
-    
-    IFS=: read -r proj_name proj_path proj_type <<< "$project_info"
-    
-    # First, deselect current project if any
-    local active=$(read_context)
-    if [[ "$active" != "null" && -n "$active" && "$active" != "$name" ]]; then
-        log_info "Deselecting current project '$active'..."
-        deselect_project
-    fi
-    
-    # Expand tilde in path
-    proj_path="${proj_path/#\~/$HOME}"
-    
-    # Strip trailing slashes to prevent double slash issues
-    proj_path="${proj_path%/}"
-    
-    # Handle remote projects
-    if [[ "$proj_type" == "remote" ]]; then
-        local project_dir="$CLIENTS_DIR/$name"
-        if [[ ! -d "$project_dir" ]]; then
-            log_info "Cloning remote project '$name'..."
-            mkdir -p "$CLIENTS_DIR"
-            git clone "$proj_path" "$project_dir"
-            proj_path="$project_dir"
-        else
-            log_info "Project '$name' already cloned locally"
-            proj_path="$project_dir"
-        fi
-    fi
-    
-    # Verify project exists
-    if [[ ! -d "$proj_path" ]]; then
-        log_error "Project path '$proj_path' does not exist"
-        return 1
-    fi
-    
-    # Create brain symlink
-    local brain_link="$proj_path/_brain"
-    if [[ -L "$brain_link" ]]; then
-        log_info "Removing existing brain symlink"
-        rm "$brain_link"
-    elif [[ -e "$brain_link" ]]; then
-        log_error "File '_brain' exists in project but is not a symlink"
-        return 1
-    fi
-    
-    ln -sf "$BRAIN_DIR" "$brain_link"
-    
-    # Update context
-    update_context "$name" "$proj_path"
-    
-    # Update workspace to sync with context
-    update_workspace
-    
-    log_success "Selected project '$name'"
-    log_info "Brain symlink created at: $brain_link"
+    [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
+    local link="$pp/_brain"
+    [[ -L "$link" ]] && rm "$link"
+    [[ -e "$link" ]] && { log_error "'_brain' exists and is not a symlink"; return 1; }
+    ln -sf "$BRAIN_DIR" "$link"
+    update_context "$name" "$pp"
+    link_append "project:select" "$name" "$pp"
+    log_success "Selected primary project '$name' (symlink: $link)"
 }
 
-# Deselect active project
 deselect_project() {
-    local active=$(read_context)
-    
-    if [[ "$active" == "null" || -z "$active" ]]; then
-        log_warning "No active project to deselect"
-        return
-    fi
-    
-    # Get active path from context
-    local active_path=$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)
-    active_path="${active_path/#\~/$HOME}"
-    # Strip trailing slashes to prevent double slash issues
-    active_path="${active_path%/}"
-    
-    # Remove brain symlink if it exists
-    if [[ -n "$active_path" && -L "$active_path/_brain" ]]; then
-        rm "$active_path/_brain"
-        log_info "Removed brain symlink from '$active'"
-    fi
-    
-    # Clear context
+    local active; active="$(read_context)"
+    [[ "$active" == "null" || -z "$active" ]] && { log_warning "No active project"; return; }
+    local ap; ap="$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)"; ap="${ap/#\~/$HOME}"; ap="${ap%/}"
+    [[ -n "$ap" && -L "$ap/_brain" ]] && rm "$ap/_brain"
     update_context "null" "null"
-    
-    # Update workspace to sync with context
-    update_workspace
-    
-    log_success "Deselected project '$active'"
+    link_append "project:deselect" "$active" ""
+    log_success "Deselected '$active'"
 }
 
-# Show status
+# --- Multi-project warm set -------------------------------------------------
+work_project() {
+    local name="$1"
+    [[ -z "$name" ]] && { log_error "Usage: matrix work <name>"; return 1; }
+    local path; path="$(resolve_project_path "$name")" || { log_error "Project '$name' not found"; return 1; }
+    init_state
+    grep -q "name: $name$" "$WORKSPACE_FILE" 2>/dev/null && { log_warning "'$name' already warm"; return 0; }
+    # Insert before the last_updated line.
+    local ts; ts="$(date -Iseconds)"
+    local tmp; tmp="$(mktemp)"
+    awk -v n="$name" -v p="$path" -v ts="$ts" '
+        /^active_projects:/ && $0 ~ /\[\]/ { print "active_projects:"; print "  - name: " n; print "    path: " p; print "    activated: " ts; next }
+        /^last_updated:/ { print "last_updated: \"" ts "\""; next }
+        { print }
+    ' "$WORKSPACE_FILE" > "$tmp"
+    # If the set was non-empty, the awk above only handles the empty case; handle non-empty by append.
+    if grep -q "name: $name$" "$tmp"; then mv "$tmp" "$WORKSPACE_FILE"; else
+        rm -f "$tmp"
+        # Append under active_projects: (non-empty list)
+        sed -i "/^active_projects:/a\\  - name: $name\\n    path: $path\\n    activated: $ts" "$WORKSPACE_FILE"
+        sed -i "s|^last_updated:.*|last_updated: \"$ts\"|" "$WORKSPACE_FILE"
+    fi
+    link_append "project:work" "$name" "$path"
+    log_success "Warmed '$name' into the active set"
+}
+
+unwork_project() {
+    local name="$1"
+    [[ -z "$name" ]] && { log_error "Usage: matrix unwork <name>"; return 1; }
+    init_state
+    # Remove the 3-line block for this project.
+    sed -i "/^  - name: $name$/,+2d" "$WORKSPACE_FILE"
+    # If list is now empty, normalize.
+    grep -q "^  - name:" "$WORKSPACE_FILE" || sed -i "s|^active_projects:.*|active_projects: []|" "$WORKSPACE_FILE"
+    sed -i "s|^last_updated:.*|last_updated: \"$(date -Iseconds)\"|" "$WORKSPACE_FILE"
+    link_append "project:unwork" "$name" ""
+    log_success "Removed '$name' from the active set"
+}
+
+show_workspace() {
+    init_state
+    log_info "Warm project set:"; echo
+    if grep -q "^  - name:" "$WORKSPACE_FILE"; then
+        grep "^  - name:" "$WORKSPACE_FILE" | sed 's/  - name:/   •/'
+    else
+        echo "   (empty) — use 'matrix work <name>'"
+    fi
+}
+
+# --- Status -----------------------------------------------------------------
 show_status() {
-    log_info "Matrix Status"
-    echo
-    
-    # Active project
-    local active=$(read_context)
+    log_info "Matrix Status"; echo
+    local active; active="$(read_context)"
     if [[ "$active" != "null" && -n "$active" ]]; then
-        local active_path=$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)
-        active_path="${active_path/#\~/$HOME}"
-        # Strip trailing slashes to prevent double slash issues
-        active_path="${active_path%/}"
-        echo "Active Project: $active"
-        echo "Path: $active_path"
-        echo "Brain Link: $active_path/_brain"
-        if [[ -L "$active_path/_brain" ]]; then
-            echo "Link Status: ✓ Active"
-        else
-            echo "Link Status: ✗ Broken"
-        fi
+        local ap; ap="$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)"; ap="${ap/#\~/$HOME}"; ap="${ap%/}"
+        echo "Primary project: $active"
+        echo "Path: $ap"
+        if [[ -L "$ap/_brain" ]]; then echo "Brain link: ✓ active"; else echo "Brain link: ✗ broken"; fi
     else
-        echo "Active Project: None"
+        echo "Primary project: none"
     fi
     echo
-    
-    # Project count
-    local project_count=$(read_registry | wc -l)
-    echo "Registered Projects: $project_count"
+    echo "Warm set: $(grep -c '^  - name:' "$WORKSPACE_FILE" 2>/dev/null || echo 0) project(s)"
+    echo "Registered: $(read_registry | grep -c . || echo 0) project(s)"
     echo
-    
-    # Recent checkpoints
-    if [[ -f "$BRAIN_DIR/state/checkpoints.jsonl" ]]; then
-        echo "Recent Checkpoints:"
-        tail -n 3 "$BRAIN_DIR/state/checkpoints.jsonl" | jq -r '(.timestamp + " - " + .note)' | while read -r checkpoint; do
-            echo "  $checkpoint"
-        done
-    else
-        echo "No checkpoints yet"
+    if [[ -s "$CHECKPOINTS_FILE" ]]; then
+        echo "Recent checkpoints:"
+        tail -n 3 "$CHECKPOINTS_FILE" | jq -r '"  " + .timestamp + " — " + .note' 2>/dev/null || true
+    fi
+    echo
+    if [[ -s "$ACTIVITY_LOG" ]]; then
+        echo "Recent Link events:"
+        tail -n 3 "$ACTIVITY_LOG" | sed 's/^/  /'
     fi
 }
 
-# Write checkpoint
+# --- Checkpoints ------------------------------------------------------------
 write_checkpoint() {
     local note="$1"
+    [[ -z "$note" ]] && { log_error "Usage: matrix checkpoint \"<note>\""; return 1; }
+    init_state
+    local ts; ts="$(date -Iseconds)"
+    local active; active="$(read_context)"
+    jq -n -c --arg ts "$ts" --arg user "Emiliano" --arg proj "$active" --arg note "$note" \
+        '{timestamp:$ts,user:$user,project:$proj,note:$note,context:{active_agents:[],current_focus:"",blockers:[],next_actions:[]}}' \
+        >> "$CHECKPOINTS_FILE"
+    link_append "checkpoint" "$active" "$note"
+    log_success "Checkpoint written"
+}
 
-    if [[ -z "$note" ]]; then
-        log_error "Usage: matrix checkpoint \"<note>\""
-        return 1
-    fi
+show_activity() {
+    init_state
+    local n="${1:-20}"
+    log_info "Link ledger (last $n):"; echo
+    tail -n "$n" "$ACTIVITY_LOG" | sed 's/^/  /'
+}
 
-    local timestamp=$(date -Iseconds)
-    local active=$(read_context)
-    local checkpoints_file="$BRAIN_DIR/state/checkpoints.jsonl"
-    
-    # Ensure checkpoints file exists
-    if [[ ! -f "$checkpoints_file" ]]; then
-        touch "$checkpoints_file"
-        chmod 600 "$checkpoints_file" 2>/dev/null || true
-    fi
+# --- Seraph hooks -----------------------------------------------------------
+run_hook() {
+    local name="$1"; shift || true
+    local hook="$HOOKS_DIR/$name.py"
+    [[ -f "$hook" ]] || { log_error "Hook '$name' not found at $hook"; return 1; }
+    MATRIX_ROOT="$MATRIX_DIR" python3 "$hook" "$@"
+}
 
-    jq -n -c \
-        --arg ts "$timestamp" \
-        --arg user "Emiliano" \
-        --arg proj "$active" \
-        --arg note "$note" \
-        '{timestamp: $ts, user: $user, project: $proj, note: $note, context: {active_agents: [], current_focus: "", blockers: [], next_actions: []}}' \
-        >> "$checkpoints_file"
-
-    if [[ $? -ne 0 ]]; then
-        log_error "Failed to create checkpoint entry in JSONL"
-        return 1
-    fi
-
-    log_success "Checkpoint written to checkpoints.jsonl"
-
-    # Log checkpoint to work-process-log.jsonl
-    local log_script="$MATRIX_DIR/.agents/skills/deus-ex-machina/scripts/matrix-log-entry.sh"
-    if [[ -x "$log_script" ]]; then
-        "$log_script" \
-            --event-type "checkpoint_write" \
-            --status "success" \
-            --level "INFO" \
-            --details "Checkpoint creado: $note" \
-            --user-request "$note" \
-            --checkpoint-note "$note" \
-            --matrix-dir "$MATRIX_DIR"
-        log_info "Checkpoint registrado en work-process-log.jsonl"
+# --- Trainman build ---------------------------------------------------------
+build_target() {
+    local target=""
+    for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}";; esac; done
+    [[ -z "$target" ]] && { log_error "Usage: matrix build --target=<devin|claude|...>"; return 1; }
+    local builder="$MATRIX_DIR/adapters/$target/build.sh"
+    if [[ -x "$builder" ]]; then
+        log_info "Trainman: building artifacts for '$target'..."
+        MATRIX_ROOT="$MATRIX_DIR" "$builder"
+        link_append "build" "$target" "artifacts generated"
     else
-        log_warning "No se pudo registrar checkpoint en work-process-log.jsonl (script no encontrado)"
+        log_warning "Trainman: no adapter builder at $builder (not implemented yet for '$target')."
+        return 1
     fi
 }
 
-# Show help
 show_help() {
-    echo "Matrix CLI - Personal Intelligence Engine"
-    echo
-    echo "Usage: matrix <command> [args]"
-    echo
-    echo "Commands:"
-    echo "  list                    List all registered projects"
-    echo "  add <name> [path]       Add a new project to registry (path optional, uses current dir if not provided)"
-    echo "  select <name>           Set active project and create brain symlink (deselects current first)"
-    echo "  deselect                Clear active project and remove brain symlink"
-    echo "  status                  Show current Matrix status"
-    echo "  checkpoint \"<note>\"    Write a timestamped checkpoint"
-    echo "  help                    Show this help message"
-    echo
-    echo "Examples:"
-    echo "  matrix add myproject /path/to/project"
-    echo "  matrix add myproject              (uses current directory)"
-    echo "  matrix select myproject"
-    echo "  matrix checkpoint \"Completed bugfix for client X\""
+    cat << 'EOF'
+Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
+
+Usage: matrix <command> [args]
+
+Projects:
+  list                    List all registered projects
+  add <name> [path]       Register a project (path optional → current dir)
+  select <name>           Set primary active project + create _brain symlink
+  deselect                Clear primary active project + remove symlink
+
+Multi-project (warm set):
+  work <name>             Warm a project into the active set
+  unwork <name>           Remove a project from the active set
+  workspace               Show the warm project set
+
+State & telemetry:
+  status                  Show current Matrix status
+  checkpoint "<note>"     Write a timestamped checkpoint (+ Link entry)
+  activity [n]            Show last n Link ledger events (default 20)
+
+Enforcement & adapters:
+  hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close, post_run_audit)
+  build --target=<cli>    Trainman: generate native artifacts for a CLI
+  help                    Show this help
+EOF
 }
 
-# Main command dispatcher
 main() {
     case "${1:-}" in
-        "list")
-            list_projects
-            ;;
-        "add")
-            add_project "$2" "$3"
-            ;;
-        "select")
-            select_project "$2"
-            ;;
-        "deselect")
-            deselect_project
-            ;;
-        "status")
-            show_status
-            ;;
-        "checkpoint")
-            write_checkpoint "$2"
-            ;;
-        "help"|"--help"|"-h")
-            show_help
-            ;;
-        "")
-            log_error "No command specified. Use 'matrix help' for usage."
-            exit 1
-            ;;
-        *)
-            log_error "Unknown command: $1"
-            echo "Use 'matrix help' for available commands."
-            exit 1
-            ;;
+        list)       list_projects ;;
+        add)        add_project "${2:-}" "${3:-}" ;;
+        select)     select_project "${2:-}" ;;
+        deselect)   deselect_project ;;
+        work)       work_project "${2:-}" ;;
+        unwork)     unwork_project "${2:-}" ;;
+        workspace)  show_workspace ;;
+        status)     show_status ;;
+        checkpoint) write_checkpoint "${2:-}" ;;
+        activity)   show_activity "${2:-}" ;;
+        hooks)      shift; run_hook "$@" ;;
+        build)      shift; build_target "$@" ;;
+        help|--help|-h) show_help ;;
+        "") log_error "No command. Use 'matrix help'."; exit 1 ;;
+        *)  log_error "Unknown command: $1"; echo "Use 'matrix help'."; exit 1 ;;
     esac
 }
 
-# Check dependencies
-if ! command -v jq >/dev/null 2>&1; then
-    log_error "jq is required but not installed. Please install jq to continue."
-    exit 1
-fi
-
-# Run main function with all arguments
+command -v jq >/dev/null 2>&1 || { log_error "jq is required but not installed."; exit 1; }
 main "$@"

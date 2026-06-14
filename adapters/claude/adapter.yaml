@@ -1,0 +1,18 @@
+# Trainman adapter — Claude Code
+# Maps abstract capabilities to Claude Code's native tools.
+target: claude
+capabilities:
+  read: Read
+  edit: [Edit, MultiEdit]
+  search: [Grep, Glob]
+  code-nav: serena            # fallback: Grep/Glob
+  run-subagent: Task
+  run-command: Bash
+  ask-user: prompt
+render:
+  master: command            # → .claude/commands/<name>.md (thin pointer)
+  specialist: command
+model_policy:
+  cheap: claude-haiku
+  reasoning: claude-sonnet
+  auto: claude-sonnet

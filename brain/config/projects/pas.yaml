@@ -20,13 +20,12 @@ working_model:
     enabled: true
     mode: "hybrid"
     available_specialists:
+      - "neo"
       - "oracle"
-      - "sentinel"
-      - "smith"
       - "morpheus"
-      - "trinity"
       - "architect"
-      - "sion"
+      - "trinity"
+      - "smith"
       - "keymaker"
     auto_routing: true
 
@@ -46,6 +45,5 @@ domain_specific:
 
 pas_tools:
   enabled: true
-  tools_index: "brain/state/pas-tools-index.yaml"
 
 subprojects: []

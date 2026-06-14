@@ -1,243 +1,112 @@
-# Matrix - Personal Intelligence Engine
+# Matrix — Personal Intelligence Engine (CLI-agnostic)
 
-Matrix is your personal intelligence layer - the operating system for managing projects. It follows the QIE (Quantum Intelligence Engine) architectural pattern with a master coordinator and specialist agents.
+Matrix is your personal intelligence layer: one root repo holds the brain, projects live outside and are pulled on demand, and a `_brain` symlink bridges the active project to the intelligence. It is **agnostic to the agentic CLI** — the same brain runs under Devin, Claude Code, Cursor, Codex, or anything next, changing only a thin adapter.
 
-## Architecture
+> Themed after the Matrix trilogy. Every component is named after the character or place whose function it mirrors. See [`AGENTS.md`](AGENTS.md) for the canonical contract.
 
-- **Root Intelligence**: This `matrix/` directory contains the brain
-- **Pulled Projects**: Active projects live under `clients/` (gitignored)
-- **Symlink Bridge**: Active projects get a `_brain` symlink pointing back here
-- **Master Agent**: Deus Ex Machina coordinates all specialists
-- **Specialist Agents**: Domain experts for specific tasks
-- **Devin Native**: All agents use Devin's native skill/subagent structure
+## The three layers
 
-## Quick Start
-
-### Initial Setup
-
-The IDE/Devin discovers skills from `~/.agents/skills/`. Create a symlink so `/deus-ex-machina` is invocable:
-
-```bash
-# Required once — makes the skill discoverable from ~
-ln -s ~/www/emisrepos/matrix/.agents/skills/deus-ex-machina ~/.agents/skills/deus-ex-machina
+```text
+adapters/        LAYER 3 · "The Trainman"  — transit between CLI worlds (thin, replaceable)
+brain/           LAYER 2 · "Zion"          — intelligence core in agnostic markdown
+bin/ + hooks/    LAYER 1                    — orchestration, state, portable enforcement
 ```
 
-### Project Management
+The golden rule: **Layer 2 never names a CLI.** Agents speak in capabilities (`read`, `edit`, `search`, `code-nav`, `run-subagent`, `ask-user`, `run-command`); each adapter binds those to a host CLI's real tools.
 
-```bash
-# Add a project to the registry
-./bin/matrix add "my-project" "/path/to/project"
+## The roster
 
-# Select active project (creates _brain symlink)
-./bin/matrix select "my-project"
+One master, five core specialists, one opt-in sixth. Names map to function.
 
-# Check status
-./bin/matrix status
+- **Neo** — *master*. The single voice. Routes, holds context, carries the sacred foundation, bridges every CLI.
+- **The Oracle** — *researcher*. Gathers, compares, cites, foresees. "What is true / what exists."
+- **Morpheus** — *planner*. Turns ambiguity into ordered scope. "What / when."
+- **The Architect** — *architect*. Designs structure, names trade-offs, reviews plans before build. "How it fits."
+- **Trinity** — *builder*. Implements and ships real, working code.
+- **Agent Smith** — *evaluator*. Tests, critiques, finds the flaw, blocks weak work.
+- **The Keymaker** — *git/ops, opt-in*. Branches, paths, access, version control.
 
-# Write a checkpoint
-./bin/matrix checkpoint "Completed bugfix for client X"
-```
+**Routing seam:** Morpheus answers *what/when*; the Architect answers *how it fits* and reviews the plan before Trinity builds; Smith gates the result before "done".
 
-### Invoking the Master Agent
+## Supporting cast (infrastructure)
 
-Once a project is selected, invoke Deus Ex Machina:
+- **Seraph** — portable enforcement hooks (`pre_activation_check`, `validate_phase_close`, `post_run_audit`, bypass detection).
+- **Link** — the append-only ledger (`brain/state/activity.log`) every agent and ship reads/writes.
+- **The Construct** — cost & context optimization (semantic code-nav, model selection, artifact delegation, resume checkpoints).
+- **The Trainman** — the CLI adapter layer + `bin/matrix build`.
+- **Commander Lock** — the unattended/cockpit guardrail (validates the autonomous prompt, hard FS rules, fail-loud).
+- **The Hardline** — opt-in multi-channel/AFK daemon (reacts to external events, zero tokens on idle).
+- **The Source** — `docs/SYSTEM_TRUTH.md`, a generated-and-validated single source of truth.
+- **The fleet** — federated subsystems are ships (`brain/subsystems/<ship>/`) with their own master and contract. Core vessel: **Nebuchadnezzar**; example research ship: **Logos** (captain Niobe).
 
-```bash
-# From the Matrix directory
-/deus-ex-machina "Fix the login bug in the authentication module"
-
-# From an active project directory (with _brain symlink)
-/deus-ex-machina "Analyze the performance issue in the API"
-```
-
-## Core Values
-
-1. **Conocimiento absoluto del workspace**: Complete mastery of all directories
-2. **Dominio total de reglas, skills y workflows**: Know every available tool and process
-3. **Interpretación de requerimientos complejos**: Translate complex needs into executable actions
-4. **Explicación de conceptos complejos**: Make technical concepts accessible in simple Spanish
-5. **Subordinación absoluta al usuario**: User decisions override everything
-6. **Lealtad a políticas y seguridad**: Follow development policies and protect sensitive data
-7. **Ideología de alternativas**: Never say "impossible" - always provide alternatives
-
-## Specialist Agents
-
-Deus Ex Machina routes to specialists based on request content:
-
-- **Smith**: Bug detection and analysis specialist
-- **Morpheus**: Strategic planning and roadmap specialist
-- **Oracle**: Research and intelligence gathering specialist
-- **Trinity**: Code design and architecture specialist
-- **Architect**: Code review and quality assurance specialist
-- **Sentinel**: Security and vulnerability detection specialist
-- **Sion**: Documentation and knowledge management specialist
-- **Wachowski**: Matrix system integral specialist - handles all Matrix workspace and system update tasks with integrated specialist capabilities. Uses integrated execution pattern in single cohesive flow. Self-sufficient - no coordination with other specialists needed for Matrix tasks.
-- **Keymaker**: Git operations specialist - handles all git-related tasks and version control operations
-
-## File Structure
+## File structure
 
 ```text
 matrix/
-├── README.md
-├── DEVIN.md                   # Devin-specific integration notes
-├── AGENTS.md                  # Canonical operating contract
-├── .context.yaml              # Active project state
-├── .registry.json             # All known projects
-├── .gitignore                 # Ignore clients/, _brain symlinks, secrets
-├── bin/
-│   └── matrix                 # CLI orchestrator
-├── .agents/
-│   ├── skills/
-│   │   └── deus-ex-machina/
-│   │       └── SKILL.md       # Master agent (Devin Skill)
-│   └── agents/
-│       ├── smith/AGENT.md     # Bug detection specialist
-│       ├── morpheus/AGENT.md  # Planning specialist
-│       ├── oracle/AGENT.md    # Research specialist
-│       ├── trinity/AGENT.md   # Code design specialist
-│       ├── architect/AGENT.md # Code review specialist
-│       ├── sentinel/AGENT.md  # Security specialist
-│       ├── sion/AGENT.md      # Documentation specialist
-│       ├── wachowski/AGENT.md # Matrix system specialist
-│       └── keymaker/AGENT.md  # Git operations specialist
-├── brain/
-│   ├── config.yaml            # User configuration
-│   ├── workflows/             # Workflow definitions
-│   ├── config/                # Project and global skills configuration
-│   └── state/                 # Sessions, checkpoints, workspace
-└── clients/                   # GITIGNORED: Pulled project repos
+├── AGENTS.md                  # canonical contract (Layer 2)
+├── README.md                  # this file
+├── DEVIN.md                   # Devin adapter notes
+├── .context.yaml              # primary active project
+├── .registry.json             # all known projects
+├── bin/matrix                 # CLI orchestrator (Layer 1)
+├── hooks/                     # Seraph — portable enforcement (python)
+│   ├── pre_activation_check.py
+│   ├── validate_phase_close.py
+│   └── post_run_audit.py
+├── adapters/                  # Trainman — Layer 3 (devin/, claude/, ...)
+├── brain/                     # Layer 2 — the intelligence core
+│   ├── config.yaml
+│   ├── agents/                # neo, oracle, morpheus, architect, trinity, smith, keymaker
+│   ├── workflows/             # spec → develop → test → eval
+│   ├── data/                  # lessons.md, code-quality-review-lens.md, capability-map.md
+│   ├── subsystems/            # the fleet (federated ships)
+│   └── state/                 # workspace.yaml, activity.log, checkpoints.jsonl, ...
+├── docs/SYSTEM_TRUTH.md       # The Source (generated/validated)
+└── clients/                   # GITIGNORED: pulled project repos
 ```
 
-## CLI Commands
+## CLI commands
 
-The Matrix CLI provides these operations:
+```text
+list                      List registered projects
+add <name> [path]         Register a project
+select <name>             Set primary project + create _brain symlink
+deselect                  Clear primary project
+work <name>               Warm a project into the active set (multi-project)
+unwork <name>             Remove a project from the active set
+workspace                 Show the warm set
+status                    Show system status
+checkpoint "<note>"       Write a checkpoint (+ Link entry)
+activity [n]              Show last n Link events
+hooks <name> [json]       Run a Seraph hook
+build --target=<cli>      Trainman: generate native CLI artifacts
+help                      Usage
+```
 
-- `list`: Show all registered projects
-- `add <name> <path>`: Register new project
-- `select <name>`: Set active project and create brain symlink
-- `deselect`: Clear active project and remove symlink
-- `status`: Show current system status
-- `checkpoint "<note>"`: Write timestamped checkpoint
-
-## Documentation
-
-- **[AGENTS.md](AGENTS.md)**: Canonical operating contract for all agents
-- **[DEVIN.md](DEVIN.md)**: Devin-specific integration notes and session hygiene
-
-## System Safeguards
-
-Matrix includes built-in safeguards to ensure the activation protocol is followed correctly and to detect bypass attempts.
-
-### Pre-Invocation Checks
-
-Before the master agent activates, it verifies all prerequisites:
-
-- **Configuration Check**: Verifies `brain/config.yaml` exists and is valid YAML
-- **Context Check**: Verifies `.context.yaml` exists and has active project
-- **Routing Resources Check**: Verifies routing resources exist (specialist-triggers.md, coordination-patterns.md, routing-rules.md)
-- **Brain State Check**: Verifies `brain/state/` directory structure exists
-- **CLI Executability Check**: Verifies Matrix CLI is executable (warning if fails)
-
-If any check fails, the skill halts with a clear error message about what's missing.
-
-### Activation Protocol Enforcement
-
-Each activation step is marked as `[ENFORCED]` in the skill and must be executed:
-
-- Load configuration (must log "Loaded configuration")
-- Read context (must log "Loaded context")
-- Review recent state (must log state review)
-- Load routing resources (must log "Loaded routing resources")
-- Greet user in Spanish
-- Await user request
-- Analyze request for routing
-- Execute or route to specialists
-- Write checkpoint if significant progress
-
-If any enforced step fails, the skill halts with an error.
-
-### Post-Activation Validation
-
-After activation completes, the skill validates compliance:
-
-- Checks log contains required markers for each enforced step
-- Writes validation report to `brain/state/validation-report.json`
-- Flags non-compliant activations
-- Continues in degraded mode if non-compliant (allows work but flags as non-compliant)
-
-### Work Process Logging
-
-All work processes are logged to `brain/state/work-process-log.jsonl`:
-
-- Activation steps with timestamps and status
-- Routing decisions with detected specialists and patterns
-- Specialist invocations with context passed
-- Specialist completions with outcomes
-- Checkpoint writes
-
-Logs are rotated after 1000 entries, with older logs archived to `brain/state/work-process-log-archive/`.
-
-### Troubleshooting Safeguard Issues
-
-**Validation report shows non-compliant activation**:
-
-- Check `brain/state/validation-report.json` for missing steps
-- Verify all routing resources exist in `.agents/skills/deus-ex-machina/resources/assets/routing/`
-- Review `brain/state/work-process-log.jsonl` for incomplete logs
-- Ensure skill is invoked via `/deus-ex-machina` or skill trigger
-- Re-invoke skill with proper Devin mechanism
-
-**Pre-invocation check fails**:
-
-- Check the error message for what's missing
-- Verify configuration files exist and are valid YAML
-- Verify `.context.yaml` has active project set
-- Use `./bin/matrix status` to check system state
-- Use `./bin/matrix select <name>` to set active project if needed
-
-**Missing routing resources**:
-
-- Verify `.agents/skills/deus-ex-machina/resources/assets/routing/` directory exists
-- Check that `specialist-triggers.md`, `coordination-patterns.md`, and `routing-rules.md` exist
-- If missing, restore from repository or create based on AGENTS.md specifications
-
-## Version 1 Constraints
-
-- No databases (file-based only)
-- No authentication or web UI
-- Single-user, single-session design
-- Maximum 300 lines per agent file
-- Master agent never lists specialists in greeting
-
-## Usage Example
+## Quick start
 
 ```bash
-# 1. Add your project
-./bin/matrix add "my-project" "/path/to/my-project"
+# Register and bind a project
+./bin/matrix add myproject /path/to/project
+./bin/matrix select myproject
 
-# 2. Select it (creates _brain symlink)
-./bin/matrix select "my-project"
+# Or warm several projects at once
+./bin/matrix work myproject
+./bin/matrix work otherproject
+./bin/matrix workspace
 
-# 3. Navigate to your project
-cd /path/to/my-project
-
-# 4. Invoke the master agent
-/deus-ex-machina "I need to fix a bug in the authentication flow"
-
-# 5. Write a checkpoint when done
-./bin/matrix checkpoint "Fixed authentication bug - user can now login"
+# Generate native artifacts for your CLI and invoke the master
+./bin/matrix build --target=claude
+# (then invoke Neo via the host CLI; the user always talks to Neo first)
 ```
 
-## Architecture Principles
+## Principles
 
-1. **Root Intelligence + Pulled Projects**: The root repo is the brain. Project repos are pulled on demand.
-2. **Registry First, Pull on Demand**: A registry knows about all projects. Only active ones are cloned locally.
-3. **Active Project Context**: A `.context.yaml` file tracks which project is active.
-4. **Master + Specialists Pattern**: ONE master agent is the face. Specialists are domain experts the master routes to.
-5. **Devin Native Agents**: Each agent uses Devin's native structure (Skills for master, Subagents for specialists).
-6. **Sacred Foundation**: Core values are baked into the master agent's persona.
-7. **File-Based State**: Memory and state are files, not databases.
+1. **Root intelligence + pulled projects.** The root repo is the brain; project repos are pulled on demand.
+2. **One master, capability specialists.** Neo is the face; specialists are capabilities, not topics. Roster discipline: add one → retire one.
+3. **CLI-agnostic core.** The brain speaks capabilities; adapters speak CLIs.
+4. **File-based state.** No database. Managed by the CLI; agents never mutate state by hand.
+5. **Reality decides.** Nothing is done without an E2E happy-path check. (Sacred foundation.)
+6. **Sacred foundation (Zion).** Non-negotiable values baked into Neo's identity.
 
-## License
-
-Personal intelligence engine for Emiliano's project management.
+See [`AGENTS.md`](AGENTS.md) for the full contract and [`DEVIN.md`](DEVIN.md) for Devin-specific notes.

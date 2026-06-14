@@ -1,6 +1,9 @@
 # Matrix Workspace State
 # Tracks active projects and system state
 
-active_projects: []
-last_updated: "2026-06-02T15:56:47-03:00"
+active_projects:
+  - name: mck
+    path: /home/emiliano/www/Portal-Templates-Group/mckinsey
+    activated: 2026-06-13T20:38:49-03:00
+last_updated: "2026-06-13T22:03:57-03:00"
 system_status: "initialized"

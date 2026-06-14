@@ -13,6 +13,15 @@ brain/state/*.yaml
 brain/config.yaml
 .context.yaml
 
+# Generated adapter artifacts (Trainman build output)
+adapters/*/generated/
+
+# The Hardline event inbox (per-machine, may carry transient data)
+modules/hardline/inbox.log
+
+# Federated ship corpora (per-machine)
+brain/subsystems/*/corpus/
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -25,3 +34,6 @@ Thumbs.db
 .idea/
 
 *.backup
+# Python cache
+__pycache__/
+*.pyc

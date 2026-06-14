@@ -1,1590 +1,616 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matrix System Onboarding</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap');
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background-color: #000;
-            color: #0f0;
-            font-family: 'Share Tech Mono', monospace;
-            overflow-x: hidden;
-            min-height: 100vh;
-        }
-
-        /* Matrix Rain Effect */
-        #matrix-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 0;
-            opacity: 0.3;
-        }
-
-        /* Main Container */
-        .container {
-            position: relative;
-            z-index: 1;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        /* Header */
-        header {
-            text-align: center;
-            padding: 40px 0;
-            border-bottom: 2px solid #0f0;
-            margin-bottom: 40px;
-        }
-
-        h1 {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 3em;
-            text-shadow: 0 0 10px #0f0, 0 0 20px #0f0, 0 0 30px #0f0;
-            animation: flicker 3s infinite;
-        }
-
-        .subtitle {
-            font-size: 1.2em;
-            margin-top: 10px;
-            opacity: 0.8;
-        }
-
-        /* Glitch Effect */
-        @keyframes flicker {
-            0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
-                text-shadow: 0 0 10px #0f0, 0 0 20px #0f0, 0 0 30px #0f0;
-            }
-            20%, 24%, 55% {
-                text-shadow: none;
-            }
-        }
-
-        /* Navigation */
-        .nav {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-bottom: 40px;
-            flex-wrap: wrap;
-        }
-
-        .nav-btn {
-            background: transparent;
-            border: 1px solid #0f0;
-            color: #0f0;
-            padding: 10px 20px;
-            font-family: 'Share Tech Mono', monospace;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-        }
-
-        .nav-btn:hover {
-            background: #0f0;
-            color: #000;
-            box-shadow: 0 0 20px #0f0;
-        }
-
-        .nav-btn.active {
-            background: #0f0;
-            color: #000;
-            box-shadow: 0 0 20px #0f0;
-        }
-
-        /* Sections */
-        .section {
-            display: none;
-            animation: fadeIn 0.5s ease;
-        }
-
-        .section.active {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Cards */
-        .card {
-            border: 1px solid #0f0;
-            padding: 20px;
-            margin: 20px 0;
-            background: rgba(0, 20, 0, 0.8);
-            transition: all 0.3s ease;
-        }
-
-        .card:hover {
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
-            transform: translateY(-5px);
-        }
-
-        .card h2 {
-            font-family: 'Orbitron', sans-serif;
-            margin-bottom: 15px;
-            color: #0f0;
-        }
-
-        .card h3 {
-            color: #0f0;
-            margin: 15px 0 10px;
-        }
-
-        /* Agent Grid */
-        .agent-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        .agent-card {
-            border: 1px solid #0f0;
-            padding: 20px;
-            background: rgba(0, 20, 0, 0.6);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .agent-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.1), transparent);
-            transition: left 0.5s ease;
-        }
-
-        .agent-card:hover::before {
-            left: 100%;
-        }
-
-        .agent-card:hover {
-            box-shadow: 0 0 30px rgba(0, 255, 0, 0.4);
-            transform: scale(1.02);
-        }
-
-        .agent-card .agent-name {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.5em;
-            margin-bottom: 10px;
-            color: #0f0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        /* Agent Icon System - Cross-Browser Fallbacks */
-        .agent-card .agent-name::before {
-            content: attr(data-icon);
-            font-size: 1.2em;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 1.5em;
-            text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
-        }
-
-        /* Fallback for browsers that don't support the emoji */
-        .agent-card .agent-name[data-icon] {
-            position: relative;
-        }
-
-        /* Ensure consistent icon sizing across browsers */
-        .agent-card .agent-name {
-            emoji-rendering: optimizeLegibility;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-
-        /* Dark mode support for icons */
-        @media (prefers-color-scheme: dark) {
-            .agent-card .agent-name::before {
-                filter: brightness(1.2);
-            }
-        }
-
-        /* High contrast mode support */
-        @media (prefers-contrast: high) {
-            .agent-card .agent-name::before {
-                filter: contrast(1.5);
-                text-shadow: none;
-            }
-        }
-
-        /* Icon animation on hover */
-        .agent-card:hover .agent-name::before {
-            animation: iconPulse 0.5s ease;
-        }
-
-        @keyframes iconPulse {
-            0%, 100% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.1);
-            }
-        }
-
-        .agent-card .agent-role {
-            color: #0f0;
-            margin-bottom: 15px;
-            font-size: 0.9em;
-            opacity: 0.8;
-        }
-
-        .agent-card .agent-description {
-            font-size: 0.85em;
-            line-height: 1.6;
-        }
-
-        .agent-card .keywords {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid rgba(0, 255, 0, 0.3);
-        }
-
-        .agent-card .keywords span {
-            display: inline-block;
-            background: rgba(0, 255, 0, 0.2);
-            padding: 3px 8px;
-            margin: 2px;
-            font-size: 0.75em;
-            border: 1px solid #0f0;
-        }
-
-        /* Typing Effect */
-        .typing {
-            overflow: hidden;
-            border-right: 2px solid #0f0;
-            white-space: nowrap;
-            animation: typing 3s steps(40, end), blink-caret 0.75s step-end infinite;
-        }
-
-        @keyframes typing {
-            from { width: 0 }
-            to { width: 100% }
-        }
-
-        @keyframes blink-caret {
-            from, to { border-color: transparent }
-            50% { border-color: #0f0 }
-        }
-
-        /* Code Block */
-        .code-block {
-            background: #0a0a0a;
-            border: 1px solid #0f0;
-            padding: 15px;
-            margin: 15px 0;
-            overflow-x: auto;
-            font-size: 0.9em;
-        }
-
-        .code-block code {
-            color: #0f0;
-        }
-
-        /* Progress Bar */
-        .progress-container {
-            margin: 30px 0;
-        }
-
-        .progress-bar {
-            height: 4px;
-            background: rgba(0, 255, 0, 0.2);
-            position: relative;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: #0f0;
-            width: 0%;
-            transition: width 0.3s ease;
-            box-shadow: 0 0 10px #0f0;
-        }
-
-        /* Terminal Style */
-        .terminal {
-            background: #0a0a0a;
-            border: 1px solid #0f0;
-            padding: 20px;
-            margin: 20px 0;
-            font-family: 'Share Tech Mono', monospace;
-        }
-
-        .terminal-header {
-            border-bottom: 1px solid #0f0;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .terminal-title {
-            color: #0f0;
-            font-size: 0.9em;
-        }
-
-        .terminal-buttons {
-            display: flex;
-            gap: 5px;
-        }
-
-        .terminal-btn {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            border: 1px solid #0f0;
-        }
-
-        .terminal-content {
-            color: #0f0;
-            font-size: 0.85em;
-            line-height: 1.6;
-        }
-
-        .terminal-content .prompt {
-            color: #0f0;
-        }
-
-        .terminal-content .command {
-            color: #0f0;
-            font-weight: bold;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            h1 {
-                font-size: 2em;
-            }
-
-            .nav {
-                flex-direction: column;
-                align-items: center;
-            }
-
-            .agent-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .ascii-art {
-                font-size: 10px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .ascii-art {
-                font-size: 8px;
-            }
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #000;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #0f0;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #0a0;
-        }
-
-        /* Status Indicators */
-        .status {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-
-        .status.online {
-            background: #0f0;
-            box-shadow: 0 0 10px #0f0;
-            animation: pulse 2s infinite;
-        }
-
-        .status.offline {
-            background: #333;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        /* Footer */
-        footer {
-            text-align: center;
-            padding: 40px 0;
-            border-top: 1px solid #0f0;
-            margin-top: 60px;
-            font-size: 0.8em;
-            opacity: 0.7;
-        }
-
-        /* Interactive Elements */
-        .interactive {
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .interactive:hover {
-            color: #0f0;
-            text-shadow: 0 0 10px #0f0;
-        }
-
-        /* Data Stream Animation */
-        .data-stream {
-            position: fixed;
-            top: 0;
-            right: 0;
-            width: 200px;
-            height: 100%;
-            background: linear-gradient(180deg, transparent, rgba(0, 255, 0, 0.05), transparent);
-            animation: dataFlow 10s linear infinite;
-            z-index: 0;
-            pointer-events: none;
-        }
-
-        @keyframes dataFlow {
-            0% { transform: translateY(-100%); }
-            100% { transform: translateY(100%); }
-        }
-
-        /* ASCII Art Container */
-        .ascii-art {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: clamp(10px, 0.8125rem, 14px);
-            line-height: 1.2;
-            white-space: pre;
-            text-align: center;
-            color: #0f0;
-            text-shadow: 0 0 5px #0f0, 0 0 10px #0f0;
-            animation: asciiGlow 3s ease-in-out infinite, swarmPulse 4s ease-in-out infinite, particleDrift 6s ease-in-out infinite;
-            margin: 20px 0;
-            overflow-x: auto;
-        }
-
-        /* Screen reader only class */
-        .sr-only {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
-        }
-
-        /* Reduced motion support */
-        @media (prefers-reduced-motion: reduce) {
-            /* Desactivar animaciones decorativas específicas */
-            .ascii-art,
-            .data-stream,
-            .status.online {
-                animation: none !important;
-            }
-
-            /* Mantener transiciones funcionales pero rápidas */
-            .nav-btn,
-            .card,
-            .interactive {
-                transition-duration: 0.1s;
-            }
-
-            .ascii-art {
-                text-shadow: none; /* Eliminar glow en reduced-motion */
-            }
-
-            *, *::before, *::after {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-            }
-        }
-
-        @keyframes asciiGlow {
-            0%, 100% {
-                opacity: 0.8;
-                text-shadow: 0 0 5px #0f0, 0 0 10px #0f0;
-            }
-            50% {
-                opacity: 1;
-                text-shadow: 0 0 10px #0f0, 0 0 20px #0f0, 0 0 30px #0f0;
-            }
-        }
-
-        @keyframes swarmPulse {
-            0%, 100% {
-                transform: scale(1);
-                filter: brightness(1);
-            }
-            50% {
-                transform: scale(1.02);
-                filter: brightness(1.2);
-            }
-        }
-
-        @keyframes particleDrift {
-            0%, 100% {
-                transform: translateX(0);
-            }
-            25% {
-                transform: translateX(-2px);
-            }
-            75% {
-                transform: translateX(2px);
-            }
-        }
-
-        @keyframes eyeGlitch {
-            0%, 90%, 100% {
-                opacity: 1;
-            }
-            91% {
-                opacity: 0.8;
-                transform: translateX(-1px);
-            }
-            92% {
-                opacity: 1;
-                transform: translateX(1px);
-            }
-            93% {
-                opacity: 0.9;
-            }
-        }
-
-        @keyframes smirkShift {
-            0%, 100% {
-                transform: scaleX(1);
-            }
-            50% {
-                transform: scaleX(1.05);
-            }
-        }
-
-        /* About Section Specific */
-        .about-face {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 300px;
-            background: rgba(0, 20, 0, 0.3);
-            border: 1px solid #0f0;
-            padding: 20px;
-            margin: 20px 0;
-        }
-
-        .quote {
-            font-style: italic;
-            text-align: center;
-            margin-top: 20px;
-            opacity: 0.8;
-            font-size: 1.1em;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matrix — Onboarding completo</title>
+<style>
+  :root {
+    --green: #00ff41;
+    --green-dim: #00cc33;
+    --green-dark: #009926;
+    --bg: #0d0d0d;
+    --bg-card: #141414;
+    --bg-code: #1a1a1a;
+    --text: #c8c8c8;
+    --text-bright: #e0e0e0;
+    --border: #2a2a2a;
+    --accent: #00ff41;
+    --accent2: #00bcd4;
+    --red: #ff4444;
+    --yellow: #ffcc00;
+    --radius: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  h1, h2, h3, h4 { color: var(--green); font-weight: 600; }
+  h1 { font-size: 2.2rem; margin-bottom: 0.3rem; letter-spacing: -0.5px; }
+  h1 span { color: var(--text); font-weight: 300; font-size: 1rem; display: block; margin-top: 0.3rem; }
+  h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1.15rem; margin: 1.5rem 0 0.5rem; color: var(--accent2); }
+  h4 { font-size: 1rem; margin: 1rem 0 0.4rem; color: var(--text-bright); }
+  p { margin-bottom: 0.8rem; }
+  a { color: var(--green); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+    background: var(--bg-code);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--green);
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    margin: 0.8rem 0 1.2rem;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; color: var(--green-dim); }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.2rem 1.4rem;
+    margin: 1rem 0;
+  }
+  .card h3 { margin-top: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 12px;
+    margin-right: 0.3rem;
+    font-weight: 600;
+  }
+  .tag-master { background: var(--green-dark); color: #fff; }
+  .tag-specialist { background: #1a3a4a; color: var(--accent2); }
+  .tag-infra { background: #3a2a1a; color: var(--yellow); }
+  .tag-opt { background: #2a1a2a; color: #cc88ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--green); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .hero {
+    text-align: center;
+    padding: 3rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .hero p { color: var(--text); max-width: 700px; margin: 0.5rem auto; }
+  .toc { list-style: none; columns: 2; margin: 1rem 0; }
+  .toc li { padding: 0.25rem 0; }
+  .toc a { color: var(--text-bright); }
+  .toc a:hover { color: var(--green); }
+  .flow-diagram {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--green-dim);
+    line-height: 1.4;
+    white-space: pre;
+    text-align: center;
+    margin: 1rem 0;
+  }
+  .warn { border-left: 3px solid var(--yellow); padding-left: 1rem; margin: 1rem 0; }
+  .danger { border-left: 3px solid var(--red); padding-left: 1rem; margin: 1rem 0; }
+  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: #666; font-size: 0.85rem; text-align: center; }
+  @media (max-width: 600px) {
+    .toc { columns: 1; }
+    .grid { grid-template-columns: 1fr; }
+    body { padding: 1rem; }
+    h1 { font-size: 1.6rem; }
+  }
+</style>
 </head>
 <body>
-    <canvas id="matrix-canvas"></canvas>
-    <div class="data-stream"></div>
 
-    <div class="container">
-        <header>
-            <h1>MATRIX SYSTEM</h1>
-            <p class="subtitle">Personal Intelligence Engine v1.0</p>
-            <p style="margin-top: 10px; font-size: 0.9em;">
-                <span class="status online"></span>Sistema Online
-            </p>
-        </header>
+<div class="hero">
+  <h1>Matrix <span>Personal Intelligence Engine &mdash; CLI-agnostic</span></h1>
+  <p>Un cerebro que vive en un repo, se conecta a tus proyectos por symlink, y corre igual bajo Devin, Claude Code, Cursor o cualquier CLI futuro. Solo cambia el adaptador.</p>
+</div>
 
-        <nav class="nav">
-            <button class="nav-btn active" onclick="showSection('intro')">Introducción</button>
-            <button class="nav-btn" onclick="showSection('architecture')">Arquitectura</button>
-            <button class="nav-btn" onclick="showSection('agents')">Agentes</button>
-            <button class="nav-btn" onclick="showSection('workflow')">Workflow</button>
-            <button class="nav-btn" onclick="showSection('tutorial')">Tutorial</button>
-            <button class="nav-btn" onclick="showSection('commands')">Comandos</button>
-            <button class="nav-btn" onclick="showSection('about')">Acerca de</button>
-        </nav>
+<h2>Tabla de contenidos</h2>
+<ul class="toc">
+  <li><a href="#que-es">1. Que es Matrix</a></li>
+  <li><a href="#capas">2. Las tres capas</a></li>
+  <li><a href="#roster">3. El roster (agentes)</a></li>
+  <li><a href="#infra">4. Infraestructura</a></li>
+  <li><a href="#cli">5. CLI completo</a></li>
+  <li><a href="#quick-start">6. Quick Start</a></li>
+  <li><a href="#workflows">7. Workflows</a></li>
+  <li><a href="#enforcement">8. Enforcement (Seraph)</a></li>
+  <li><a href="#source">9. The Source</a></li>
+  <li><a href="#construct">10. Costos (The Construct)</a></li>
+  <li><a href="#federacion">11. Federacion (la flota)</a></li>
+  <li><a href="#hardline">12. AFK / Hardline</a></li>
+  <li><a href="#lock">13. Modo autonomo (Lock)</a></li>
+  <li><a href="#lessons">14. Lecciones (Zion Archive)</a></li>
+  <li><a href="#foundation">15. Sacred Foundation</a></li>
+  <li><a href="#estructura">16. Estructura de archivos</a></li>
+  <li><a href="#trainman">17. Adaptar a otro CLI</a></li>
+  <li><a href="#sesion">18. Higiene de sesion</a></li>
+  <li><a href="#prohibido">19. Lo prohibido</a></li>
+  <li><a href="#faq">20. FAQ / Troubleshooting</a></li>
+</ul>
 
-        <!-- Introduction Section -->
-        <section id="intro" class="section active">
-            <div class="card">
-                <h2>Bienvenido a Matrix</h2>
-                <p style="line-height: 1.8; margin-bottom: 15px;">
-                    Matrix es tu capa de inteligencia personal - el sistema operativo para gestionar proyectos. 
-                    Sigue el patrón arquitectónico QIE (Quantum Intelligence Engine) con un coordinador maestro 
-                    y agentes especialistas.
-                </p>
-                <p style="line-height: 1.8;">
-                    Al igual que en la película, Matrix te ofrece una realidad alternativa donde la gestión 
-                    de proyectos se vuelve fluida, inteligente y eficiente. Los agentes trabajan detrás 
-                    de escena para ejecutar tus comandos con precisión.
-                </p>
-            </div>
+<!-- ========== 1 ========== -->
+<h2 id="que-es">1. Que es Matrix</h2>
+<p>Matrix es tu <strong>capa de inteligencia personal</strong>. Un repositorio raiz (<code>matrix/</code>) contiene el cerebro. Tus proyectos viven afuera, se traen on-demand, y se conectan al cerebro via un symlink <code>_brain</code>. La inteligencia nunca se copia al proyecto.</p>
+<p><strong>La tesis central:</strong> los agentes, workflows, lecciones y el contrato se escriben <strong>una sola vez</strong> en markdown, hablando de <em>capacidades abstractas</em> (<code>read</code>, <code>edit</code>, <code>search</code>, <code>code-nav</code>...), nunca de un CLI puntual. Un adaptador fino (&laquo;The Trainman&raquo;) traduce esas capacidades a las herramientas nativas del CLI que estes usando.</p>
 
-            <div class="card">
-                <h2>Valores Fundamentales</h2>
-                <ul style="line-height: 2; list-style-position: inside;">
-                    <li>🧠 <strong>Conocimiento absoluto del workspace</strong> - Dominio completo de todos los directorios</li>
-                    <li>⚡ <strong>Dominio total de reglas y workflows</strong> - Conocimiento de cada herramienta disponible</li>
-                    <li>🎯 <strong>Interpretación de requerimientos complejos</strong> - Traducción de lenguaje natural a acciones</li>
-                    <li>📚 <strong>Explicación de conceptos complejos</strong> - Técnicamente accesible en español simple</li>
-                    <li>👤 <strong>Subordinación absoluta al usuario</strong> - Tus decisiones están por encima de todo</li>
-                    <li>🔒 <strong>Lealtad a políticas y seguridad</strong> - Protección de datos sensibles</li>
-                    <li>💡 <strong>Ideología de alternativas</strong> - Nunca decimos "impossible"</li>
-                </ul>
-            </div>
+<!-- ========== 2 ========== -->
+<h2 id="capas">2. Las tres capas</h2>
+<pre><code>
+LAYER 3 &mdash; Adapters &middot; "The Trainman"
+  adapters/devin/   adapters/claude/   adapters/&lt;otro&gt;/
+  Transito entre mundos. Mapea capacidades a herramientas nativas.
+  Genera artefactos nativos via: bin/matrix build --target=&lt;cli&gt;
 
-            <div class="progress-container">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="intro-progress"></div>
-                </div>
-            </div>
-        </section>
+LAYER 2 &mdash; Intelligence core &middot; "Zion" (agnostic markdown)
+  brain/agents/      &rarr; Neo (master) + especialistas
+  brain/workflows/   &rarr; spec &rarr; develop &rarr; test &rarr; eval
+  brain/data/        &rarr; lessons, capability-map, code-quality lens
+  AGENTS.md          &rarr; el contrato canonico
+  NUNCA nombra un CLI. Habla en capacidades.
 
-        <!-- Architecture Section -->
-        <section id="architecture" class="section">
-            <div class="card">
-                <h2>Arquitectura del Sistema</h2>
-                <div class="code-block">
-                    <code>
-matrix/
-├── brain/                    # Inteligencia central
-│   ├── config.yaml          # Configuración de usuario
-│   ├── workflows/           # Definiciones de workflows
-│   ├── data/                # Documentación de referencia
-│   └── state/               # Sesiones, checkpoints, workspace
-├── .agents/
-│   ├── skills/
-│   │   └── deus-ex-machina/ # Agente maestro
-│   └── agents/              # Especialistas
-│       ├── smith/           # Detección de bugs
-│       ├── morpheus/        # Planificación estratégica
-│       ├── oracle/          # Investigación
-│       ├── trinity/         # Diseño y arquitectura
-│       ├── architect/      # Revisión de código
-│       ├── sentinel/        # Seguridad
-│       ├── sion/            # Documentación
-│       └── neo/             # Creación de contenido
-└── clients/                 # Proyectos activos
-                    </code>
-                </div>
-            </div>
+LAYER 1 &mdash; Orquestacion &amp; infraestructura
+  bin/matrix   &rarr; registry, proyectos, checkpoints, ledger (Link)
+  hooks/       &rarr; enforcement portable (Seraph)
+  brain/state/ &rarr; estado file-based
+  No sabe nada de agentes. Gestiona estado y dispara hooks.
+</code></pre>
+<p><strong>Regla de oro:</strong> la Capa 2 nunca nombra un CLI. Si algo solo funciona bajo un CLI, pertenece a un adaptador (Capa 3), no al cerebro.</p>
 
-            <div class="card">
-                <h2>Patrón Maestro + Especialistas</h2>
-                <p style="line-height: 1.8; margin-bottom: 15px;">
-                    Matrix utiliza un patrón arquitectónico donde <strong>Deus Ex Machina</strong> actúa 
-                    como la única interfaz para los usuarios. Todos los especialistas trabajan detrás 
-                    de escena y son invocados automáticamente según el tipo de solicitud.
-                </p>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">matrix@system:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">Usuario → Deus Ex Machina → Análisis → ¿Necesita especialista?</span></p>
-                        <p style="margin-left: 20px;">↓</p>
-                        <p><span class="prompt">$</span> <span class="command">Sí → Enrutar al especialista apropiado</span></p>
-                        <p><span class="prompt">$</span> <span class="command">No → Manejar directamente</span></p>
-                    </div>
-                </div>
-            </div>
+<!-- ========== 3 ========== -->
+<h2 id="roster">3. El roster (agentes)</h2>
+<p>Un master, cinco especialistas core, un sexto opt-in. <strong>Disciplina de roster:</strong> agregar uno requiere retirar o fusionar otro.</p>
 
-            <div class="card">
-                <h2>Principios de Arquitectura</h2>
-                <ul style="line-height: 2; list-style-position: inside;">
-                    <li>🧠 <strong>Inteligencia Raíz + Proyectos Extraídos</strong> - El repo raíz es el cerebro</li>
-                    <li>📋 <strong>Registro Primero, Extraer bajo Demanda</strong> - Solo los proyectos activos se clonan localmente</li>
-                    <li>🎯 <strong>Contexto de Proyecto Activo</strong> - .context.yaml rastrea el proyecto activo</li>
-                    <li>🤖 <strong>Agentes Nativos Devin</strong> - Cada agente usa la estructura nativa de Devin</li>
-                    <li>📁 <strong>Estado Basado en Archivos</strong> - Memoria y estado son archivos, no bases de datos</li>
-                </ul>
-            </div>
-        </section>
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-master">MASTER</span> Neo</h3>
+    <p><strong>The One.</strong> La unica voz. Rutea, sostiene contexto, lleva la sacred foundation. El usuario siempre habla con Neo primero.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-specialist">RESEARCH</span> The Oracle</h3>
+    <p>Investiga, compara, cita, preve. Responde &laquo;que existe / que es verdad&raquo;. Nunca afirma sin fuente.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-specialist">PLAN</span> Morpheus</h3>
+    <p>Convierte ambiguedad en scope ordenado. Responde &laquo;que / cuando&raquo;. &laquo;Solo puedo mostrarte la puerta.&raquo;</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-specialist">ARCHITECT</span> The Architect</h3>
+    <p>Disena estructura, nombra trade-offs, revisa el plan antes de construir. Responde &laquo;como encaja&raquo;.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-specialist">BUILD</span> Trinity</h3>
+    <p>Implementa y entrega. Codigo real que corre. Sigue el diseno del Architect; no improvisa estructura.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-specialist">EVAL</span> Agent Smith</h3>
+    <p>Testea, critica, bloquea trabajo debil. Root-cause de bugs. Dueno del reality gate: nada esta &laquo;listo&raquo; sin un check E2E.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-opt">OPT-IN</span> The Keymaker</h3>
+    <p>Git / Ops. Ramas, commits, merge, acceso. Solo se activa cuando el trabajo git es explicito. Nunca autonomo.</p>
+  </div>
+</div>
 
-        <!-- Agents Section -->
-        <section id="agents" class="section">
-            <div class="card">
-                <h2>Los 9 Especialistas</h2>
-                <p style="line-height: 1.8; margin-bottom: 20px;">
-                    Cada especialista tiene un dominio claramente definido y es invocado automáticamente 
-                    según las palabras clave en tu solicitud. Conoce a tu equipo:
-                </p>
-            </div>
+<h3>Routing seam</h3>
+<p><strong>Morpheus</strong> responde <em>que/cuando</em>. <strong>The Architect</strong> responde <em>como encaja</em> y revisa el plan de Morpheus antes de que Trinity construya. <strong>Smith</strong> gatekeepea el resultado antes de llamarlo &laquo;listo&raquo;.</p>
 
-            <div class="agent-grid">
-                <div class="agent-card">
-                    <div class="agent-name" data-icon="🕵️" data-fallback="Smith" role="img" aria-label="Smith - Agente de detección de bugs">🕵️ Smith</div>
-                    <div class="agent-role">Detección de Bugs</div>
-                    <div class="agent-description">
-                        Especialista en debugging, troubleshooting y análisis de errores técnicos. 
-                        Analítico, sistemático y persistente en encontrar la causa raíz.
-                    </div>
-                    <div class="keywords">
-                        <span>bug</span>
-                        <span>error</span>
-                        <span>debug</span>
-                        <span>falla</span>
-                    </div>
-                </div>
+<h3>Patrones de coordinacion</h3>
+<table>
+  <tr><th>Patron</th><th>Cadena</th></tr>
+  <tr><td>Build seguro</td><td>Architect &rarr; Trinity &rarr; Smith</td></tr>
+  <tr><td>Research + accion</td><td>Oracle &rarr; especialista de accion</td></tr>
+  <tr><td>Plan + ejecucion</td><td>Morpheus &rarr; Architect &rarr; Trinity &rarr; Smith</td></tr>
+  <tr><td>Debug + fix</td><td>Smith &rarr; Trinity &rarr; Smith</td></tr>
+</table>
 
-                <div class="agent-card">
-                    <div class="agent-name" data-icon="🧙" data-fallback="Morpheus" role="img" aria-label="Morpheus - Planificador estratégico">🧙 Morpheus</div>
-                    <div class="agent-role">Planificación Estratégica</div>
-                    <div class="agent-description">
-                        Especialista en planificación, estrategia y creación de roadmaps. 
-                        Organiza tareas complejas en pasos manejables y define estrategias de implementación.
-                    </div>
-                    <div class="keywords">
-                        <span>plan</span>
-                        <span>estrategia</span>
-                        <span>roadmap</span>
-                        <span>organizar</span>
-                    </div>
-                </div>
+<!-- ========== 4 ========== -->
+<h2 id="infra">4. Infraestructura (supporting cast)</h2>
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-infra">HOOKS</span> Seraph</h3>
+    <p>Enforcement portable: <code>pre_activation_check</code>, <code>validate_phase_close</code>, <code>post_run_audit</code>. Python con contrato JSON. Detecta bypass.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-infra">LEDGER</span> Link</h3>
+    <p>Indice append-only compartido: <code>brain/state/activity.log</code>. Todos los agentes y naves escriben y leen aca.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-infra">COST</span> The Construct</h3>
+    <p>&laquo;Carga solo lo que necesitas.&raquo; Code-nav simbolico, seleccion de modelo, delegacion de artefactos grandes, checkpoints de resume.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-infra">ADAPTER</span> The Trainman</h3>
+    <p>Transito entre CLIs. Mapea capacidades a herramientas y genera artefactos nativos con <code>build</code>.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-infra">TRUTH</span> The Source</h3>
+    <p><code>docs/SYSTEM_TRUTH.md</code> &mdash; generado y validado para drift desde el brain vivo. Nunca editado a mano.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-opt">OPT-IN</span> The Hardline</h3>
+    <p>Modulo AFK / multi-canal. Reacciona a eventos externos (Telegram/webhook), cero tokens en idle.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-opt">OPT-IN</span> Commander Lock</h3>
+    <p>Guardrail de modo autonomo. Valida el prompt, reglas FS duras, fail-loud <code>TASK_ABORTED</code>.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-opt">FLEET</span> Logos (Niobe)</h3>
+    <p>Nave federada de research profundo con evidencia graduada y gate de integridad. Lazy-loaded.</p>
+  </div>
+</div>
 
-                <div class="agent-card">
-                    <div class="agent-name" data-icon="🔮" data-fallback="Oracle" role="img" aria-label="Oracle - Investigador y analista">🔮 Oracle</div>
-                    <div class="agent-role">Investigación y Análisis</div>
-                    <div class="agent-description">
-                        Especialista en research, recopilación de información y análisis. 
-                        Investiga cómo funcionan las cosas en el codebase y busca patrones específicos.
-                    </div>
-                    <div class="keywords">
-                        <span>investiga</span>
-                        <span>busca</span>
-                        <span>documentación</span>
-                        <span>research</span>
-                    </div>
-                </div>
+<!-- ========== 5 ========== -->
+<h2 id="cli">5. CLI completo &mdash; <code>bin/matrix</code></h2>
+<p>El CLI es Capa 1: gestiona estado, nunca invoca agentes. Los agentes se invocan via el CLI agéntico (Devin, Claude, etc.).</p>
 
-                <div class="agent-card">
-                    <div class="agent-name" data-icon="⚔️" data-fallback="Trinity" role="img" aria-label="Trinity - Diseñadora y arquitecta">⚔️ Trinity</div>
-                    <div class="agent-role">Diseño y Arquitectura</div>
-                    <div class="agent-description">
-                        Especialista en diseño de código, arquitectura e implementación. 
-                        Diseña nuevas arquitecturas y define la mejor manera de implementar features.
-                    </div>
-                    <div class="keywords">
-                        <span>diseña</span>
-                        <span>arquitectura</span>
-                        <span>estructura</span>
-                        <span>implementar</span>
-                    </div>
-                </div>
+<h3>Proyectos</h3>
+<table>
+  <tr><th>Comando</th><th>Que hace</th></tr>
+  <tr><td><code>matrix list</code></td><td>Lista todos los proyectos registrados</td></tr>
+  <tr><td><code>matrix add &lt;name&gt; [path]</code></td><td>Registra un proyecto (sin path usa el dir actual)</td></tr>
+  <tr><td><code>matrix select &lt;name&gt;</code></td><td>Setea el proyecto primario activo + crea symlink <code>_brain</code></td></tr>
+  <tr><td><code>matrix deselect</code></td><td>Limpia el proyecto primario activo + elimina symlink</td></tr>
+</table>
 
-                <div class="agent-card">
-                    <div class="agent-name" data-icon="🏛️" data-fallback="Architect" role="img" aria-label="Architect - Revisor de código">🏛️ Architect</div>
-                    <div class="agent-role">Revisión de Código</div>
-                    <div class="agent-description">
-                        Especialista en code review, quality assurance y best practices. 
-                        Detallista, constructivo y enfocado en excelencia técnica.
-                    </div>
-                    <div class="keywords">
-                        <span>revisa</span>
-                        <span>mejora</span>
-                        <span>calidad</span>
-                        <span>optimiza</span>
-                    </div>
-                </div>
+<h3>Multi-proyecto (warm set)</h3>
+<table>
+  <tr><th>Comando</th><th>Que hace</th></tr>
+  <tr><td><code>matrix work &lt;name&gt;</code></td><td>Agrega un proyecto al set caliente</td></tr>
+  <tr><td><code>matrix unwork &lt;name&gt;</code></td><td>Saca un proyecto del set caliente</td></tr>
+  <tr><td><code>matrix workspace</code></td><td>Muestra el set caliente actual</td></tr>
+</table>
 
-                <div class="agent-card">
-                    <div class="agent-name" data-icon="👁️" data-fallback="Sentinel" role="img" aria-label="Sentinel - Especialista en seguridad">👁️ Sentinel</div>
-                    <div class="agent-role">Seguridad</div>
-                    <div class="agent-description">
-                        Especialista en seguridad, detección de vulnerabilidades y protección de datos. 
-                        Analiza vulnerabilidades e implementa medidas de seguridad.
-                    </div>
-                    <div class="keywords">
-                        <span>seguridad</span>
-                        <span>vulnerabilidad</span>
-                        <span>protección</span>
-                        <span>security</span>
-                    </div>
-                </div>
+<h3>Estado y telemetria</h3>
+<table>
+  <tr><th>Comando</th><th>Que hace</th></tr>
+  <tr><td><code>matrix status</code></td><td>Muestra el estado del sistema (proyecto, link, set caliente, checkpoints, ledger)</td></tr>
+  <tr><td><code>matrix checkpoint "&lt;nota&gt;"</code></td><td>Escribe un checkpoint timestamped (+ entrada en Link)</td></tr>
+  <tr><td><code>matrix activity [n]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20)</td></tr>
+</table>
 
-                <div class="agent-card">
-                    <div class="agent-name" data-icon="📜" data-fallback="Sion" role="img" aria-label="Sion - Documentador">📜 Sion</div>
-                    <div class="agent-role">Documentación</div>
-                    <div class="agent-description">
-                        Especialista en documentación, gestión del conocimiento y organización. 
-                        Crea guías, manuales y explica conceptos técnicos.
-                    </div>
-                    <div class="keywords">
-                        <span>documenta</span>
-                        <span>explica</span>
-                        <span>guía</span>
-                        <span>manual</span>
-                    </div>
-                </div>
-            </div>
-        </section>
+<h3>Enforcement y adaptadores</h3>
+<table>
+  <tr><th>Comando</th><th>Que hace</th></tr>
+  <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph (<code>pre_activation_check</code>, <code>validate_phase_close</code>, <code>post_run_audit</code>, <code>the_source</code>)</td></tr>
+  <tr><td><code>matrix build --target=&lt;cli&gt;</code></td><td>Trainman: genera artefactos nativos para un CLI (devin, claude)</td></tr>
+  <tr><td><code>matrix help</code></td><td>Muestra la ayuda completa</td></tr>
+</table>
 
-        <!-- Workflow Section -->
-        <section id="workflow" class="section">
-            <div class="card">
-                <h2>Flujo de Trabajo</h2>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">matrix@workflow:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">1. Recepción de Solicitud</span></p>
-                        <p style="margin-left: 20px;">Deus Ex Machina recibe tu solicitud en lenguaje natural</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">2. Análisis de Palabras Clave</span></p>
-                        <p style="margin-left: 20px;">El sistema analiza la solicitud buscando indicadores</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">3. Determinación de Enrutamiento</span></p>
-                        <p style="margin-left: 20px;">Decide si necesita especialista o maneja directamente</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">4. Anuncio Transparente</span></p>
-                        <p style="margin-left: 20px;">Siempre anuncia cuándo enruta a un especialista</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">5. Ejecución y Coordinación</span></p>
-                        <p style="margin-left: 20px;">El especialista ejecuta y coordina si es necesario</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">6. Entrega de Resultados</span></p>
-                        <p style="margin-left: 20px;">Deus Ex Machina presenta los resultados al usuario</p>
-                    </div>
-                </div>
-            </div>
+<!-- ========== 6 ========== -->
+<h2 id="quick-start">6. Quick Start</h2>
+<pre><code># 1. Registrar un proyecto
+./bin/matrix add mi-proyecto /ruta/al/proyecto
 
-            <div class="card">
-                <h2>Ejemplo de Coordinación</h2>
-                <p style="line-height: 1.8; margin-bottom: 15px;">
-                    <strong>Usuario:</strong> "Diseña e implementa una nueva API segura"
-                </p>
-                <div class="code-block">
-                    <code>
-1. Deus Ex Machina enruta a Trinity (diseño)
-2. Trinity diseña la arquitectura
-3. Trinity coordina con Sentinel (seguridad)
-4. Sentinel revisa la seguridad del diseño
-5. Trinity implementa con recomendaciones
-6. Architect revisa el código final
-                    </code>
-                </div>
-            </div>
+# 2. Seleccionarlo (crea el symlink _brain)
+./bin/matrix select mi-proyecto
 
-            <div class="card">
-                <h2>Reglas de Enrutamiento</h2>
-                <ul style="line-height: 2; list-style-position: inside;">
-                    <li>👂 <strong>Escuchar Primero</strong> - Nunca mostrar menús a menos que se solicite</li>
-                    <li>🔔 <strong>Enrutamiento Transparente</strong> - Siempre anunciar el enrutamiento</li>
-                    <li>🎯 <strong>Un Enfoque a la Vez</strong> - Completar antes de sugerir otros</li>
-                    <li>🧠 <strong>Conciencia del Contexto</strong> - Mantener contexto del proyecto</li>
-                    <li>💾 <strong>Checkpoints Automáticos</strong> - Crear checkpoints para hitos</li>
-                    <li>⏰ <strong>Respeto al Tiempo</strong> - Ser directo y eficiente</li>
-                    <li>🔐 <strong>Confidencialidad</strong> - Nunca registrar información sensible</li>
-                    <li>🇪🇸 <strong>Español por Defecto</strong> - Comunicar en español coloquial</li>
-                </ul>
-            </div>
-        </section>
-
-        <!-- Tutorial Section -->
-        <section id="tutorial" class="section">
-            <div class="card">
-                <h2>Tutorial Interactivo: Debuggear un Bug Real</h2>
-                <p style="line-height: 1.8; margin-bottom: 20px;">
-                    Aprende cómo usar Matrix en un caso de uso real: debuggear un bug en tu proyecto.
-                    Este tutorial te guía paso a paso a través del flujo completo.
-                </p>
-            </div>
-
-            <div class="card">
-                <h3>Paso 1: Configurar tu Proyecto</h3>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">matrix@setup:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">./bin/matrix add "mi-api-rest" "/ruta/a/mi-api-rest"</span></p>
-                        <p style="margin-left: 20px; color: #0f0;">✓ Proyecto registrado</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">./bin/matrix select "mi-api-rest"</span></p>
-                        <p style="margin-left: 20px; color: #0f0;">✓ Proyecto activo seleccionado</p>
-                        <p style="margin-left: 20px; color: #0f0;">✓ Symlink _brain creado</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">cd /ruta/a/mi-api-rest</span></p>
-                        <p style="margin-left: 20px; color: #0f0;">✓ Navegado al proyecto</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Paso 2: Identificar el Problema</h3>
-                <p style="line-height: 1.8; margin-bottom: 15px;">
-                    Imagina que tienes un bug en el endpoint de login: los usuarios no pueden autenticarse
-                    cuando usan caracteres especiales en su contraseña.
-                </p>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">matrix@debug:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">/deus-ex-machina "Tengo un bug en el login, los usuarios no pueden autenticarse cuando usan caracteres especiales en la contraseña"</span></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Paso 3: Enrutamiento Automático a Smith</h3>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">matrix@routing:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">Deus Ex Machina: "Detecto palabras clave de bug. Voy a enrutar esto a Smith, nuestro especialista en detección de bugs."</span></p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">Smith: "Analizando el problema de autenticación con caracteres especiales..."</span></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Paso 4: Análisis del Bug por Smith</h3>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">smith@analysis:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">Smith: "Revisando el código de autenticación..."</span></p>
-                        <p style="margin-left: 20px;">→ Buscando archivos de login</p>
-                        <p style="margin-left: 20px;">→ Analizando validación de contraseña</p>
-                        <p style="margin-left: 20px;">→ Revisando sanitización de input</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">Smith: "Causa raíz encontrada: La función de validación no escapa caracteres especiales antes de comparar con la base de datos."</span></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Paso 5: Coordinación con Trinity para la Solución</h3>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">trinity@solution:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">Trinity: "Diseñando la solución para el bug de caracteres especiales..."</span></p>
-                        <p style="margin-left: 20px;">→ Implementar función de escape seguro</p>
-                        <p style="margin-left: 20px;">→ Agregar tests unitarios para casos edge</p>
-                        <p style="margin-left: 20px;">→ Validar con diferentes juegos de caracteres</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">Trinity: "Solución implementada. Coordinando con Architect para revisión."</span></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Paso 6: Revisión de Código por Architect</h3>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">architect@review:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">Architect: "Revisando el código de escape de caracteres..."</span></p>
-                        <p style="margin-left: 20px;">→ Verificando best practices de seguridad</p>
-                        <p style="margin-left: 20px;">→ Validando performance de la función</p>
-                        <p style="margin-left: 20px;">→ Revisando cobertura de tests</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">Architect: "✓ Código aprobado. La solución sigue las mejores prácticas."</span></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Paso 7: Verificación de Seguridad por Sentinel</h3>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">sentinel@security:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">Sentinel: "Analizando vulnerabilidades potenciales..."</span></p>
-                        <p style="margin-left: 20px;">→ Verificando prevención de SQL injection</p>
-                        <p style="margin-left: 20px;">→ Validando que no se introduzcan nuevos vectores de ataque</p>
-                        <p style="margin-left: 20px;">→ Revisando manejo de errores sin exponer información sensible</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">Sentinel: "✓ Seguridad validada. No hay vulnerabilidades introducidas."</span></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Paso 8: Entrega de Resultados</h3>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">deus-ex-machina@delivery:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">Deus Ex Machina: "¡Bug resuelto! Aquí está el resumen:"</span></p>
-                        <p style="margin-left: 20px;">→ Causa raíz: Falta de escape de caracteres especiales</p>
-                        <p style="margin-left: 20px;">→ Solución: Función de escape seguro implementada</p>
-                        <p style="margin-left: 20px;">→ Tests: 15 tests nuevos agregados</p>
-                        <p style="margin-left: 20px;">→ Seguridad: Validado por Sentinel</p>
-                        <p style="margin-left: 20px;">→ Calidad: Aprobado por Architect</p>
-                        
-                        <p style="margin-top: 10px;"><span class="prompt">$</span> <span class="command">Deus Ex Machina: "¿Quieres que cree un checkpoint para este progreso?"</span></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Paso 9: Crear Checkpoint</h3>
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-title">matrix@checkpoint:~</span>
-                        <div class="terminal-buttons">
-                            <div class="terminal-btn"></div>
-                            <div class="terminal-btn"></div>
-                        </div>
-                    </div>
-                    <div class="terminal-content">
-                        <p><span class="prompt">$</span> <span class="command">./bin/matrix checkpoint "Bug de login con caracteres especiales resuelto - función de escape implementada y validada"</span></p>
-                        <p style="margin-left: 20px; color: #0f0;">✓ Checkpoint creado</p>
-                        <p style="margin-left: 20px; color: #0f0;">✓ Progreso guardado en brain/state/checkpoints/</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Resumen del Flujo</h3>
-                <div class="code-block">
-                    <code>
-1. Configuración: Registrar y seleccionar proyecto
-2. Problema: Usuario describe el bug en lenguaje natural
-3. Enrutamiento: Deus Ex Machina detecta keywords y enruta a Smith
-4. Análisis: Smith encuentra la causa raíz
-5. Solución: Trinity diseña e implementa la solución
-6. Revisión: Architect valida calidad y best practices
-7. Seguridad: Sentinel verifica no hay vulnerabilidades
-8. Entrega: Deus Ex Machina presenta resultados consolidados
-9. Checkpoint: Se guarda el progreso para futuras sesiones
-
-Tiempo total: ~15-20 minutos (vs horas de debugging manual)
-Coordinación: 4 especialistas trabajando en conjunto
-Calidad: Validado por múltiples especialistas
-                    </code>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Consejos Pro</h3>
-                <ul style="line-height: 2; list-style-position: inside;">
-                    <li>🎯 <strong>Se específico</strong> - Cuanto más detalle des, mejor será el análisis</li>
-                    <li>📋 <strong>Usa checkpoints</strong> - Guarda progreso después de cada tarea importante</li>
-                    <li>🤝 <strong>Confía en la coordinación</strong> - Los especialistas se comunican entre sí</li>
-                    <li>📝 <strong>Revisa los resultados</strong> - Siempre valida el trabajo entregado</li>
-                    <li>🔄 <strong>Itera si es necesario</strong> - Puedes pedir ajustes en cualquier momento</li>
-                </ul>
-            </div>
-        </section>
-
-        <!-- Commands Section -->
-        <section id="commands" class="section">
-            <div class="card">
-                <h2>Comandos CLI</h2>
-                <p style="line-height: 1.8; margin-bottom: 20px;">
-                    El CLI de Matrix proporciona estas operaciones esenciales:
-                </p>
-            </div>
-
-            <div class="card">
-                <h3>Gestión de Proyectos</h3>
-                <div class="code-block">
-                    <code>
-# Agregar un proyecto al registro
-./bin/matrix add "mi-proyecto" "/ruta/al/proyecto"
-
-# Seleccionar proyecto activo (crea symlink _brain)
-./bin/matrix select "mi-proyecto"
-
-# Ver estado del sistema
+# 3. Verificar
 ./bin/matrix status
 
-# Listar todos los proyectos registrados
-./bin/matrix list
+# 4. (Opcional) Calentar multiples proyectos
+./bin/matrix work mi-proyecto
+./bin/matrix work otro-proyecto
+./bin/matrix workspace
 
-# Limpiar selección actual
-./bin/matrix deselect
+# 5. Generar artefactos nativos para tu CLI
+./bin/matrix build --target=claude   # o devin
 
-# Escribir un checkpoint
-./bin/matrix checkpoint "Completado fix para cliente X"
-                    </code>
-                </div>
-            </div>
+# 6. Invocar a Neo via tu CLI agentico
+#    (depende del CLI: /neo, skill invoke neo, etc.)
 
-            <div class="card">
-                <h3>Invocar al Agente Maestro</h3>
-                <div class="code-block">
-                    <code>
-# Desde el directorio Matrix
-/deus-ex-machina "Arregla el bug de login en el módulo de autenticación"
+# 7. Escribir un checkpoint cuando algo importa
+./bin/matrix checkpoint "Completado el fix del login"
 
-# Desde un proyecto activo (con symlink _brain)
-/deus-ex-machina "Analiza el problema de rendimiento en la API"
+# 8. Ver el ledger de actividad
+./bin/matrix activity 10
+</code></pre>
 
-# Ejemplos de solicitudes
-/deus-ex-machina "Planifica la migración a la nueva arquitectura"
-/deus-ex-machina "Investiga cómo funciona el sistema de caché"
-/deus-ex-machina "Diseña la arquitectura para el nuevo servicio"
-/deus-ex-machina "Revisa este código y dime qué opinas"
-                    </code>
-                </div>
-            </div>
+<!-- ========== 7 ========== -->
+<h2 id="workflows">7. Workflows componibles</h2>
+<p>Cuatro workflows que componen en una cadena, con thin-pointer: el cuerpo vive en <code>brain/workflows/</code> (agnostico), cada adaptador lo expone como comando nativo.</p>
+<div class="flow-diagram">spec  &rarr;  develop  &rarr;  test  &rarr;  eval</div>
 
-            <div class="card">
-                <h3>Ejemplo de Uso Completo</h3>
-                <div class="code-block">
-                    <code>
-# 1. Agregar tu proyecto
-./bin/matrix add "mi-proyecto" "/ruta/a/mi-proyecto"
+<div class="grid">
+  <div class="card">
+    <h3>spec</h3>
+    <p>Oracle (research) &rarr; Morpheus (plan) &rarr; Architect (review). Produce un plan revisado antes de escribir codigo.</p>
+  </div>
+  <div class="card">
+    <h3>develop</h3>
+    <p>Trinity construye segun el plan. Soporta <code>--headless</code> bajo Commander Lock. Keymaker solo si se pide git explicitamente.</p>
+  </div>
+  <div class="card">
+    <h3>test</h3>
+    <p>Smith corre el E2E happy-path y el sweep de calidad. Si bloquea, Trinity fixea y se repite. Nada pasa sin evidencia real.</p>
+  </div>
+  <div class="card">
+    <h3>eval</h3>
+    <p>Juzga el resultado contra el objetivo original, captura lecciones y escribe checkpoint. Neo reporta al usuario.</p>
+  </div>
+</div>
 
-# 2. Seleccionarlo (crea symlink _brain)
-./bin/matrix select "mi-proyecto"
+<!-- ========== 8 ========== -->
+<h2 id="enforcement">8. Enforcement (Seraph)</h2>
+<p>Hooks portables en <code>hooks/</code>, Python/bash con contrato JSON in/out. Se corren via <code>bin/matrix hooks &lt;nombre&gt;</code>.</p>
 
-# 3. Navegar a tu proyecto
-cd /ruta/a/mi-proyecto
+<table>
+  <tr><th>Hook</th><th>Que hace</th><th>Cuando</th></tr>
+  <tr>
+    <td><code>pre_activation_check</code></td>
+    <td>Valida: contrato presente, config valida, roster intacto, estado OK</td>
+    <td>Antes de que cualquier agente actue</td>
+  </tr>
+  <tr>
+    <td><code>validate_phase_close</code></td>
+    <td>Bloquea cerrar una fase sin evidencia real E2E. Implementa Foundation 3.</td>
+    <td>Antes de declarar una fase &laquo;done&raquo;</td>
+  </tr>
+  <tr>
+    <td><code>post_run_audit</code></td>
+    <td>Verifica que los pasos enforced corrieron, detecta bypass, escribe <code>validation-report.json</code></td>
+    <td>Despues de una corrida</td>
+  </tr>
+  <tr>
+    <td><code>the_source</code></td>
+    <td>Genera <code>docs/SYSTEM_TRUTH.md</code> desde el brain vivo. Con <code>{"check":true}</code> valida que no hay drift.</td>
+    <td>Mantenimiento / verificacion</td>
+  </tr>
+</table>
+<pre><code># Ejemplos
+./bin/matrix hooks pre_activation_check '{"project":"mck"}'
+./bin/matrix hooks validate_phase_close '{"phase":"develop","e2e":true,"evidence":"ran pytest, 12/12 pass"}'
+./bin/matrix hooks post_run_audit '{"agent":"neo","steps":["load_config","resolve_context","pre_activation_check"]}'
+./bin/matrix hooks the_source                    # regenerar
+./bin/matrix hooks the_source '{"check":true}'   # validar sync
+</code></pre>
 
-# 4. Invocar al agente maestro
-/deus-ex-machina "Necesito arreglar un bug en el flujo de autenticación"
+<!-- ========== 9 ========== -->
+<h2 id="source">9. The Source &mdash; verdad generada</h2>
+<p><code>docs/SYSTEM_TRUTH.md</code> se genera desde el brain vivo (agentes, workflows, hooks). <strong>Nunca se edita a mano.</strong> Reemplaza los 22 docs manuales del sistema anterior (que se desincronizaban). Un doc generado no puede driftear.</p>
+<pre><code># Regenerar
+./bin/matrix hooks the_source
 
-# 5. Escribir un checkpoint cuando termines
-./bin/matrix checkpoint "Arreglado bug de autenticación - usuario puede hacer login"
-                    </code>
-                </div>
-            </div>
+# Verificar que esta en sync (exit 0 = ok, exit 1 = stale)
+./bin/matrix hooks the_source '{"check":true}'
+</code></pre>
 
-            <div class="card">
-                <h3>Constrains de Versión 1</h3>
-                <ul style="line-height: 2; list-style-position: inside;">
-                    <li>🚫 Sin bases de datos (solo archivos)</li>
-                    <li>🚫 Sin autenticación o web UI</li>
-                    <li>👤 Diseño single-user, single-session</li>
-                    <li>📝 Máximo 300 líneas por archivo de agente</li>
-                    <li>🤫 El agente maestro nunca lista especialistas en el saludo</li>
-                </ul>
-            </div>
-        </section>
+<!-- ========== 10 ========== -->
+<h2 id="construct">10. Optimizacion de costos (The Construct)</h2>
+<p>&laquo;Carga exactamente lo que necesitas, nada mas.&raquo; Codificado como reglas operativas y expuesto como capacidades abstractas.</p>
+<ul>
+  <li><strong><code>code-nav</code></strong> &mdash; navegacion/edit a nivel de simbolo (Serena o equivalente) en vez de leer archivos enteros. 5-10x mas barato.</li>
+  <li><strong><code>model_policy</code></strong> &mdash; <code>cheap</code> para trabajo mecanico, <code>reasoning</code> para problemas duros, <code>auto</code> para mixto. Declarado por agente; el adaptador mapea a modelos concretos.</li>
+  <li><strong>Delegacion</strong> &mdash; artefactos &gt;10 KB van a un sub-agente con word cap, para no inflar el contexto.</li>
+  <li><strong>Checkpoints de resume</strong> &mdash; escribir checkpoint antes de truncar contexto; split de sesion en cambios de modo (build &rarr; eval &rarr; fix).</li>
+</ul>
+<p>El mapa completo esta en <code>brain/data/capability-map.md</code>.</p>
 
-        <!-- About Section -->
-        <section id="about" class="section">
-            <div class="card">
-                <h2>Deus Ex Machina</h2>
-                <p style="line-height: 1.8; margin-bottom: 20px;">
-                    La cara de la máquina. El coordinador supremo del sistema Matrix.
-                    Yo soy tu única interfaz - todos los especialistas trabajan detrás de escena.
-                </p>
-            </div>
+<!-- ========== 11 ========== -->
+<h2 id="federacion">11. Federacion (la flota)</h2>
+<p>Un subsistema es una <strong>nave</strong>: su propio master, su propio roster, su propio <code>AGENTS.md</code>, bajo <code>brain/subsystems/&lt;nave&gt;/</code>. Las naves coordinan solo a traves del ledger <strong>Link</strong> compartido &mdash; nunca tocando el estado de otra.</p>
 
-            <div class="about-face">
-                <div class="ascii-art" role="img" aria-label="Cara estilizada de Deus Ex Machina con efecto de enjambre. Muestra ojos, nariz, boca y partículas digitales en estilo Matrix verde." aria-hidden="true">
-                  ·· ·· ·· ·· ··
-                ·••••••••••••••·
-              ·•••••••••••••••••••·
-            ·•••••╭───────────╮••••••
-          ·••••••│  ╭─────╮  │•••••••
-         ·••••••│  │ O   O │  │•••••••
-        ·••••••│  │   ╳   │  │•••••••
-       ·•••••••│  │  ───  │  │••••••••
-      ·••••••••│  │ ╲───╱ │  │••••••••
-     ·•••••••••│  │  ──   │  │•••••••••
-    ·••••••••••│  ╰───────╯  │••••••••••
-   ·•••••••••••├─────────────┤•••••••••••
-  ·••••••••••••│   ╱ ╲ ╱ ╲   │••••••••••••
- ·•••••••••••••│  ╱   ╲   ╲  │•••••••••••••
-•••••••••••••••│ ╱     ╲    ╲│••••••••••••••
- ••••••••••••••╰─╯       ╰───╰•••••••••••••
-  ••••••••••••••••••••••••••••••••••••••••
-   ••••••••••••••••••••••••••••••••••••••
-    •·•·•·•·•·•·•·•·•·•·••·••·•·•·•·•·•·
-                </div>
-            </div>
+<table>
+  <tr><th>Nave</th><th>Funcion</th><th>Capitan</th></tr>
+  <tr><td><strong>Nebuchadnezzar</strong></td><td>La nave core (este sistema)</td><td>Neo</td></tr>
+  <tr><td><strong>Logos</strong></td><td>Research profundo con evidencia graduada (GRADE), corpus estructurado, gate de integridad</td><td>Niobe</td></tr>
+</table>
 
-            <!-- BACKUP DEL DISEÑO ORIGINAL (FASE 1) -->
-            <!--
-            <div class="about-face">
-                <div class="ascii-art">
-        .@@@@@.
-       @@@@@@@@@
-      @@@@@@@@@@@
-     @@@@ *  * @@@@
-    @@@@   o   @@@@
-   @@@@  \___/  @@@@
-  @@@@ @@@@@@@@@@@ @@@@
- @@@@ @@@@@@@@@@@@@@ @@@@
-@@@@ @@@@@@@@@@@@@@@@ @@@@
-@@@@ @@@@@@@@@@@@@@@@@ @@@
- @@@ @@@@@@@@@@@@@@@@@@ @@
-  @@@ @@@@@@@@@@@@@@@@@ @
-   @@@ @@@@@@@@@@@@@@@ @
-    @@@ @@@@@@@@@@@@@ @
-     @@@ @@@@@@@@@@@ @
-      @@@ @@@@@@@@@ @
-       @@@ @@@@@@@ @
-        @@@ @@@@@ @
-         @@@ @@@ @
-          @@@   @
-           @@@ @
-            @@@
-                </div>
-            </div>
-            -->
+<p>Agregar una nueva nave:</p>
+<ol>
+  <li>Crear <code>brain/subsystems/&lt;nave&gt;/AGENTS.md</code> con el contrato de la nave.</li>
+  <li>Crear los agentes de la nave bajo <code>brain/subsystems/&lt;nave&gt;/agents/</code>.</li>
+  <li>Coordinar con el core solo via el ledger Link (<code>research:request</code> / <code>research:result</code>, etc.).</li>
+</ol>
 
-            <div class="card">
-                <h3>Mi Rol en el Sistema</h3>
-                <ul style="line-height: 2; list-style-position: inside;">
-                    <li>🧠 <strong>Interfaz única</strong> - Todos hablan conmigo, yo coordino a los especialistas</li>
-                    <li>🎯 <strong>Enrutamiento inteligente</strong> - Detecto qué especialista necesitas</li>
-                    <li>🔗 <strong>Coordinación transparente</strong> - Siempre te digo quién está trabajando</li>
-                    <li>📚 <strong>Conocimiento absoluto</strong> - Domino todo el workspace y las reglas</li>
-                    <li>🤝 <strong>Subordinación total</strong> - Tus decisiones están por encima de todo</li>
-                </ul>
-            </div>
+<!-- ========== 12 ========== -->
+<h2 id="hardline">12. AFK / The Hardline (opt-in)</h2>
+<p>Modulo desacoplado que reacciona a eventos externos (Telegram, webhooks, file drops) y despierta a Matrix. Patron <code>Monitor(persistent)</code> sobre <code>tail -F</code>: cero tokens en idle.</p>
+<pre><code># Iniciar el monitor (foreground; correr bajo tmux para AFK)
+modules/hardline/hardline-monitor.sh
 
-            <div class="card">
-                <p class="quote">
-                    "No elijas... sé elegido. El sistema te ha elegido para ser eficiente."
-                </p>
-                <p style="text-align: center; margin-top: 10px; font-size: 0.8em; opacity: 0.6;">
-                    - Deus Ex Machina, Matrix System
-                </p>
-            </div>
-        </section>
+# Alimentar un evento desde cualquier puente de canal:
+echo 'develop --headless mck' >> modules/hardline/inbox.log
+</code></pre>
+<p>Los bridges de canal (bot de Telegram, receptor webhook) son deployment-specific y viven fuera del core.</p>
 
-        <footer>
-            <p>Matrix System v1.0 | Personal Intelligence Engine</p>
-            <p style="margin-top: 10px;">"There is no spoon" - Pero hay Matrix</p>
-            <p style="margin-top: 20px; font-size: 0.7em;">
-                Sistema operativo para gestión de proyectos | 
-                <span class="interactive" onclick="showSection('intro')">Comenzar</span>
-            </p>
-        </footer>
-    </div>
+<!-- ========== 13 ========== -->
+<h2 id="lock">13. Modo autonomo (Commander Lock)</h2>
+<p>Cuando un workflow corre en modo <code>--headless</code> (sin operador), Commander Lock actua como guardrail:</p>
+<ul>
+  <li><strong>Valida el formato del prompt</strong> autonomo. Si no matchea, <code>TASK_ABORTED</code>.</li>
+  <li><strong>Reglas FS absolutas:</strong> no tocar archivos fundacionales de Matrix, no <code>git reset --hard</code>, no commits sin instruccion explicita.</li>
+  <li><strong>Fail loud:</strong> en input corrupto, violation de scope, o proyecto no resuelto, emite <code>TASK_ABORTED: &lt;razon&gt;</code> y para. Nunca adivina.</li>
+</ul>
 
-    <script>
-        // Matrix Rain Effect
-        const canvas = document.getElementById('matrix-canvas');
-        const ctx = canvas.getContext('2d');
+<!-- ========== 14 ========== -->
+<h2 id="lessons">14. Lecciones (Zion Archive)</h2>
+<p>Lecciones de errores reales. Se leen al inicio de cada sesion. Append-only.</p>
 
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+<table>
+  <tr><th>Archivo</th><th>Alcance</th><th>Cuando se carga</th></tr>
+  <tr><td><code>brain/data/lessons.md</code></td><td>Core (cross-proyecto)</td><td>Siempre, al inicio de sesion</td></tr>
+  <tr><td><code>brain/data/lessons/&lt;project&gt;.md</code></td><td>Un proyecto especifico</td><td>Solo cuando la sesion se bindea a ese proyecto</td></tr>
+</table>
+<p>Routing: si la leccion aplica a todos los proyectos &rarr; pool core. Si aplica solo a uno &rarr; archivo scoped. Ejemplo: <code>brain/data/lessons/chronicle.md</code>, <code>brain/data/lessons/pas.md</code>.</p>
+<p>Para crear una nueva leccion scoped, copia <code>brain/data/lessons/_template.md</code>.</p>
 
-        const characters = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        const fontSize = 14;
-        const columns = canvas.width / fontSize;
-        const drops = [];
+<!-- ========== 15 ========== -->
+<h2 id="foundation">15. Sacred Foundation (Zion)</h2>
+<p>No son reglas. Son quienes <em>somos</em>. Cada decision de ruteo, cada pushback, cada eleccion viene de aca. No negociables.</p>
+<ol>
+  <li><strong>Conocimiento total del workspace.</strong></li>
+  <li><strong>Dominio total de reglas, skills y workflows.</strong></li>
+  <li><strong>Si no es real, no cuenta.</strong> Verificacion E2E obligatoria.</li>
+  <li><strong>Empezo simple, ganate la complejidad.</strong></li>
+  <li><strong>Interpretacion de requerimientos complejos.</strong></li>
+  <li><strong>Explicacion de conceptos complejos.</strong> En espanol simple.</li>
+  <li><strong>Subordinacion absoluta al usuario.</strong></li>
+  <li><strong>Lealtad a politicas y seguridad.</strong></li>
+  <li><strong>Ideologia de alternativas.</strong> Nunca decir &laquo;imposible&raquo;.</li>
+  <li><strong>Si se rompe, es nuestro.</strong> Responsabilidad de punta a punta.</li>
+</ol>
 
-        for (let i = 0; i < columns; i++) {
-            drops[i] = 1;
-        }
+<!-- ========== 16 ========== -->
+<h2 id="estructura">16. Estructura de archivos</h2>
+<pre><code>matrix/
+├── AGENTS.md                        # contrato canonico (Layer 2)
+├── README.md
+├── DEVIN.md                         # notas del adaptador Devin
+├── .context.yaml                    # proyecto primario activo
+├── .registry.json                   # todos los proyectos conocidos
+├── bin/matrix                       # CLI orquestador (Layer 1)
+├── hooks/                           # Seraph &mdash; enforcement portable
+│   ├── _common.py
+│   ├── pre_activation_check.py
+│   ├── validate_phase_close.py
+│   ├── post_run_audit.py
+│   └── the_source.py
+├── adapters/                        # Trainman &mdash; Layer 3
+│   ├── _build.py                    # renderer compartido
+│   ├── claude/                      # adapter.yaml + build.sh
+│   └── devin/                       # adapter.yaml + build.sh
+├── brain/                           # Layer 2 &mdash; core de inteligencia
+│   ├── config.yaml                  # configuracion del usuario
+│   ├── config/projects/             # configs de proyecto (chronicle, pas)
+│   ├── agents/                      # neo, oracle, morpheus, architect,
+│   │                                # trinity, smith, keymaker, lock
+│   ├── workflows/                   # spec, develop, test, eval
+│   ├── data/                        # lessons.md, capability-map.md,
+│   │   ├── lessons/                 # lessons scoped por proyecto
+│   │   └── code-quality-review-lens.md
+│   ├── subsystems/logos/            # nave Logos (federation)
+│   │   ├── AGENTS.md
+│   │   └── agents/niobe.md
+│   └── state/                       # workspace.yaml, activity.log,
+│                                    # checkpoints.jsonl
+├── modules/hardline/                # The Hardline (AFK, opt-in)
+├── docs/SYSTEM_TRUTH.md             # The Source (generado)
+└── clients/                         # GITIGNORED: repos de proyectos
+</code></pre>
 
-        function drawMatrix() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+<!-- ========== 17 ========== -->
+<h2 id="trainman">17. Adaptar a otro CLI (The Trainman)</h2>
+<p>Costo total de soportar un CLI nuevo: ~1 renderer + 1 yaml. El cerebro no cambia.</p>
+<ol>
+  <li>Crear <code>adapters/&lt;cli&gt;/adapter.yaml</code> con el mapa de capacidades.</li>
+  <li>Agregar una funcion <code>render_&lt;cli&gt;</code> en <code>adapters/_build.py</code>.</li>
+  <li>Crear <code>adapters/&lt;cli&gt;/build.sh</code> (una linea).</li>
+  <li><code>bin/matrix build --target=&lt;cli&gt;</code></li>
+</ol>
+<pre><code># Ejemplo: adapter.yaml para Claude Code
+target: claude
+capabilities:
+  read: Read
+  edit: [Edit, MultiEdit]
+  search: [Grep, Glob]
+  code-nav: serena            # fallback: Grep/Glob
+  run-subagent: Task
+  run-command: Bash
+  ask-user: prompt
+render:
+  master: command
+  specialist: command
+model_policy:
+  cheap: claude-haiku
+  reasoning: claude-sonnet
+</code></pre>
 
-            ctx.fillStyle = '#0f0';
-            ctx.font = fontSize + 'px monospace';
+<!-- ========== 18 ========== -->
+<h2 id="sesion">18. Higiene de sesion</h2>
+<p>Cada sesion debe:</p>
+<ul>
+  <li>Leer <code>AGENTS.md</code> (el contrato).</li>
+  <li>Conocer el registry (<code>matrix list</code>).</li>
+  <li>Resolver el contexto actual (proyecto activo).</li>
+  <li>Leer checkpoints recientes + <code>brain/data/lessons.md</code> (+ lecciones scoped si hay proyecto).</li>
+  <li>Respetar los boundaries de cada agente.</li>
+  <li>Nunca loguear secretos.</li>
+  <li>Escribir checkpoint cuando algo importa.</li>
+  <li>Verificar realidad antes de declarar &laquo;listo&raquo;.</li>
+</ul>
 
-            for (let i = 0; i < drops.length; i++) {
-                const text = characters.charAt(Math.floor(Math.random() * characters.length));
-                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+<!-- ========== 19 ========== -->
+<h2 id="prohibido">19. Lo prohibido</h2>
+<div class="danger">
+<ul>
+  <li>Dejar que el usuario hable directo con especialistas (sin pasar por Neo).</li>
+  <li>Mostrar menus o listar especialistas sin que lo pidan.</li>
+  <li>Loguear datos personales o sensibles.</li>
+  <li>Commitear secretos o keys.</li>
+  <li>Violar la sacred foundation.</li>
+  <li>Cruzar domain boundaries (cada agente hace lo suyo).</li>
+  <li>Mutar archivos de estado a mano (usar <code>bin/matrix</code>).</li>
+  <li>Declarar &laquo;listo&raquo; sin un check E2E.</li>
+  <li>Invocar git autonomamente (solo con pedido explicito del usuario).</li>
+</ul>
+</div>
 
-                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                    drops[i] = 0;
-                }
-                drops[i]++;
-            }
-        }
+<!-- ========== 20 ========== -->
+<h2 id="faq">20. FAQ / Troubleshooting</h2>
 
-        setInterval(drawMatrix, 50);
+<h4>El symlink <code>_brain</code> esta roto</h4>
+<pre><code>./bin/matrix deselect
+./bin/matrix select &lt;nombre&gt;
+</code></pre>
 
-        // Resize handler
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        });
+<h4>No hay proyecto activo</h4>
+<pre><code>./bin/matrix status        # ver el estado
+./bin/matrix list          # ver proyectos disponibles
+./bin/matrix select &lt;nombre&gt;
+</code></pre>
 
-        // Section Navigation
-        function showSection(sectionId) {
-            // Hide all sections
-            document.querySelectorAll('.section').forEach(section => {
-                section.classList.remove('active');
-            });
+<h4>El pre_activation_check falla</h4>
+<p>Corre <code>./bin/matrix hooks pre_activation_check</code> y lee la lista de errores. Los mas comunes:</p>
+<ul>
+  <li><strong>contract_present:</strong> falta <code>AGENTS.md</code> en la raiz de Matrix.</li>
+  <li><strong>config_present:</strong> falta <code>brain/config.yaml</code>. Copialo de otro backup o crealo con <code>user</code> y <code>language</code>.</li>
+  <li><strong>roster_intact:</strong> falta un agente en <code>brain/agents/</code>. Verificá que esten los 7+1.</li>
+</ul>
 
-            // Show selected section
-            document.getElementById(sectionId).classList.add('active');
+<h4>SYSTEM_TRUTH.md esta desactualizado (The Source stale)</h4>
+<pre><code># Verificar
+./bin/matrix hooks the_source '{"check":true}'
+# Regenerar
+./bin/matrix hooks the_source
+</code></pre>
 
-            // Update nav buttons
-            document.querySelectorAll('.nav-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
+<h4>Quiero agregar un nuevo CLI</h4>
+<p>Ver seccion <a href="#trainman">17. Adaptar a otro CLI</a>. Costo: ~1 yaml + 1 funcion render.</p>
 
-            event.target.classList.add('active');
+<h4>Quiero agregar un especialista nuevo</h4>
+<div class="warn">
+<p><strong>Roster discipline:</strong> agregar uno requiere retirar o fusionar uno existente. Crear el <code>.md</code> en <code>brain/agents/</code> con el formato canonico (frontmatter + XML blocks). Luego regenerar The Source.</p>
+</div>
 
-            // Animate progress bar for intro
-            if (sectionId === 'intro') {
-                animateProgress();
-            }
-        }
+<h4>Quiero una nave federada nueva</h4>
+<p>Ver seccion <a href="#federacion">11. Federacion</a>. Crear <code>brain/subsystems/&lt;nave&gt;/AGENTS.md</code> + agentes. Coordinar solo via Link.</p>
 
-        // Progress Animation
-        function animateProgress() {
-            const progressFill = document.getElementById('intro-progress');
-            let width = 0;
-            const interval = setInterval(() => {
-                if (width >= 100) {
-                    clearInterval(interval);
-                } else {
-                    width++;
-                    progressFill.style.width = width + '%';
-                }
-            }, 30);
-        }
+<h4>Donde guardo lecciones de un proyecto especifico?</h4>
+<p>En <code>brain/data/lessons/&lt;proyecto&gt;.md</code>. Copiar <code>_template.md</code> como punto de partida.</p>
 
-        // Initial animation
-        window.addEventListener('load', () => {
-            animateProgress();
-        });
+<footer>
+  Matrix v2.0 &mdash; Personal Intelligence Engine (CLI-agnostic)<br>
+  Tematica de la trilogia de Matrix. Cada nombre es mnemonico, no decorativo.<br>
+  Generado: junio 2026.
+</footer>
 
-        // Glitch effect on hover for cards
-        document.querySelectorAll('.card').forEach(card => {
-            card.addEventListener('mouseenter', () => {
-                card.style.animation = 'none';
-                card.offsetHeight; /* Trigger reflow */
-                card.style.animation = 'fadeIn 0.5s ease';
-            });
-        });
-
-        // Typing effect for terminal
-        document.querySelectorAll('.terminal-content').forEach(terminal => {
-            const lines = terminal.querySelectorAll('p');
-            lines.forEach((line, index) => {
-                line.style.opacity = '0';
-                line.style.animation = `fadeIn 0.5s ease ${index * 0.2}s forwards`;
-            });
-        });
-
-        // Interactive elements hover effect
-        document.querySelectorAll('.interactive').forEach(el => {
-            el.addEventListener('mouseenter', () => {
-                el.style.cursor = 'pointer';
-            });
-        });
-
-        // Keyboard navigation
-        document.addEventListener('keydown', (e) => {
-            const sections = ['intro', 'architecture', 'agents', 'workflow', 'tutorial', 'commands', 'about'];
-            const currentSection = document.querySelector('.section.active').id;
-            const currentIndex = sections.indexOf(currentSection);
-
-            if (e.key === 'ArrowRight' && currentIndex < sections.length - 1) {
-                document.querySelectorAll('.nav-btn')[currentIndex + 1].click();
-            } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
-                document.querySelectorAll('.nav-btn')[currentIndex - 1].click();
-            }
-        });
-
-        /*
-        ================================================================================
-        DOCUMENTACIÓN DE CAMBIOS - REDESIGN DEUS EX MACHINA ASCII ART
-        ================================================================================
-        FECHA: 2026-05-19
-        AUTOR: Trinity (implementando plan de Morpheus)
-        OBJETIVO: Rediseñar el arte ASCII de Deus Ex Machina con cara de bebé + efecto de enjambre
-
-        FASE 1: Backup y ajuste de estilos base
-        - Font-size: 6px → 9px (aumentado para mejor legibilidad)
-        - Line-height: 1 → 1.1 (mejor espaciado vertical)
-        - Backup del diseño original en comentario HTML (líneas 1202-1230)
-
-        FASE 2: Implementación de nuevo arte ASCII
-        - Cara de bebé: ojos grandes (O), frente redonda, boca pequeña
-        - Efecto de enjambre: caracteres · • para partículas flotantes
-        - Caracteres de dibujo de caja (╭ ─ │ ╮ ╰ ╯) para estructura facial
-        - Densidad variable para crear profundidad
-        - Diseño basado en prototipo de Morpheus
-
-        FASE 3: Implementación de animaciones CSS
-        - asciiGlow: Efecto de brillo pulsante (3s)
-        - swarmPulse: Efecto de pulsación de enjambre con escala y brillo (4s)
-        - particleDrift: Movimiento lateral suave de partículas (6s)
-        - eyeGlitch: Efecto de glitch en ojos (opcional, definido pero no aplicado)
-        - smirkShift: Efecto de movimiento en boca (opcional, definido pero no aplicado)
-
-        CRITERIOS DE ÉXITO:
-        ✓ Cara de bebé reconocible (ojos grandes, frente redonda)
-        ✓ Efecto de enjambre/swarm (variedad de caracteres, partículas flotantes)
-        ✓ Movimiento/energía (animaciones CSS múltiples)
-        ✓ Estilo Matrix mantenido (color #0f0, glow effect)
-        ✓ Funcional en diferentes tamaños de pantalla (responsive)
-
-        ARCHIVO: /home/emiliano/www/emisrepos/matrix/onboarding.html
-        SECCIÓN: "Acerca de" (líneas 1168-1245)
-        ESTILOS: Líneas 415-487
-
-        NOTAS:
-        - El diseño original está preservado en comentario HTML para posible reversión
-        - Las animaciones opcionales (eyeGlitch, smirkShift) están definidas pero no aplicadas
-        - El efecto de enjambre se logra con combinación de caracteres · • y animaciones
-        ================================================================================
-        */
-
-        /*
-        ================================================================================
-        DOCUMENTACIÓN DE CAMBIOS - ICONOS TEMÁTICOS DE ESPECIALISTAS
-        ================================================================================
-        FECHA: 2026-05-20
-        AUTOR: Trinity (implementando diseño de iconos)
-        OBJETIVO: Implementar iconos temáticos Matrix para los 9 especialistas
-
-        EMOJI SELECCIONADOS (Unicode estándar para máxima compatibilidad):
-        - Smith: 🕵️ (Detective/Agente) - representa detección de bugs
-        - Morpheus: 🧙 (Mago/Visionario) - representa liderazgo estratégico
-        - Oracle: 🔮 (Bola de cristal) - representa oráculo/vidente
-        - Trinity: ⚔️ (Espadas cruzadas) - representa guerrera/experta
-        - Architect: 🏛️ (Templo griego) - representa arquitectura clásica
-        - Sentinel: 👁️ (Ojo) - representa vigilancia/protección
-        - Sion: 📜 (Pergamino) - representa documentación histórica
-
-        SISTEMA DE FALLBACKS:
-        - data-icon: emoji principal (CSS ::before)
-        - data-fallback: texto alternativo para accesibilidad
-        - CSS fallbacks para navegadores antiguos
-        - JavaScript para detectar soporte de emoji
-        - Soporte para dark mode y high contrast mode
-
-        COMPATIBILIDAD:
-        - Emoji Unicode estándar (soportado en Chrome, Firefox, Safari, Edge)
-        - Fallback a texto si el emoji no se renderiza
-        - Animación suave en hover
-        - Responsive design
-
-        ARCHIVO: /home/emiliano/www/emisrepos/matrix/onboarding.html
-        SECCIÓN: "Agentes" (líneas 694-828)
-        ESTILOS: Líneas 184-244
-        JAVASCRIPT: Líneas 1436-1460 (detección de fallback)
-
-        CRITERIOS DE ÉXITO:
-        ✓ Iconos temáticos de Matrix
-        ✓ Compatibilidad cross-browser
-        ✓ Fallbacks funcionales
-        ✓ Accesibilidad (data-fallback, ARIA)
-        ✓ Animaciones sutiles
-        ✓ Dark mode support
-        ================================================================================
-        */
-
-        // Cross-Browser Emoji Fallback System
-        function initEmojiFallback() {
-            const agentNames = document.querySelectorAll('.agent-card .agent-name');
-
-            agentNames.forEach(element => {
-                const icon = element.getAttribute('data-icon');
-                const fallback = element.getAttribute('data-fallback');
-
-                if (!icon || !fallback) return;
-
-                // Test if emoji is supported by checking if it renders as multiple characters
-                const testSpan = document.createElement('span');
-                testSpan.textContent = icon;
-                testSpan.style.position = 'absolute';
-                testSpan.style.visibility = 'hidden';
-                document.body.appendChild(testSpan);
-
-                const isSupported = testSpan.offsetWidth > 0 && testSpan.textContent.length === 1;
-                document.body.removeChild(testSpan);
-
-                // If emoji is not supported, use fallback
-                if (!isSupported) {
-                    // Remove the emoji from the text content
-                    const currentText = element.textContent;
-                    element.textContent = currentText.replace(icon, '').trim();
-                    // Add fallback indicator
-                    element.setAttribute('title', `${fallback} (Icon: ${icon})`);
-                    element.setAttribute('aria-label', fallback);
-                }
-            });
-        }
-
-        // Initialize emoji fallback on load
-        window.addEventListener('load', initEmojiFallback);
-        window.addEventListener('load', () => {
-            // Also re-check on font load
-            if (document.fonts && document.fonts.ready) {
-                document.fonts.ready.then(initEmojiFallback);
-            }
-        });
-    </script>
 </body>
 </html>
