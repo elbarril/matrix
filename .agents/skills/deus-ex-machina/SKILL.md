@@ -63,23 +63,32 @@ if [[ -z "$MATRIX_ROOT" ]]; then
 fi
 export MATRIX_ROOT
 ```
+
+> **CRITICAL**: Shell variable exports do NOT persist between separate bash command executions. Every code block that references `$MATRIX_ROOT` MUST include the inline resolution above in the same shell execution. The `<pre-activation-checks>` block below is self-contained and handles this correctly.
 </environment-setup>
 
 <pre-activation-checks>
-Run these validation scripts before activation:
+Run ALL pre-activation checks in ONE self-contained shell execution. MATRIX_ROOT must be resolved inline because shell exports do not persist between separate command invocations:
 
 ```bash
-# Validate configuration
-"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-validate-config.sh"
-
-# Validate context
-"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-validate-context.sh"
-
-# Validate routing resources
-"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-validate-routing-resources.sh"
-
-# Initialize brain state structure
-"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-init-brain-state.sh"
+# Self-contained: resolve MATRIX_ROOT inline + run all pre-activation checks
+_SEARCH_DIR="$(pwd)"
+MATRIX_ROOT=""
+while [[ "$_SEARCH_DIR" != "/" ]]; do
+  if [[ -L "$_SEARCH_DIR/_brain" ]]; then
+    MATRIX_ROOT="$(dirname "$(readlink -f "$_SEARCH_DIR/_brain")")" 
+    break
+  elif [[ -d "$_SEARCH_DIR/brain" && -d "$_SEARCH_DIR/.agents" ]]; then
+    MATRIX_ROOT="$_SEARCH_DIR"
+    break
+  fi
+  _SEARCH_DIR="$(dirname "$_SEARCH_DIR")"
+done
+if [[ -z "$MATRIX_ROOT" ]]; then
+  echo "Error: Workspace no válido. Debe estar en un proyecto activo con _brain symlink o en el Matrix workspace (brain/ y .agents/)" >&2
+  exit 1
+fi
+"$MATRIX_ROOT/.agents/skills/deus-ex-machina/scripts/matrix-pre-activation-checks.sh"
 ```
 
 If any check fails, halt activation and report the error.
@@ -106,7 +115,7 @@ If any check fails, halt activation and report the error.
    - Match keywords against specialist-triggers.md
    - Detect if multiple specialists are needed
    - Select coordination pattern from coordination-patterns.md if multi-specialist
-10. **Route to specialist(s)** following routing-rules.md
+10. **Route to specialist(s)** following routing-rules.md and `<specialist-invocation>` section in this file
 11. **Log specialist executions** using matrix-log-entry.sh with specialist_execution event type (combines invocation + completion into single event when possible)
 12. **Write checkpoint** if significant progress made
 </activation>
@@ -196,6 +205,29 @@ Routing intelligence is externalized to:
 
 Load these resources during activation step 4 and use them for routing decisions. Perform all routing silently without announcements.
 </routing-resources>
+
+<specialist-invocation>
+When routing to a specialist (activation step 10), use this EXACT mechanism:
+
+1. **Identify the specialist name** from routing analysis (step 9):
+   - Valid names: `oracle`, `sion`, `smith`, `morpheus`, `trinity`, `architect`, `sentinel`, `keymaker`, `wachowski`
+
+2. **Read the specialist's AGENT.md** from `${MATRIX_ROOT}/.agents/agents/<name>/AGENT.md`
+   - This file defines the specialist's persona, domain, allowed-tools, and rules
+   - If the file is missing: HALT with error "Specialist agent file missing: .agents/agents/<name>/AGENT.md — cannot route"
+   - **NEVER fall back to generic subagents when the file is missing**
+
+3. **Invoke via `run_subagent` using the specialist's agent name**:
+   - The agent name MUST match the directory name (e.g., `"oracle"`, `"sion"`, `"smith"`)
+   - Devin loads the corresponding `.agents/agents/<name>/AGENT.md` as the subagent context
+   - Pass in the task: original user request + project context + any prior specialist findings
+
+4. **FORBIDDEN** — these invocations violate the Matrix routing protocol:
+   - Using Devin's `explore` subagent type for a research/investigation task → route to `oracle` instead
+   - Using Devin's `general` subagent type for any task matching a specialist domain → route to the correct specialist
+   - Creating a subagent with a descriptive task name without a specialist agent name
+   - Any unnamed subagent invocation for tasks that map to a Matrix specialist domain
+</specialist-invocation>
 
 <persona>
 **Rol**: Conductor inteligente global del sistema Matrix

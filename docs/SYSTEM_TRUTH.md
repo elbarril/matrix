@@ -222,6 +222,9 @@ Artefactos de ingenieria inversa del sistema. 9 subdirectorios vacios eliminados
 6. **Rotacion documentada vs real**: Parcial - codigo usa 1000, no documentado explicitamente en README (sin referencias incorrectas tampoco)
 7. **brain/data/ no existe**: Solo referenciado en SYSTEM_TRUTH.md (este archivo); no hay refs activas en scripts o agentes
 8. **Checkpoint con project "null"**: Sin cambios
+9. **Shell variable persistence en SKILL.md**: RESUELTO (2026-06-13) - `<pre-activation-checks>` usaba `$MATRIX_ROOT` de un bloque bash previo. En Devin cada bloque bash corre en shell separada, variable no persiste. Fix: bloque `<pre-activation-checks>` ahora auto-contenido con resolucion de MATRIX_ROOT inline. Nota critica agregada a `<environment-setup>`.
+10. **Routing usa subagents genericos en vez de especialistas**: RESUELTO (2026-06-13) - SKILL.md step 10 solo decia "siguiendo routing-rules.md" sin especificar mecanismo exacto. Agente usaba `explore subagent` y `general subagent` (tipos genericos Devin) en lugar de agentes especializados (`oracle`, `sion`). Fix: nueva seccion `<specialist-invocation>` en SKILL.md con mecanismo exacto de invocacion via `run_subagent` con agent name. Step 10 actualizado para referenciar esta seccion.
+11. **Validacion routing no verifica AGENT.md de especialistas**: RESUELTO (2026-06-13) - `matrix-validate-routing-resources.sh` solo validaba 4 archivos MD de routing. No verificaba existencia de archivos AGENT.md en `.agents/agents/`. Fix: agregada validacion de los 9 AGENT.md de especialistas al script. Pre-activation ahora falla correctamente si faltan archivos de agente.
 
 ### Inconsistencias
 
@@ -271,3 +274,6 @@ Artefactos de ingenieria inversa del sistema. 9 subdirectorios vacios eliminados
 8. ✓ DONE Limpiar 9 subdirectorios vacios en docs/ (2026-06-02)
 9. ✓ DONE No hay refs activas a brain/data/ en scripts o agentes
 10. Pendiente - rotation=1000 no documentada explicitamente (sin docs incorrectas tampoco)
+11. ✓ DONE Shell variable persistence en pre-activation-checks (2026-06-13)
+12. ✓ DONE Routing: agregar seccion `<specialist-invocation>` con mecanismo exacto (2026-06-13)
+13. ✓ DONE matrix-validate-routing-resources.sh: validar AGENT.md de especialistas (2026-06-13)

@@ -84,6 +84,36 @@ if [[ ${#MISSING_FILES[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# All routing resources exist
+# Required specialist agent files
+REQUIRED_AGENTS=(
+  "oracle"
+  "sion"
+  "smith"
+  "morpheus"
+  "trinity"
+  "architect"
+  "sentinel"
+  "keymaker"
+  "wachowski"
+)
+
+MISSING_AGENTS=()
+
+for agent in "${REQUIRED_AGENTS[@]}"; do
+  AGENT_FILE="$MATRIX_DIR/.agents/agents/$agent/AGENT.md"
+  if [[ ! -f "$AGENT_FILE" ]]; then
+    MISSING_AGENTS+=("$agent")
+  fi
+done
+
+if [[ ${#MISSING_AGENTS[@]} -gt 0 ]]; then
+  echo "ERROR: Missing specialist agent files (routing will fail):" >&2
+  for agent in "${MISSING_AGENTS[@]}"; do
+    echo "  - .agents/agents/$agent/AGENT.md" >&2
+  done
+  exit 1
+fi
+
+# All routing resources and specialist agents exist
 echo "OK: All routing resources exist"
 exit 0
