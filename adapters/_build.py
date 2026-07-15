@@ -24,10 +24,11 @@ MASTER = "neo"
 
 
 def frontmatter(path):
-    """Return (name, description, model_policy) from an agent's YAML frontmatter."""
+    """Return (name, description, model_policy, capabilities) from an agent's frontmatter."""
     name = os.path.splitext(os.path.basename(path))[0]
     desc = ""
     model_policy = "auto"
+    capabilities = []
     with open(path, encoding="utf-8") as fh:
         lines = fh.read().splitlines()
     if lines and lines[0].strip() == "---":
@@ -40,7 +41,9 @@ def frontmatter(path):
                 desc = ln.split(":", 1)[1].strip()
             elif ln.startswith("model_policy:"):
                 model_policy = ln.split(":", 1)[1].strip()
-    return name, desc, model_policy
+            elif ln.startswith("capabilities:"):
+                capabilities = parse_scalar_list(ln.split(":", 1)[1])
+    return name, desc, model_policy, capabilities
 
 
 def agents():
@@ -48,43 +51,68 @@ def agents():
     for f in sorted(os.listdir(AGENTS_DIR)):
         if f.endswith(".md"):
             stem = f[:-3]
-            name, desc, model_policy = frontmatter(os.path.join(AGENTS_DIR, f))
-            out.append((stem, name, desc, model_policy))
+            out.append((stem,) + frontmatter(os.path.join(AGENTS_DIR, f)))
     return out
 
 
-def load_model_policy(adapter_yaml):
-    """Parse the `model_policy:` block of an adapter.yaml without a YAML dependency.
+def parse_scalar_list(raw):
+    """Parse a YAML flow-sequence (`[a, b]`) or bare scalar into a list of strings."""
+    v = raw.split("#", 1)[0].strip()
+    if v.startswith("[") and v.endswith("]"):
+        v = v[1:-1]
+    if not v:
+        return []
+    return [item.strip().strip('"').strip("'") for item in v.split(",") if item.strip()]
 
-    Expects the simple, controlled shape Matrix's adapter.yaml files use:
-        model_policy:
-          cheap: <model>
-          reasoning: <model>
-          auto: <model>
+
+def load_yaml_block(adapter_yaml, block_key):
+    """Parse a simple top-level `<block_key>:` mapping in an adapter.yaml without a
+    YAML dependency. Values may be a bare scalar or a `[a, b]` flow-sequence.
+
+    Expects the controlled shape Matrix's adapter.yaml files use:
+        <block_key>:
+          <sub-key>: <value> | [<value>, <value>, ...]
     """
-    policy = {}
+    block = {}
     if not os.path.isfile(adapter_yaml):
-        return policy
+        return block
     in_block = False
     with open(adapter_yaml, encoding="utf-8") as fh:
         for raw in fh:
             line = raw.rstrip("\n")
             stripped = line.split("#", 1)[0].strip()
             if not in_block:
-                if stripped == "model_policy:":
+                if stripped == f"{block_key}:":
                     in_block = True
                 continue
             if not line.startswith((" ", "\t")) and stripped:
                 break  # dedented — block ended
             if ":" in stripped:
                 k, v = stripped.split(":", 1)
-                policy[k.strip()] = v.strip()
-    return policy
+                block[k.strip()] = parse_scalar_list(v) if (v.strip().startswith("[")) else v.strip()
+    return block
 
 
 def resolve_model(target, model_policy_tier):
-    policy = load_model_policy(os.path.join(ROOT, "adapters", target, "adapter.yaml"))
+    policy = load_yaml_block(os.path.join(ROOT, "adapters", target, "adapter.yaml"), "model_policy")
     return policy.get(model_policy_tier) or policy.get("auto")
+
+
+def resolve_allowed_tools(target, capabilities):
+    """Union the Devin allowed-tools categories for a list of abstract capabilities.
+
+    Capabilities with no entry in the map (e.g. `ask-user`, `run-subagent` — see
+    capability-map.md) are silently skipped: they are not representable as an
+    allowed-tools grant under Devin, so omitting them changes nothing.
+    """
+    mapping = load_yaml_block(os.path.join(ROOT, "adapters", target, "adapter.yaml"), "allowed_tools")
+    seen, out = set(), []
+    for cap in capabilities:
+        for tool in mapping.get(cap, []) if isinstance(mapping.get(cap), list) else [mapping.get(cap)]:
+            if tool and tool not in seen:
+                seen.add(tool)
+                out.append(tool)
+    return out
 
 
 def render_devin(outdir):
@@ -102,12 +130,16 @@ def render_devin(outdir):
     agent_dir = os.path.join(brain, "agents")
     capmap = os.path.join(brain, "data", "capability-map.md")
     excluded = NON_ROUTED | {MASTER}
-    specialists = [s for s, _n, _d, _m in agents() if s not in excluded]
-    for stem, name, desc, model_tier in agents():
+    specialists = [s for s, _n, _d, _m, _c in agents() if s not in excluded]
+    for stem, name, desc, model_tier, capabilities in agents():
         agent_file = os.path.join(agent_dir, f"{stem}.md")
         model = resolve_model("devin", model_tier)
         model_line = f"model: {model}\n" if model else ""
         if stem == MASTER:
+            # The master is a Skill, not a subagent, and needs `run_subagent` /
+            # `ask_user_question` — neither is a nameable allowed-tools entry
+            # (see capability-map.md), so Neo is intentionally left
+            # unrestricted rather than risk silently dropping either one.
             d = os.path.join(outdir, ".agents", "skills", stem)
             os.makedirs(d, exist_ok=True)
             p = os.path.join(d, "SKILL.md")
@@ -142,8 +174,12 @@ def render_devin(outdir):
             d = os.path.join(outdir, ".agents", "agents", stem)
             os.makedirs(d, exist_ok=True)
             p = os.path.join(d, "AGENT.md")
+            allowed = resolve_allowed_tools("devin", capabilities)
+            allowed_block = (
+                "allowed-tools:\n" + "".join(f"  - {t}\n" for t in allowed) if allowed else ""
+            )
             body = (
-                f"---\nname: {name}\ndescription: {desc}\n{model_line}---\n\n"
+                f"---\nname: {name}\ndescription: {desc}\n{model_line}{allowed_block}---\n\n"
                 f"# {name} — Devin Subagent (specialist)\n\n"
                 f"Thin pointer. Read and follow the specialist's brain definition, "
                 f"and run its `<activation>` block FIRST:\n\n"

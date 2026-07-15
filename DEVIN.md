@@ -23,6 +23,10 @@ The brain declares abstract capabilities; the Devin adapter binds them:
 | `run-subagent` | `run_subagent` |
 | `ask-user` | `ask_user_question` |
 | `run-command` | `run_command` |
+| `browser` | `mcp__chrome-browser__*` (visual QA; no-op if that MCP server isn't configured) |
+| `docs-lookup` | `mcp__context7__*` (version-pinned library/framework docs; Oracle) |
+
+Every generated `AGENT.md` also gets a Devin-native `allowed-tools:` grant, resolved from the same `capabilities:` list through a second, smaller map (`allowed_tools:` in `adapters/devin/adapter.yaml`) — see "Least-privilege" in `capability-map.md`. Neo's `SKILL.md` is deliberately left without `allowed-tools` (see below).
 
 The Trainman is a **two-step** flow for Devin:
 
@@ -45,7 +49,19 @@ Global install is deliberate: Neo must be reachable from any repo — inside Mat
 
 ## Model policy
 
-Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, resolved at build time from the agent's `model_policy` tier (`cheap`/`reasoning`/`auto`, declared in `brain/agents/<name>.md`) through `adapters/devin/adapter.yaml`'s `model_policy` map. Today all three tiers resolve to `swe-1-7` (the model currently free on the Devin plan), so every specialist and Neo itself run on it. To move a tier onto a different model, edit the map in `adapters/devin/adapter.yaml` and rerun:
+Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, resolved at build time from the agent's `model_policy` tier (`cheap`/`reasoning`/`auto`, declared in `brain/agents/<name>.md`) through `adapters/devin/adapter.yaml`'s `model_policy` map. Verified live against `~/.local/share/devin/cli/sessions.db` (the `model` column records what the CLI actually resolved a `--model` flag to) on 2026-07-15:
+
+| Tier | Model | Used by | Why |
+|---|---|---|---|
+| `cheap` | `swe-1-7-lightning` | Keymaker, Lock | Cerebras-backed fast variant — same intelligence, lower latency, for mechanical/plumbing work |
+| `reasoning` | `swe-1-7` | Neo, Architect, Morpheus, Oracle, Smith | Full model, for planning/architecture/research/evaluation |
+| `auto` | `swe-1-7` | Trinity | Mixed work; defaults to the full model |
+
+**Both `swe-1.7` and `swe-1-7` are accepted and normalize to the same canonical id** (confirmed via the sessions database — do not assume dash vs. dot matters). `swe-1-7-lightning` is a genuinely distinct, faster model, not just an alias.
+
+**Time-bound: SWE-1.7 is a free preview only through 2026-08-08.** After that date it may stop being free or may be replaced by a newer release — re-verify this table (repeat the `--model X -p "OK"` + sessions.db check, or just watch `/model`'s selector) and update the map if needed. This is exactly the kind of drift this file exists to catch.
+
+To move a tier onto a different model, edit the map in `adapters/devin/adapter.yaml` and rerun:
 
 ```bash
 bin/matrix build   --target=devin
@@ -54,9 +70,24 @@ bin/matrix install --target=devin
 
 No agent file needs to change — the tier assignment (which kind of work an agent does) is separate from which model backs that tier.
 
+## External MCP servers this brain assumes
+
+| Server | Scope | Added | Used by |
+|---|---|---|---|
+| `chrome-browser` | user (`~/.config/devin/config.json`) | pre-existing | Smith (`browser` capability) |
+| `context7` | user (`~/.config/devin/config.json`) | 2026-07-15, `devin mcp add context7 --url https://mcp.context7.com/mcp --scope user` | Oracle (`docs-lookup` capability) |
+
+Both are **user-scope**, so they follow Neo/the specialists globally rather than needing per-project setup. Neither is required for the roster to function — the corresponding capability (`browser`, `docs-lookup`) is simply unavailable if the server isn't configured on a given machine, and the agent should say so rather than fake the check (Foundation 3). context7 works unauthenticated (rate-limited, verified live); running `devin mcp add ...` again prints an OAuth URL for higher rate limits — optional, not required.
+
+## Least-privilege `allowed-tools`
+
+Every specialist's generated `AGENT.md` carries an `allowed-tools:` list, resolved from its `capabilities:` frontmatter through the `allowed_tools:` map in `adapters/devin/adapter.yaml` (categories: `read`, `edit`, `grep`, `glob`, `exec`, plus `mcp__server__tool` patterns — the actual Devin frontmatter vocabulary, distinct from the tool-call names in the `capabilities:` map above). Verified end-to-end: a restricted `keymaker` subagent (only `read`+`exec`) successfully ran `git status`/`git log`; a restricted `smith` subagent (adds `mcp__chrome-browser__*`) successfully read and grepped its own brain file; a restricted `oracle` subagent (adds `mcp__context7__*`) successfully resolved a library id and queried its docs through context7.
+
+Neo's `SKILL.md` is the one exception — deliberately left with no `allowed-tools`. Neo needs `run_subagent` and `ask_user_question`, and neither is a nameable `allowed-tools` entry (see below), so restricting Neo's list to the nameable categories risks silently dropping tools that were never in scope to restrict in the first place. The blast radius of an unrestricted Neo is also lower in practice: it runs in the foreground, user-approved, not as an unattended subagent.
+
 ## Subagents can never ask the user directly
 
-Devin withholds `ask_user_question` from every subagent unconditionally. Specialists that declare the `ask-user` capability (Architect, Keymaker, Morpheus, Oracle, Trinity) run as Devin subagents, so they cannot call it. When one of them needs a decision from the user, it stops and reports the question back to Neo (the master skill, not a subagent — it keeps `ask_user_question`), which asks and re-delegates. See `brain/data/capability-map.md` for the full note.
+Devin withholds `ask_user_question` from every subagent unconditionally — not configurable via `allowed-tools` or `permissions`. Specialists that declare the `ask-user` capability (Architect, Keymaker, Morpheus, Oracle, Trinity) run as Devin subagents, so they cannot call it. When one of them needs a decision from the user, it stops and reports the question back to Neo (the master skill, not a subagent — it keeps `ask_user_question`), which asks and re-delegates. `run_subagent`/`read_subagent` are similarly unavailable inside a subagent by default (nesting is disabled beyond the root agent unless `max-nesting` is set — none of our specialists need it). See `brain/data/capability-map.md` for the full note.
 
 ## Mapping to Devin's native structure
 

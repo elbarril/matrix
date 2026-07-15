@@ -114,7 +114,7 @@ These are not rules. They are who the system *is*. Every routing call, every pus
 ---
 name: <agent>
 description: <one line: role + when to route here>
-capabilities: [read, edit, search, code-nav, run-subagent, ask-user, run-command]
+capabilities: [read, edit, search, code-nav, run-subagent, ask-user, run-command, browser]
 model_policy: <cheap|reasoning|auto>   # The Construct uses this
 ---
 
@@ -189,7 +189,8 @@ Enforcement lives in `hooks/` as **python/bash with a JSON in/out contract**, ca
 "Load exactly what you need, nothing more." Encoded as operating rules, exposed as abstract capabilities so any CLI can satisfy them.
 
 - **`code-nav` capability** — symbol-level navigation/edit (Serena or equivalent) instead of reading whole files. The adapter binds it; agents just request `code-nav`.
-- **Model selection (`model_policy`)** — each agent declares `cheap` (mechanical work), `reasoning` (planning/architecture/research/evaluation), or `auto` (mixed). The adapter's `model_policy` map (`adapters/<cli>/adapter.yaml`) resolves each tier to a concrete model name, which the Trainman bakes into the generated artifact's `model:` frontmatter — so the tier assignment in the brain never has to change, only the adapter's mapping. Today the Devin adapter maps all three tiers to the same free model (`swe-1-7`); splitting them onto different models later is a one-line change in `adapters/devin/adapter.yaml` followed by `bin/matrix build && bin/matrix install --target=devin`.
+- **Model selection (`model_policy`)** — each agent declares `cheap` (mechanical work), `reasoning` (planning/architecture/research/evaluation), or `auto` (mixed). The adapter's `model_policy` map (`adapters/<cli>/adapter.yaml`) resolves each tier to a concrete model name, which the Trainman bakes into the generated artifact's `model:` frontmatter — so the tier assignment in the brain never has to change, only the adapter's mapping. The Devin adapter currently splits this by actual model variant, not just by tier: `cheap` → a faster/lighter model variant, `reasoning`/`auto` → the full model (see `DEVIN.md` for the exact names — they are time-bound to a free-preview window and worth re-checking periodically).
+- **Least-privilege tool grants** — the Devin adapter also resolves each agent's `capabilities:` into a Devin-native `allowed-tools:` grant on the generated artifact, so a specialist that only declares `read`+`search` cannot exercise `edit` or `exec` even if the platform would otherwise allow it. Capabilities with no representable grant (`ask-user`, `run-subagent`) are simply omitted rather than guessed at.
 - **Large-artifact delegation** — outputs > ~10 KB are produced by a sub-agent with a word cap, to avoid inflating the working context.
 - **Proactive resume checkpoints** — write a checkpoint before truncating context; split sessions on mode changes (build → eval → fix).
 

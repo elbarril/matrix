@@ -201,7 +201,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   </div>
   <div class="card">
     <h3><span class="tag tag-specialist">EVAL</span> Agent Smith</h3>
-    <p>Testea, critica, bloquea trabajo debil. Root-cause de bugs. Dueno del reality gate: nada esta &laquo;listo&raquo; sin un check E2E.</p>
+    <p>Testea, critica, bloquea trabajo debil. Root-cause de bugs. Dueno del reality gate: nada esta &laquo;listo&raquo; sin un check E2E. Para trabajo visual, usa la capacidad <code>browser</code> (screenshot real, no descripcion).</p>
   </div>
   <div class="card">
     <h3><span class="tag tag-opt">OPT-IN</span> The Keymaker</h3>
@@ -400,7 +400,8 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <p>&laquo;Carga exactamente lo que necesitas, nada mas.&raquo; Codificado como reglas operativas y expuesto como capacidades abstractas.</p>
 <ul>
   <li><strong><code>code-nav</code></strong> &mdash; navegacion/edit a nivel de simbolo (Serena o equivalente) en vez de leer archivos enteros. 5-10x mas barato.</li>
-  <li><strong><code>model_policy</code></strong> &mdash; <code>cheap</code> para trabajo mecanico, <code>reasoning</code> para problemas duros, <code>auto</code> para mixto. Declarado por agente; <code>adapters/devin/adapter.yaml</code> mapea cada tier a un modelo concreto y el Trainman lo escribe como frontmatter <code>model:</code> en cada skill/subagent generado. Hoy los tres tiers apuntan al mismo modelo gratuito (<code>swe-1-7</code>).</li>
+  <li><strong><code>model_policy</code></strong> &mdash; <code>cheap</code> para trabajo mecanico, <code>reasoning</code> para problemas duros, <code>auto</code> para mixto. Declarado por agente; <code>adapters/devin/adapter.yaml</code> mapea cada tier a un modelo concreto y el Trainman lo escribe como frontmatter <code>model:</code> en cada skill/subagent generado. Hoy: <code>cheap</code> &rarr; <code>swe-1-7-lightning</code> (variante rapida, Cerebras), <code>reasoning</code>/<code>auto</code> &rarr; <code>swe-1-7</code> (modelo completo). Ambos gratis en preview hasta el 2026-08-08 &mdash; revisar el mapa despues de esa fecha.</li>
+  <li><strong><code>allowed-tools</code> (least-privilege)</strong> &mdash; el adaptador Devin tambien resuelve las <code>capabilities:</code> de cada agente a un grant nativo <code>allowed-tools:</code> (categorias: <code>read</code>, <code>edit</code>, <code>grep</code>, <code>glob</code>, <code>exec</code>, mas <code>mcp__server__tool</code>), asi un especialista no puede ejercer herramientas que no declaro necesitar. Neo (skill, no subagent) queda sin restringir a proposito &mdash; ver DEVIN.md.</li>
   <li><strong>Delegacion</strong> &mdash; artefactos &gt;10 KB van a un sub-agente con word cap, para no inflar el contexto.</li>
   <li><strong>Checkpoints de resume</strong> &mdash; escribir checkpoint antes de truncar contexto; split de sesion en cambios de modo (build &rarr; eval &rarr; fix).</li>
 </ul>

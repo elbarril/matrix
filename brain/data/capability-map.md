@@ -13,6 +13,8 @@ The brain speaks in **abstract capabilities**. Adapters (the Trainman) bind each
 | `run-subagent` | Delegate to another agent | Use for large artifacts (>~10 KB) with a word cap |
 | `run-command` | Execute a shell command | For the reality check (E2E), builds, tests |
 | `ask-user` | Ask the user a question | Ask once; never loop on ambiguity |
+| `browser` | Render a page and capture visual evidence (screenshots, DOM state) | Only for UI/visual verification (Smith); no-op if the adapter has no binding |
+| `docs-lookup` | Fetch current, version-pinned library/framework/API documentation | Cheaper *and* more accurate than a generic web search for this specific case (Oracle) |
 
 ## Model policy (per agent / per turn)
 
@@ -36,12 +38,20 @@ capabilities:
   run-subagent: run_subagent
   run-command: run_command
   ask-user: ask_user_question
+  browser: mcp__chrome-browser     # visual QA; no-op if unconfigured
+  docs-lookup: mcp__context7       # version-pinned library docs
 render:
   master: skill        # → .agents/skills/<name>/SKILL.md
   specialist: subagent # → .agents/agents/<name>/AGENT.md
 ```
 
 The golden rule: **if a capability has no native equivalent in a CLI, the adapter provides a fallback** (e.g. `code-nav` → `search`). The brain never changes.
+
+## Least-privilege: `allowed-tools` on generated artifacts
+
+Beyond documenting the mapping above, the Devin adapter also declares an `allowed_tools:` block in `adapters/devin/adapter.yaml` — a second mapping, from capability to Devin's actual frontmatter tool categories (`read`, `edit`, `grep`, `glob`, `exec`, and `mcp__server__tool` patterns; this is a smaller, fixed vocabulary, distinct from the tool-call names in the `capabilities:` map above). The Trainman resolves each agent's declared `capabilities:` through this second map and writes the union as `allowed-tools:` frontmatter, so every generated `SKILL.md`/`AGENT.md` is scoped to only what that agent actually declared needing — "Restricting tools makes skills/subagents safer and more predictable" (Devin CLI docs).
+
+`ask-user` and `run-subagent` are intentionally excluded from `allowed_tools` — see the constraint below and the Nesting Depth rule (subagents cannot spawn subagents by default); neither is a grantable `allowed-tools` entry, so including them would be a no-op.
 
 ## Devin-specific constraint: `ask-user` inside subagents
 

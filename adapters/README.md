@@ -4,8 +4,8 @@
 
 Each adapter is a **thin, replaceable** binding between the agnostic brain (Layer 2) and one host CLI. An adapter declares three things:
 
-1. **A capability → tool map** (`adapter.yaml`) — how the abstract capabilities (`read`, `edit`, `search`, `code-nav`, `run-subagent`, `run-command`, `ask-user`) bind to that CLI's real tools, plus a `model_policy` map.
-2. **A builder** (`build.sh`) — renders each agent in `brain/agents/*.md` into the CLI's native artifact (thin pointers that reference the brain by absolute path, never copies of it), including a `model:` frontmatter field resolved from the agent's `model_policy` tier.
+1. **A capability → tool map** (`adapter.yaml`) — how the abstract capabilities (`read`, `edit`, `search`, `code-nav`, `run-subagent`, `run-command`, `ask-user`, `browser`, `docs-lookup`, ...) bind to that CLI's real tools, plus a `model_policy` map and (optionally) an `allowed_tools` map for least-privilege scoping.
+2. **A builder** (`build.sh`) — renders each agent in `brain/agents/*.md` into the CLI's native artifact (thin pointers that reference the brain by absolute path, never copies of it), including a `model:` frontmatter field resolved from the agent's `model_policy` tier, and — for Devin — an `allowed-tools:` grant resolved from the agent's declared `capabilities:`.
 3. **An installer** (`install.sh`) — deploys the generated artifacts into the host CLI's discovery path so they are actually invocable. For Devin this means the global path (`~/.config/devin/skills|agents/`), making Neo reachable from any project.
 
 ## Layout

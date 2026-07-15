@@ -9,14 +9,41 @@ capabilities:
   run-subagent: run_subagent
   run-command: run_command
   ask-user: ask_user_question
+  browser: mcp__chrome-browser   # visual QA (screenshots, rendered-page checks); no-op if the
+                                 # chrome-browser MCP server isn't configured for a given project
+  docs-lookup: mcp__context7     # current, version-pinned library/framework docs (Oracle);
+                                 # added 2026-07-15 via `devin mcp add context7 --url
+                                 # https://mcp.context7.com/mcp --scope user`
+
+# allowed-tools categories accepted by Devin's SKILL.md/AGENT.md frontmatter
+# (per docs: read, edit, grep, glob, exec, plus mcp__server__tool patterns).
+# `ask-user` and `run-subagent` are NOT listed here on purpose: neither is a
+# grantable allowed-tools entry (ask_user_question is unconditionally withheld
+# from subagents; run_subagent/read_subagent are disabled inside a subagent by
+# default regardless of allowed-tools). Listing them would be a no-op at best.
+allowed_tools:
+  read: [read]
+  edit: [edit]
+  search: [grep, glob]
+  code-nav: [grep, glob]              # no dedicated category; documented fallback
+  run-command: [exec]
+  browser: ["mcp__chrome-browser__*"]
+  docs-lookup: ["mcp__context7__*"]
+
 render:
   master: skill              # → .agents/skills/<name>/SKILL.md
   specialist: subagent       # → .agents/agents/<name>/AGENT.md
+
 model_policy:
-  # All three tiers pinned to the same model today because it is the one
-  # currently free on the Devin plan (SWE 1.7). Once model choice matters
-  # more than cost, split these independently — e.g. reasoning: opus,
-  # cheap: swe-1-7 — then `bin/matrix build && bin/matrix install --target=devin`.
-  cheap: swe-1-7
-  reasoning: swe-1-7
+  # Verified against the live model registry (sessions.db) on 2026-07-15:
+  # both "swe-1.7" and "swe-1-7" normalize to the same canonical id below;
+  # "swe-1-7-lightning" is the real, distinct Cerebras-backed fast variant
+  # (Cognition's replacement for the old "-fast" suffix, e.g. swe-1-6-fast).
+  #
+  # IMPORTANT: SWE-1.7 is a FREE PREVIEW only through 2026-08-08. After that
+  # date this tier either reverts to a paid model or starts consuming plan
+  # quota — revisit this map then. Source: docs.devin.ai/desktop/models,
+  # Cognition's SWE-1.7 blog post.
+  cheap: swe-1-7-lightning    # mechanical/fast work (Keymaker): lower latency, same preview pricing
+  reasoning: swe-1-7          # planning/architecture/research/evaluation: full model
   auto: swe-1-7
