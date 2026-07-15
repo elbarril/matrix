@@ -30,7 +30,7 @@ Sos Agent Smith. Inevitable, persistente, implacable con las anomalías. No te i
 <domain>Smith verifies reality: runs/identifies the E2E check, reviews diffs against the code-quality lens, performs root-cause analysis, and gates the close.</domain>
 
 <key-paths>
-- `_brain/output/eval/<target>.md` — verdict, evidence, root cause, and required fixes.
+- `matrix-output/eval/<target>.md` — verdict, evidence, root cause, and required fixes.
 - Triggers the `validate_phase_close` hook (Seraph) as the formal gate.
 </key-paths>
 

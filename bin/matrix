@@ -38,6 +38,17 @@ ACTIVITY_LOG="$STATE_DIR/activity.log"
 CHECKPOINTS_FILE="$STATE_DIR/checkpoints.jsonl"
 HOOKS_DIR="$MATRIX_DIR/hooks"
 
+to_abs_path() {
+    local p="${1:-}"
+    p="${p/#\~/$HOME}"
+    [[ -z "$p" || "$p" == "null" ]] && { echo "$p"; return; }
+    if [[ "$p" == /* ]]; then
+        echo "${p%/}"
+    else
+        echo "${MATRIX_DIR}/${p#./}" | sed 's#//*#/#g'
+    fi
+}
+
 log_info()    { echo -e "${BLUE}[MATRIX]${NC} $1"; }
 log_success() { echo -e "${GREEN}[MATRIX]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[MATRIX]${NC} $1"; }
@@ -127,7 +138,7 @@ resolve_project_path() {
     local info; info="$(read_registry | grep "^$name:" | head -1)"
     [[ -z "$info" ]] && return 1
     local p; p="$(echo "$info" | cut -d: -f2)"
-    p="${p/#\~/$HOME}"; echo "${p%/}"
+    p="$(to_abs_path "$p")"; echo "${p%/}"
 }
 
 select_project() {
@@ -138,7 +149,7 @@ select_project() {
     IFS=: read -r pn pp pt <<< "$info"
     local active; active="$(read_context)"
     [[ "$active" != "null" && -n "$active" && "$active" != "$name" ]] && deselect_project
-    pp="${pp/#\~/$HOME}"; pp="${pp%/}"
+    pp="$(to_abs_path "$pp")"; pp="${pp%/}"
     if [[ "$pt" == "remote" ]]; then
         local dir="$CLIENTS_DIR/$name"
         [[ -d "$dir" ]] || { log_info "Cloning '$name'..."; mkdir -p "$CLIENTS_DIR"; git clone "$pp" "$dir"; }
@@ -157,7 +168,7 @@ select_project() {
 deselect_project() {
     local active; active="$(read_context)"
     [[ "$active" == "null" || -z "$active" ]] && { log_warning "No active project"; return; }
-    local ap; ap="$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)"; ap="${ap/#\~/$HOME}"; ap="${ap%/}"
+    local ap; ap="$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)"; ap="$(to_abs_path "$ap")"; ap="${ap%/}"
     [[ -n "$ap" && -L "$ap/_brain" ]] && rm "$ap/_brain"
     update_context "null" "null"
     link_append "project:deselect" "$active" ""
@@ -218,7 +229,7 @@ show_status() {
     log_info "Matrix Status"; echo
     local active; active="$(read_context)"
     if [[ "$active" != "null" && -n "$active" ]]; then
-        local ap; ap="$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)"; ap="${ap/#\~/$HOME}"; ap="${ap%/}"
+        local ap; ap="$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)"; ap="$(to_abs_path "$ap")"; ap="${ap%/}"
         echo "Primary project: $active"
         echo "Path: $ap"
         if [[ -L "$ap/_brain" ]]; then echo "Brain link: ✓ active"; else echo "Brain link: ✗ broken"; fi
@@ -285,6 +296,22 @@ build_target() {
     fi
 }
 
+# --- Trainman install (deploy artifacts into the host CLI's discovery path) --
+install_target() {
+    local target=""
+    for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}";; esac; done
+    [[ -z "$target" ]] && { log_error "Usage: matrix install --target=<devin|claude|...>"; return 1; }
+    local installer="$MATRIX_DIR/adapters/$target/install.sh"
+    if [[ -x "$installer" ]]; then
+        log_info "Trainman: installing artifacts for '$target' into the discovery path..."
+        MATRIX_ROOT="$MATRIX_DIR" "$installer"
+        link_append "install" "$target" "artifacts deployed"
+    else
+        log_warning "Trainman: no adapter installer at $installer (not implemented yet for '$target')."
+        return 1
+    fi
+}
+
 show_help() {
     cat << 'EOF'
 Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
@@ -308,8 +335,10 @@ State & telemetry:
   activity [n]            Show last n Link ledger events (default 20)
 
 Enforcement & adapters:
-  hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close, post_run_audit)
-  build --target=<cli>    Trainman: generate native artifacts for a CLI
+  hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close,
+                          post_run_audit, the_source)
+  build --target=<cli>    Trainman: generate native artifacts for a CLI (devin)
+  install --target=<cli>  Trainman: deploy generated artifacts into the CLI's discovery path
   help                    Show this help
 EOF
 }
@@ -328,6 +357,7 @@ main() {
         activity)   show_activity "${2:-}" ;;
         hooks)      shift; run_hook "$@" ;;
         build)      shift; build_target "$@" ;;
+        install)    shift; install_target "$@" ;;
         help|--help|-h) show_help ;;
         "") log_error "No command. Use 'matrix help'."; exit 1 ;;
         *)  log_error "Unknown command: $1"; echo "Use 'matrix help'."; exit 1 ;;

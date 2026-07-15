@@ -7,7 +7,6 @@ the brain; it points at it and tells the host CLI how to invoke it. Change the
 brain, the pointers still resolve. Change the CLI, swap the renderer.
 
 Usage:
-  python3 adapters/_build.py --target=claude
   python3 adapters/_build.py --target=devin
 Output goes to adapters/<target>/generated/.
 """
@@ -25,8 +24,10 @@ MASTER = "neo"
 
 
 def frontmatter(path):
+    """Return (name, description, model_policy) from an agent's YAML frontmatter."""
     name = os.path.splitext(os.path.basename(path))[0]
     desc = ""
+    model_policy = "auto"
     with open(path, encoding="utf-8") as fh:
         lines = fh.read().splitlines()
     if lines and lines[0].strip() == "---":
@@ -37,7 +38,9 @@ def frontmatter(path):
                 name = ln.split(":", 1)[1].strip()
             elif ln.startswith("description:"):
                 desc = ln.split(":", 1)[1].strip()
-    return name, desc
+            elif ln.startswith("model_policy:"):
+                model_policy = ln.split(":", 1)[1].strip()
+    return name, desc, model_policy
 
 
 def agents():
@@ -45,59 +48,116 @@ def agents():
     for f in sorted(os.listdir(AGENTS_DIR)):
         if f.endswith(".md"):
             stem = f[:-3]
-            name, desc = frontmatter(os.path.join(AGENTS_DIR, f))
-            out.append((stem, name, desc))
+            name, desc, model_policy = frontmatter(os.path.join(AGENTS_DIR, f))
+            out.append((stem, name, desc, model_policy))
     return out
 
 
-def render_claude(outdir):
-    """Claude Code: thin-pointer slash commands under generated/.claude/commands/."""
-    cmddir = os.path.join(outdir, ".claude", "commands")
-    os.makedirs(cmddir, exist_ok=True)
-    written = []
-    for stem, name, desc in agents():
-        body = (
-            f"---\ndescription: {desc}\n---\n\n"
-            f"# /{stem}\n\n"
-            f"Read and follow `brain/agents/{stem}.md` (agnostic agent definition). "
-            f"Run its `<activation>` block first. Bind capabilities via "
-            f"`brain/data/capability-map.md`.\n"
-        )
-        p = os.path.join(cmddir, f"{stem}.md")
-        with open(p, "w", encoding="utf-8") as fh:
-            fh.write(body)
-        written.append(p)
-    return written
+def load_model_policy(adapter_yaml):
+    """Parse the `model_policy:` block of an adapter.yaml without a YAML dependency.
+
+    Expects the simple, controlled shape Matrix's adapter.yaml files use:
+        model_policy:
+          cheap: <model>
+          reasoning: <model>
+          auto: <model>
+    """
+    policy = {}
+    if not os.path.isfile(adapter_yaml):
+        return policy
+    in_block = False
+    with open(adapter_yaml, encoding="utf-8") as fh:
+        for raw in fh:
+            line = raw.rstrip("\n")
+            stripped = line.split("#", 1)[0].strip()
+            if not in_block:
+                if stripped == "model_policy:":
+                    in_block = True
+                continue
+            if not line.startswith((" ", "\t")) and stripped:
+                break  # dedented — block ended
+            if ":" in stripped:
+                k, v = stripped.split(":", 1)
+                policy[k.strip()] = v.strip()
+    return policy
+
+
+def resolve_model(target, model_policy_tier):
+    policy = load_model_policy(os.path.join(ROOT, "adapters", target, "adapter.yaml"))
+    return policy.get(model_policy_tier) or policy.get("auto")
 
 
 def render_devin(outdir):
-    """Devin: master → Skill, specialists → Subagents, as thin pointers."""
+    """Devin: master → Skill, specialists → Subagents, as thin pointers.
+
+    Devin discovers these artifacts from a GLOBAL path (installed by the
+    Trainman's install step), so they may be invoked from ANY working
+    directory — inside Matrix, inside clients/, or in an unrelated repo.
+    Relative paths would not resolve, so the pointers reference the brain by
+    ABSOLUTE path (baked from MATRIX_ROOT at build time). The brain's own
+    `<activation>` block remains `_brain`-aware for project binding.
+    """
     written = []
-    for stem, name, desc in agents():
+    brain = os.path.join(ROOT, "brain")
+    agent_dir = os.path.join(brain, "agents")
+    capmap = os.path.join(brain, "data", "capability-map.md")
+    excluded = NON_ROUTED | {MASTER}
+    specialists = [s for s, _n, _d, _m in agents() if s not in excluded]
+    for stem, name, desc, model_tier in agents():
+        agent_file = os.path.join(agent_dir, f"{stem}.md")
+        model = resolve_model("devin", model_tier)
+        model_line = f"model: {model}\n" if model else ""
         if stem == MASTER:
             d = os.path.join(outdir, ".agents", "skills", stem)
             os.makedirs(d, exist_ok=True)
             p = os.path.join(d, "SKILL.md")
-            kind = "Skill (master)"
+            roster = "\n".join(f"- `{s}` → `{os.path.join(agent_dir, s + '.md')}`" for s in specialists)
+            body = (
+                f"---\nname: {name}\ndescription: {desc}\n{model_line}---\n\n"
+                f"# {name} — Devin Skill (master)\n\n"
+                f"Thin pointer to the agnostic brain. Read and follow the master "
+                f"agent definition, then run its `<activation>` block FIRST:\n\n"
+                f"    {agent_file}\n\n"
+                f"Bind capabilities to Devin tools via the Devin column of:\n\n"
+                f"    {capmap}\n\n"
+                f"## Matrix root (resolve from any working directory)\n\n"
+                f"This skill is global and may run from any project. The Matrix "
+                f"system lives at an absolute path; use it for orchestration, state, "
+                f"and the ledger regardless of cwd:\n\n"
+                f"    MATRIX_ROOT = {ROOT}\n"
+                f"    orchestrator = {os.path.join(ROOT, 'bin', 'matrix')}\n"
+                f"    config       = {os.path.join(brain, 'config.yaml')}\n\n"
+                f"If the current project has a `_brain` symlink (created by "
+                f"`matrix select`), prefer it for project binding; otherwise fall "
+                f"back to the absolute paths above.\n\n"
+                f"## Routing to specialists\n\n"
+                f"Neo never lets the user talk to specialists directly. To delegate, "
+                f"spawn a subagent that reads the specialist's brain file and runs its "
+                f"`<activation>` block. Prefer the matching installed subagent profile; "
+                f"if unavailable, use a general subagent pointed at the file:\n\n"
+                f"{roster}\n\n"
+                f"Log every route/handoff to the Link ledger via `bin/matrix`.\n"
+            )
         else:
             d = os.path.join(outdir, ".agents", "agents", stem)
             os.makedirs(d, exist_ok=True)
             p = os.path.join(d, "AGENT.md")
-            kind = "Subagent (specialist)"
-        body = (
-            f"---\nname: {name}\ndescription: {desc}\n---\n\n"
-            f"# {name} — Devin {kind}\n\n"
-            f"Thin pointer. The behavior lives in `brain/agents/{stem}.md`. "
-            f"Read it, run its `<activation>` block, and bind capabilities via "
-            f"`brain/data/capability-map.md` (the Devin column).\n"
-        )
+            body = (
+                f"---\nname: {name}\ndescription: {desc}\n{model_line}---\n\n"
+                f"# {name} — Devin Subagent (specialist)\n\n"
+                f"Thin pointer. Read and follow the specialist's brain definition, "
+                f"and run its `<activation>` block FIRST:\n\n"
+                f"    {agent_file}\n\n"
+                f"Bind capabilities to Devin tools via the Devin column of:\n\n"
+                f"    {capmap}\n"
+            )
         with open(p, "w", encoding="utf-8") as fh:
             fh.write(body)
         written.append(p)
     return written
 
 
-RENDERERS = {"claude": render_claude, "devin": render_devin}
+RENDERERS = {"devin": render_devin}
 
 
 def main():

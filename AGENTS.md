@@ -1,6 +1,6 @@
 # AGENTS.md — Canonical Contract for Matrix
 
-This is the document of record. Every session, every agent, every CLI invocation operates under this contract. Matrix is **CLI-agnostic**: the same brain runs identically under Devin, Claude Code, Cursor, Codex, or any future agentic CLI — only a thin adapter changes.
+This is the document of record. Every session, every agent invocation operates under this contract. Matrix is **CLI-agnostic by design**: the intelligence core speaks only in abstract capabilities, never a specific CLI's tools. **Today it is built and maintained for Devin CLI only** — the Layer 3 adapter is what would make adding another CLI later cheap (~one small adapter, no changes to the brain), but no other adapter is currently implemented.
 
 > **Lore note.** Matrix is named and themed after the trilogy. Each component below carries the name of the character or place whose function it mirrors. The names are mnemonic, not decorative: they tell you what the thing *does*.
 
@@ -10,7 +10,7 @@ This is the document of record. Every session, every agent, every CLI invocation
 
 Matrix is a personal intelligence layer. One root repo (this one) holds the brain. Project repos live separately and get pulled in on demand. A symlink `_brain` inside any active project points back to this root, giving the project access to the intelligence without contaminating its codebase.
 
-The intelligence never ships into project code. The brain stays here.
+The intelligence never ships into project code. The brain stays here. **The reverse also holds: project work never ships into the brain.** Reports, plans, screenshots, and other work artifacts produced while a project is bound are written to `matrix-output/` at that **project's own root** (a real directory, sibling to `_brain` — never written *through* the `_brain` symlink, or they would land inside the shared brain and pollute it for every other project). Only when working on Matrix itself (Matrix workspace mode, no project bound) do outputs go to this repo's own `brain/output/`.
 
 **The core thesis (why this beats a CLI-coupled system):** the intelligence (agents, workflows, lessons, contract) is written **once**, in plain markdown, in terms of abstract *capabilities* — never in terms of one CLI's native tools. A thin adapter (**The Trainman**) translates those capabilities into whatever the host CLI speaks. Change the CLI, change one ~100-line adapter, keep everything else.
 
@@ -21,10 +21,11 @@ The intelligence never ships into project code. The brain stays here.
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │  LAYER 3 — Adapters · "The Trainman"                         │
-│  adapters/devin/   adapters/claude/   adapters/<other>/      │
+│  adapters/devin/   (adapters/<other>/ later, none built yet) │
 │  Transit between worlds. Maps abstract capabilities to the   │
-│  host CLI's native tools. Generates native artifacts via     │
-│  `bin/matrix build --target=<cli>`. Thin and replaceable.    │
+│  host CLI's native tools. Generates artifacts via            │
+│  `bin/matrix build` and deploys them into the CLI's          │
+│  discovery path via `bin/matrix install`. Thin, replaceable. │
 └─────────────────────────────────────────────────────────────┘
                               ▲
 ┌─────────────────────────────────────────────────────────────┐
@@ -55,7 +56,7 @@ One master, five core specialists, one opt-in sixth. **Roster discipline (from h
 
 | Agent | Trilogy role | Function (capability) |
 |---|---|---|
-| **Neo** | The One — the nexus between worlds | **Master.** The single voice. Routes, holds context, carries the sacred foundation. Bridges the user and every CLI. |
+| **Neo** | The One — the nexus between worlds | **Master.** The single voice. Routes, holds context, carries the sacred foundation. Bridges the user and the host CLI (Devin today). |
 | **The Oracle** | The seer who knows | **Researcher.** Gathers, compares, cites, foresees. Answers "what is true / what exists". |
 | **Morpheus** | The mentor who shows the path | **Planner.** Turns ambiguity into ordered scope. Answers "what / when". "I can only show you the door." |
 | **The Architect** | Designer of the system | **Architect.** Designs structure, names trade-offs, reviews plans before build. Answers "how it fits". |
@@ -160,7 +161,6 @@ brain/state/
 ├── workspace.yaml            # the SET of warm projects (multi-project, not single)
 ├── activity.log              # Link — append-only cross-agent / cross-subsystem ledger
 ├── checkpoints.jsonl         # timestamped progress markers
-├── work-process-log.jsonl    # routing/invocation trace (rotates at 1000)
 ├── validation-report.json    # Seraph — last enforcement result
 └── sessions/                 # active session pings
 ```
@@ -168,6 +168,7 @@ brain/state/
 - **Multi-project.** `workspace.yaml` holds a *set* of warm projects. A session binds to one via `--project <name>` (or the `_brain` symlink / `$MATRIX_PROJECT`). `.context.yaml` keeps the single "primary" active project for convenience and backward compatibility.
 - **Root resolution (robust).** Scripts resolve `MATRIX_ROOT` by: (1) following a `_brain` symlink up one level if present; else (2) walking up from the script location until `brain/` + `AGENTS.md` are found. Works from any subdirectory or active project.
 - **Ledger (Link).** Append-only events: `session:start`, `route`, `decision`, `handoff`, `phase:close`. Both the core and any federated ship read and write it. Shared state without coupling.
+- **Never committed.** Everything under `brain/state/` and `brain/output/` is gitignored — it is per-machine, changes every session, and would otherwise turn every checkpoint into a noisy commit. Work *deliverables* for a bound project belong in that project's own `matrix-output/` (see §1), not here.
 
 ---
 
@@ -188,7 +189,7 @@ Enforcement lives in `hooks/` as **python/bash with a JSON in/out contract**, ca
 "Load exactly what you need, nothing more." Encoded as operating rules, exposed as abstract capabilities so any CLI can satisfy them.
 
 - **`code-nav` capability** — symbol-level navigation/edit (Serena or equivalent) instead of reading whole files. The adapter binds it; agents just request `code-nav`.
-- **Model selection (`model_policy`)** — `cheap` for mechanical work, `reasoning` for hard problems. Declared per agent/turn; the adapter maps to concrete models.
+- **Model selection (`model_policy`)** — each agent declares `cheap` (mechanical work), `reasoning` (planning/architecture/research/evaluation), or `auto` (mixed). The adapter's `model_policy` map (`adapters/<cli>/adapter.yaml`) resolves each tier to a concrete model name, which the Trainman bakes into the generated artifact's `model:` frontmatter — so the tier assignment in the brain never has to change, only the adapter's mapping. Today the Devin adapter maps all three tiers to the same free model (`swe-1-7`); splitting them onto different models later is a one-line change in `adapters/devin/adapter.yaml` followed by `bin/matrix build && bin/matrix install --target=devin`.
 - **Large-artifact delegation** — outputs > ~10 KB are produced by a sub-agent with a word cap, to avoid inflating the working context.
 - **Proactive resume checkpoints** — write a checkpoint before truncating context; split sessions on mode changes (build → eval → fix).
 
@@ -225,6 +226,7 @@ status                    Show system status
 checkpoint "<note>"       Write a timestamped checkpoint (+ Link entry)
 activity [n]              Show last n Link ledger events (default 20)
 build --target=<cli>      Trainman: generate native artifacts for a CLI
+install --target=<cli>    Trainman: deploy generated artifacts into the CLI's discovery path
 hooks <name> [json]       Run a Seraph hook by name (pre_activation_check…)
 help                      Show usage
 ```

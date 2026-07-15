@@ -13,6 +13,10 @@ render:
   master: skill              # → .agents/skills/<name>/SKILL.md
   specialist: subagent       # → .agents/agents/<name>/AGENT.md
 model_policy:
-  cheap: swe-1-5
-  reasoning: swe-1-5
-  auto: swe-1-5
+  # All three tiers pinned to the same model today because it is the one
+  # currently free on the Devin plan (SWE 1.7). Once model choice matters
+  # more than cost, split these independently — e.g. reasoning: opus,
+  # cheap: swe-1-7 — then `bin/matrix build && bin/matrix install --target=devin`.
+  cheap: swe-1-7
+  reasoning: swe-1-7
+  auto: swe-1-7

@@ -1,13 +1,13 @@
-# Matrix — Personal Intelligence Engine (CLI-agnostic)
+# Matrix — Personal Intelligence Engine (built for Devin CLI)
 
-Matrix is your personal intelligence layer: one root repo holds the brain, projects live outside and are pulled on demand, and a `_brain` symlink bridges the active project to the intelligence. It is **agnostic to the agentic CLI** — the same brain runs under Devin, Claude Code, Cursor, Codex, or anything next, changing only a thin adapter.
+Matrix is your personal intelligence layer: one root repo holds the brain, projects live outside and are pulled on demand, and a `_brain` symlink bridges the active project to the intelligence. The brain is written to be **CLI-agnostic in design** — it speaks only in capabilities, never a specific CLI's tools — but **today it is built, installed, and maintained for Devin CLI only**. Adding another CLI later would cost one small adapter, not a brain rewrite.
 
 > Themed after the Matrix trilogy. Every component is named after the character or place whose function it mirrors. See [`AGENTS.md`](AGENTS.md) for the canonical contract.
 
 ## The three layers
 
 ```text
-adapters/        LAYER 3 · "The Trainman"  — transit between CLI worlds (thin, replaceable)
+adapters/        LAYER 3 · "The Trainman"  — Devin binding today (thin, replaceable if another CLI is added)
 brain/           LAYER 2 · "Zion"          — intelligence core in agnostic markdown
 bin/ + hooks/    LAYER 1                    — orchestration, state, portable enforcement
 ```
@@ -53,17 +53,20 @@ matrix/
 │   ├── pre_activation_check.py
 │   ├── validate_phase_close.py
 │   └── post_run_audit.py
-├── adapters/                  # Trainman — Layer 3 (devin/, claude/, ...)
+├── adapters/                  # Trainman — Layer 3 (devin/ only, for now)
 ├── brain/                     # Layer 2 — the intelligence core
-│   ├── config.yaml
+│   ├── config.yaml            # GITIGNORED: per-machine (user, language, timezone)
 │   ├── agents/                # neo, oracle, morpheus, architect, trinity, smith, keymaker
 │   ├── workflows/             # spec → develop → test → eval
 │   ├── data/                  # lessons.md, code-quality-review-lens.md, capability-map.md
 │   ├── subsystems/            # the fleet (federated ships)
-│   └── state/                 # workspace.yaml, activity.log, checkpoints.jsonl, ...
+│   ├── state/                 # GITIGNORED: workspace.yaml, activity.log, checkpoints.jsonl, ...
+│   └── output/                # GITIGNORED: Matrix-workspace-mode scratch (see AGENTS.md §1)
 ├── docs/SYSTEM_TRUTH.md       # The Source (generated/validated)
 └── clients/                   # GITIGNORED: pulled project repos
 ```
+
+Work artifacts for a **bound project** are written to that project's own `matrix-output/` directory (sibling to its `_brain` symlink) — never inside this repo. See `AGENTS.md` §1.
 
 ## CLI commands
 
@@ -80,6 +83,7 @@ checkpoint "<note>"       Write a checkpoint (+ Link entry)
 activity [n]              Show last n Link events
 hooks <name> [json]       Run a Seraph hook
 build --target=<cli>      Trainman: generate native CLI artifacts
+install --target=<cli>    Trainman: deploy generated artifacts into the CLI's discovery path
 help                      Usage
 ```
 
@@ -95,9 +99,10 @@ help                      Usage
 ./bin/matrix work otherproject
 ./bin/matrix workspace
 
-# Generate native artifacts for your CLI and invoke the master
-./bin/matrix build --target=claude
-# (then invoke Neo via the host CLI; the user always talks to Neo first)
+# Generate native artifacts and deploy them into Devin's global discovery path
+./bin/matrix build   --target=devin
+./bin/matrix install --target=devin
+# (then invoke Neo via `/neo` in Devin CLI, from any project; the user always talks to Neo first)
 ```
 
 ## Principles

@@ -11,9 +11,9 @@ Produces a reviewed plan before any code is written. Agnostic body — each adap
 
 ## Steps
 
-1. **Oracle (research)** — gather what exists and what is true about the goal. Output: `_brain/output/research/<goal>.md` with sources and confidence labels.
-2. **Morpheus (plan)** — turn the goal into an ordered, minimal scope: steps, owners, done-criteria. Output: `_brain/output/plans/<goal>.md`.
-3. **Architect (review)** — review Morpheus's plan against existing systems; name trade-offs; define interfaces and boundaries Trinity will build to. Output: `_brain/output/architecture/<goal>.md`.
+1. **Oracle (research)** — gather what exists and what is true about the goal. Output: `matrix-output/research/<goal>.md` with sources and confidence labels.
+2. **Morpheus (plan)** — turn the goal into an ordered, minimal scope: steps, owners, done-criteria. Output: `matrix-output/plans/<goal>.md`.
+3. **Architect (review)** — review Morpheus's plan against existing systems; name trade-offs; define interfaces and boundaries Trinity will build to. Output: `matrix-output/architecture/<goal>.md`.
 
 ## Close
 

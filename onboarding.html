@@ -117,8 +117,8 @@
 <body>
 
 <div class="hero">
-  <h1>Matrix <span>Personal Intelligence Engine &mdash; CLI-agnostic</span></h1>
-  <p>Un cerebro que vive en un repo, se conecta a tus proyectos por symlink, y corre igual bajo Devin, Claude Code, Cursor o cualquier CLI futuro. Solo cambia el adaptador.</p>
+  <h1>Matrix <span>Personal Intelligence Engine &mdash; construido para Devin CLI</span></h1>
+  <p>Un cerebro que vive en un repo y se conecta a tus proyectos por symlink. Esta escrito para ser CLI-agnostico (habla en capacidades, nunca en herramientas de un CLI puntual), pero hoy el unico adaptador implementado y mantenido es Devin.</p>
 </div>
 
 <h2>Tabla de contenidos</h2>
@@ -154,9 +154,10 @@
 <h2 id="capas">2. Las tres capas</h2>
 <pre><code>
 LAYER 3 &mdash; Adapters &middot; "The Trainman"
-  adapters/devin/   adapters/claude/   adapters/&lt;otro&gt;/
+  adapters/devin/   (adapters/&lt;otro&gt;/ mas adelante, ninguno mas existe hoy)
   Transito entre mundos. Mapea capacidades a herramientas nativas.
-  Genera artefactos nativos via: bin/matrix build --target=&lt;cli&gt;
+  Genera artefactos: bin/matrix build --target=devin
+  Los despliega globalmente: bin/matrix install --target=devin
 
 LAYER 2 &mdash; Intelligence core &middot; "Zion" (agnostic markdown)
   brain/agents/      &rarr; Neo (master) + especialistas
@@ -259,7 +260,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 
 <!-- ========== 5 ========== -->
 <h2 id="cli">5. CLI completo &mdash; <code>bin/matrix</code></h2>
-<p>El CLI es Capa 1: gestiona estado, nunca invoca agentes. Los agentes se invocan via el CLI agéntico (Devin, Claude, etc.).</p>
+<p>El CLI es Capa 1: gestiona estado, nunca invoca agentes. Los agentes se invocan via Devin CLI (skill <code>/neo</code> + subagentes).</p>
 
 <h3>Proyectos</h3>
 <table>
@@ -290,7 +291,8 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <table>
   <tr><th>Comando</th><th>Que hace</th></tr>
   <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph (<code>pre_activation_check</code>, <code>validate_phase_close</code>, <code>post_run_audit</code>, <code>the_source</code>)</td></tr>
-  <tr><td><code>matrix build --target=&lt;cli&gt;</code></td><td>Trainman: genera artefactos nativos para un CLI (devin, claude)</td></tr>
+  <tr><td><code>matrix build --target=&lt;cli&gt;</code></td><td>Trainman: genera artefactos nativos para un CLI (hoy solo <code>devin</code>)</td></tr>
+  <tr><td><code>matrix install --target=&lt;cli&gt;</code></td><td>Trainman: despliega los artefactos generados al discovery path del CLI (global)</td></tr>
   <tr><td><code>matrix help</code></td><td>Muestra la ayuda completa</td></tr>
 </table>
 
@@ -310,11 +312,12 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 ./bin/matrix work otro-proyecto
 ./bin/matrix workspace
 
-# 5. Generar artefactos nativos para tu CLI
-./bin/matrix build --target=claude   # o devin
+# 5. Generar artefactos nativos y desplegarlos globalmente (Devin)
+./bin/matrix build   --target=devin
+./bin/matrix install --target=devin
 
-# 6. Invocar a Neo via tu CLI agentico
-#    (depende del CLI: /neo, skill invoke neo, etc.)
+# 6. Invocar a Neo desde Devin CLI, en cualquier proyecto
+#    /neo
 
 # 7. Escribir un checkpoint cuando algo importa
 ./bin/matrix checkpoint "Completado el fix del login"
@@ -397,7 +400,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <p>&laquo;Carga exactamente lo que necesitas, nada mas.&raquo; Codificado como reglas operativas y expuesto como capacidades abstractas.</p>
 <ul>
   <li><strong><code>code-nav</code></strong> &mdash; navegacion/edit a nivel de simbolo (Serena o equivalente) en vez de leer archivos enteros. 5-10x mas barato.</li>
-  <li><strong><code>model_policy</code></strong> &mdash; <code>cheap</code> para trabajo mecanico, <code>reasoning</code> para problemas duros, <code>auto</code> para mixto. Declarado por agente; el adaptador mapea a modelos concretos.</li>
+  <li><strong><code>model_policy</code></strong> &mdash; <code>cheap</code> para trabajo mecanico, <code>reasoning</code> para problemas duros, <code>auto</code> para mixto. Declarado por agente; <code>adapters/devin/adapter.yaml</code> mapea cada tier a un modelo concreto y el Trainman lo escribe como frontmatter <code>model:</code> en cada skill/subagent generado. Hoy los tres tiers apuntan al mismo modelo gratuito (<code>swe-1-7</code>).</li>
   <li><strong>Delegacion</strong> &mdash; artefactos &gt;10 KB van a un sub-agente con word cap, para no inflar el contexto.</li>
   <li><strong>Checkpoints de resume</strong> &mdash; escribir checkpoint antes de truncar contexto; split de sesion en cambios de modo (build &rarr; eval &rarr; fix).</li>
 </ul>
@@ -484,12 +487,10 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 │   ├── post_run_audit.py
 │   └── the_source.py
 ├── adapters/                        # Trainman &mdash; Layer 3
-│   ├── _build.py                    # renderer compartido
-│   ├── claude/                      # adapter.yaml + build.sh
-│   └── devin/                       # adapter.yaml + build.sh
+│   ├── _build.py                    # renderer (hoy: solo devin)
+│   └── devin/                       # adapter.yaml + build.sh + install.sh
 ├── brain/                           # Layer 2 &mdash; core de inteligencia
-│   ├── config.yaml                  # configuracion del usuario
-│   ├── config/projects/             # configs de proyecto (chronicle, pas)
+│   ├── config.yaml                  # GITIGNORED: configuracion del usuario
 │   ├── agents/                      # neo, oracle, morpheus, architect,
 │   │                                # trinity, smith, keymaker, lock
 │   ├── workflows/                   # spec, develop, test, eval
@@ -499,24 +500,28 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 │   ├── subsystems/logos/            # nave Logos (federation)
 │   │   ├── AGENTS.md
 │   │   └── agents/niobe.md
-│   └── state/                       # workspace.yaml, activity.log,
-│                                    # checkpoints.jsonl
+│   ├── state/                       # GITIGNORED: workspace.yaml, activity.log,
+│   │                                # checkpoints.jsonl
+│   └── output/                      # GITIGNORED: scratch de Matrix-workspace-mode
 ├── modules/hardline/                # The Hardline (AFK, opt-in)
 ├── docs/SYSTEM_TRUTH.md             # The Source (generado)
 └── clients/                         # GITIGNORED: repos de proyectos
+
+# Los artefactos de trabajo de un PROYECTO (reports, planes, etc.) van a
+# &lt;proyecto&gt;/matrix-output/, nunca aca &mdash; ver AGENTS.md &sect;1.
 </code></pre>
 
 <!-- ========== 17 ========== -->
 <h2 id="trainman">17. Adaptar a otro CLI (The Trainman)</h2>
-<p>Costo total de soportar un CLI nuevo: ~1 renderer + 1 yaml. El cerebro no cambia.</p>
+<p>Hoy solo existe el adaptador de Devin. El cerebro esta escrito para que agregar otro sea barato (~1 renderer + 1 yaml + 1 installer) y no requiera tocarlo, pero nadie mas esta implementado en este momento.</p>
 <ol>
-  <li>Crear <code>adapters/&lt;cli&gt;/adapter.yaml</code> con el mapa de capacidades.</li>
-  <li>Agregar una funcion <code>render_&lt;cli&gt;</code> en <code>adapters/_build.py</code>.</li>
-  <li>Crear <code>adapters/&lt;cli&gt;/build.sh</code> (una linea).</li>
-  <li><code>bin/matrix build --target=&lt;cli&gt;</code></li>
+  <li>Crear <code>adapters/&lt;cli&gt;/adapter.yaml</code> con el mapa de capacidades + <code>model_policy</code>.</li>
+  <li>Agregar una funcion <code>render_&lt;cli&gt;</code> en <code>adapters/_build.py</code> y registrarla en <code>RENDERERS</code>.</li>
+  <li>Crear <code>adapters/&lt;cli&gt;/build.sh</code> (una linea) y <code>adapters/&lt;cli&gt;/install.sh</code>.</li>
+  <li><code>bin/matrix build --target=&lt;cli&gt;</code> y despues <code>bin/matrix install --target=&lt;cli&gt;</code>.</li>
 </ol>
-<pre><code># Ejemplo: adapter.yaml para Claude Code
-target: claude
+<pre><code># Ejemplo ilustrativo (hipotetico, no implementado): adapter.yaml para otro CLI
+target: otro-cli
 capabilities:
   read: Read
   edit: [Edit, MultiEdit]
@@ -529,8 +534,9 @@ render:
   master: command
   specialist: command
 model_policy:
-  cheap: claude-haiku
-  reasoning: claude-sonnet
+  cheap: modelo-barato
+  reasoning: modelo-fuerte
+  auto: modelo-barato
 </code></pre>
 
 <!-- ========== 18 ========== -->
@@ -593,7 +599,7 @@ model_policy:
 </code></pre>
 
 <h4>Quiero agregar un nuevo CLI</h4>
-<p>Ver seccion <a href="#trainman">17. Adaptar a otro CLI</a>. Costo: ~1 yaml + 1 funcion render.</p>
+<p>Ver seccion <a href="#trainman">17. Adaptar a otro CLI</a>. Costo: ~1 yaml + 1 funcion render + 1 installer. Ninguno esta implementado hoy salvo Devin.</p>
 
 <h4>Quiero agregar un especialista nuevo</h4>
 <div class="warn">
@@ -607,9 +613,9 @@ model_policy:
 <p>En <code>brain/data/lessons/&lt;proyecto&gt;.md</code>. Copiar <code>_template.md</code> como punto de partida.</p>
 
 <footer>
-  Matrix v2.0 &mdash; Personal Intelligence Engine (CLI-agnostic)<br>
+  Matrix v2.0 &mdash; Personal Intelligence Engine (construido para Devin CLI)<br>
   Tematica de la trilogia de Matrix. Cada nombre es mnemonico, no decorativo.<br>
-  Generado: junio 2026.
+  Actualizado: julio 2026.
 </footer>
 
 </body>

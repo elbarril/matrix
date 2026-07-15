@@ -6,10 +6,19 @@ clients/
 # Brain symlink (created in active projects)
 _brain
 
-# Sensitive data
-brain/state/checkpoints/*
-brain/state/sessions/
-brain/state/*.yaml
+# Runtime state (Layer 1) — per-machine, changes every session, never committed.
+# Managed exclusively by bin/matrix; agents never hand-edit these.
+brain/state/*
+!brain/state/.gitkeep
+
+# Work artifacts produced in Matrix-workspace-mode (working on Matrix itself).
+# Project-bound work artifacts live in the PROJECT's own `matrix-output/`
+# directory (sibling to its `_brain` symlink), never here — see
+# brain/workflows/spec.md.
+brain/output/*
+!brain/output/.gitkeep
+
+# Sensitive / per-machine config
 brain/config.yaml
 .context.yaml
 
