@@ -49,17 +49,17 @@ Global install is deliberate: Neo must be reachable from any repo — inside Mat
 
 ## Model policy
 
-Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, resolved at build time from the agent's `model_policy` tier (`cheap`/`reasoning`/`auto`, declared in `brain/agents/<name>.md`) through `adapters/devin/adapter.yaml`'s `model_policy` map. Verified live against `~/.local/share/devin/cli/sessions.db` (the `model` column records what the CLI actually resolved a `--model` flag to) on 2026-07-15:
+Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, resolved at build time from the agent's `model_policy` tier (`cheap`/`reasoning`/`auto`, declared in `brain/agents/<name>.md`) through `adapters/devin/adapter.yaml`'s `model_policy` map. Re-derived 2026-07-17 from `devin-master-documentation`'s model pages (`docs/22-devin-cli-models-overview.md`, `docs/26-cognition-swe-models.md`), which mirror Devin CLI's own model-selection guidance: "multi-file refactors, architecture changes, deep reasoning" → `opus`/`gpt`; "quick edits, bug fixes, cost-sensitive work" → `swe` (fast); mixed workloads → `adaptive` (Cognition's per-task router):
 
 | Tier | Model | Used by | Why |
 |---|---|---|---|
 | `cheap` | `swe-1-7-lightning` | Keymaker, Lock | Cerebras-backed fast variant — same intelligence, lower latency, for mechanical/plumbing work |
-| `reasoning` | `swe-1-7` | Neo, Architect, Morpheus, Oracle, Smith | Full model, for planning/architecture/research/evaluation |
-| `auto` | `swe-1-7` | Trinity | Mixed work; defaults to the full model |
+| `reasoning` | `opus` (Claude Opus 4.8) | Architect, Morpheus, Oracle, Smith | Devin CLI's own guidance names `opus`/`gpt` for deep reasoning/architecture/research/evaluation; SWE-1.7 trails Opus by a few points on FrontierCode/Terminal-Bench/SWE-Bench Multilingual per Cognition's own comparison table. Real cost: $5/$25 per MTok, 1M context. |
+| `auto` | `adaptive` | Neo, Trinity | Mixed work (routing + implementation spans trivial to complex); Cognition's own per-task router picks cheap/fast vs. capable per request instead of pinning one model. Intro rate $0.50/$2.00 per MTok at time of writing — re-check after the intro window. |
 
 **Both `swe-1.7` and `swe-1-7` are accepted and normalize to the same canonical id** (confirmed via the sessions database — do not assume dash vs. dot matters). `swe-1-7-lightning` is a genuinely distinct, faster model, not just an alias.
 
-**Time-bound: SWE-1.7 is a free preview only through 2026-08-08.** After that date it may stop being free or may be replaced by a newer release — re-verify this table (repeat the `--model X -p "OK"` + sessions.db check, or just watch `/model`'s selector) and update the map if needed. This is exactly the kind of drift this file exists to catch.
+**Time-bound: SWE-1.7 is a free preview only through 2026-08-08; Adaptive's intro pricing window ended 2026-07-07 (may already be standard rate).** Re-verify this table periodically (repeat the `--model X -p "OK"` + sessions.db check, or just watch `/model`'s selector) and update the map if needed. This is exactly the kind of drift this file exists to catch.
 
 To move a tier onto a different model, edit the map in `adapters/devin/adapter.yaml` and rerun:
 

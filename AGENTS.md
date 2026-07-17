@@ -165,7 +165,11 @@ brain/state/
 └── sessions/                 # active session pings
 ```
 
-- **Multi-project.** `workspace.yaml` holds a *set* of warm projects. A session binds to one via `--project <name>` (or the `_brain` symlink / `$MATRIX_PROJECT`). `.context.yaml` keeps the single "primary" active project for convenience and backward compatibility.
+- **Three states, two files.**
+  - `workspace.yaml` holds the *warm* set: projects of interest, with their resolved paths. Warm does not imply a live `_brain` symlink is present.
+  - *Bound* is a filesystem/runtime fact, not a separate state flag: a project is bound when its path contains a valid `_brain` symlink to this brain **and** an `AGENTS.local.md` block managed by `bin/matrix`. `select` always warms the project first, so every bound project is also warm (`bound ⊆ warm`).
+  - `.context.yaml` keeps the single `primary` (default) project. It is used only when a session does not resolve a project through `--project`, `$MATRIX_PROJECT`, or a `_brain` symlink in the current directory. It is no longer exclusive: several projects may be bound at the same time.
+- **Session resolution.** A session binds to one project at a time via `--project <name>` (or the `_brain` symlink in cwd / `$MATRIX_PROJECT`). If none of those resolve, the session falls back to the `primary` recorded in `.context.yaml`.
 - **Root resolution (robust).** Scripts resolve `MATRIX_ROOT` by: (1) following a `_brain` symlink up one level if present; else (2) walking up from the script location until `brain/` + `AGENTS.md` are found. Works from any subdirectory or active project.
 - **Ledger (Link).** Append-only events: `session:start`, `route`, `decision`, `handoff`, `phase:close`. Both the core and any federated ship read and write it. Shared state without coupling.
 - **Never committed.** Everything under `brain/state/` and `brain/output/` is gitignored — it is per-machine, changes every session, and would otherwise turn every checkpoint into a noisy commit. Work *deliverables* for a bound project belong in that project's own `matrix-output/` (see §1), not here.
@@ -218,12 +222,13 @@ A subsystem is a **ship**: its own master, its own roster, its own `AGENTS.md`, 
 ```text
 list                      List all registered projects
 add <name> [path]         Register a project (path optional → current dir)
-select <name>             Set primary active project + create _brain symlink
-deselect                  Clear primary active project + remove symlink
-work <name>               Warm a project into the active SET (multi-project)
-unwork <name>             Remove a project from the active set
-workspace                 Show the warm project set
-status                    Show system status
+select <name>             Bind a project: create its _brain symlink + AGENTS.local.md block and make it the primary/default (does not unbind other bound projects)
+deselect [name]           Unbind the named project (or the primary if no name is given); other bound projects are untouched
+work <name>               Warm a project into the active SET (multi-project, does not unbind an already-bound project)
+unwork <name>             Remove a project from the active set; if it is bound, unbind it first
+workspace                 Show the warm project set, marking bound and primary projects
+bindings                  List bound projects, verifying the real state of their _brain symlink and AGENTS.local.md block
+status                    Show primary, warm, bound, and registered project counts
 checkpoint "<note>"       Write a timestamped checkpoint (+ Link entry)
 activity [n]              Show last n Link ledger events (default 20)
 build --target=<cli>      Trainman: generate native artifacts for a CLI
@@ -246,7 +251,7 @@ help                      Show usage
 
 - Not a database. State is files.
 - Not a web app. The CLI may emit static, self-contained, read-only HTML (a generated document). A UI that writes state or needs a server is not allowed.
-- Not multi-user. One user, one session per binding.
+- Not multi-user. One user, one session per binding, but a single user may keep several projects bound simultaneously (one `_brain` symlink + `AGENTS.local.md` block per project). The `primary` project in `.context.yaml` is the fallback for sessions that do not resolve a project explicitly.
 - Not CLI-coupled. If a feature only works under one CLI, it belongs in an adapter, not in the brain.
 
 ---

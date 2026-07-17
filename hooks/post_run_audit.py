@@ -8,8 +8,15 @@ Input JSON:
   {
     "agent": "neo",
     "steps": ["load_config","resolve_context","review_state",
-              "pre_activation_check","route","validate_phase_close","checkpoint"]
+              "pre_activation_check","route","validate_phase_close","checkpoint"],
+    "required": ["load_config","resolve_context","pre_activation_check"]  # optional override
   }
+
+An optional "required" list overrides the default REQUIRED_STEPS. This lets a
+caller that can only observe a subset of the real activation (e.g. a
+hook-derived audit that never sees "load_config"/"resolve_context" because
+those aren't hook-observable events) audit against a realistic bar instead of
+always failing. The default (LLM self-report via bin/matrix) is unchanged.
 
 Writes brain/state/validation-report.json. Exit 0 if compliant, 1 if not.
 """
@@ -20,7 +27,7 @@ import os
 
 from _common import emit, read_input, resolve_root
 
-# The steps an enforced activation must contain.
+# The steps an enforced activation must contain by default (LLM self-report).
 REQUIRED_STEPS = [
     "load_config",
     "resolve_context",
@@ -33,8 +40,9 @@ def main():
     root = resolve_root()
     steps = [str(s) for s in (data.get("steps") or [])]
     agent = data.get("agent")
+    required = [str(s) for s in data.get("required")] if data.get("required") else REQUIRED_STEPS
 
-    missing = [s for s in REQUIRED_STEPS if s not in steps]
+    missing = [s for s in required if s not in steps]
     bypass = bool(steps) and missing  # ran something but skipped required steps
     compliant = not missing
 
@@ -44,7 +52,7 @@ def main():
         "agent": agent,
         "timestamp": datetime.datetime.now().astimezone().isoformat(),
         "steps_seen": steps,
-        "required": REQUIRED_STEPS,
+        "required": required,
         "missing": missing,
         "bypass_suspected": bool(bypass),
         "compliant": compliant,

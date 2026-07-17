@@ -1,8 +1,68 @@
 # Matrix — Personal Intelligence Engine (built for Devin CLI)
 
-Matrix is your personal intelligence layer: one root repo holds the brain, projects live outside and are pulled on demand, and a `_brain` symlink bridges the active project to the intelligence. The brain is written to be **CLI-agnostic in design** — it speaks only in capabilities, never a specific CLI's tools — but **today it is built, installed, and maintained for Devin CLI only**. Adding another CLI later would cost one small adapter, not a brain rewrite.
+Matrix is your personal intelligence layer: one root repo holds the brain, projects live outside and are pulled on demand, and a `_brain` symlink bridges an active project to the intelligence. The brain is written to be **CLI-agnostic in design** — it speaks only in capabilities, never a specific CLI's tools — but **today it is built, installed, and maintained for Devin CLI only**. Adding another CLI later would cost one small adapter, not a brain rewrite.
 
 > Themed after the Matrix trilogy. Every component is named after the character or place whose function it mirrors. See [`AGENTS.md`](AGENTS.md) for the canonical contract.
+
+---
+
+## Empezá acá si no sabés mucho de agentes IA
+
+Esta sección explica todo el sistema en criollo, sin asumir que sabés cómo trabajan los agentes de IA. Si ya lo tenés claro, saltá a [El problema que resuelve Matrix](#el-problema-que-resuelve-matrix).
+
+### ¿Qué es un "agente de IA" en este contexto?
+
+Un agente es un asistente de IA (en este caso, Devin CLI) al que le das una tarea en lenguaje natural y que puede leer archivos, escribir código, correr comandos de terminal, y tomar decisiones sobre qué hacer paso a paso, sin que vos le digas cada click. No es un chatbot que solo contesta preguntas: puede efectivamente modificar tu proyecto.
+
+El problema de un agente "pelado" (sin nada de esto) es que cada sesión nueva no sabe nada de las anteriores, no sabe cómo querés que trabaje, no sabe tus reglas, y hay que explicarle todo de cero cada vez. Matrix existe para que eso no pase.
+
+### ¿Qué es Matrix, en una frase?
+
+Matrix es un cerebro persistente y compartido que le da a Devin CLI memoria, reglas de comportamiento, y un equipo de "especialistas" con roles fijos — todo guardado en archivos de texto plano en este repositorio, para que cualquier sesión de Devin, en cualquiera de tus proyectos, tenga el mismo criterio y el mismo historial.
+
+### ¿Cómo se activa esto en la práctica? (la magia del `_brain`)
+
+1. Este repo (`matrix/`) tiene el "cerebro": reglas, agentes, memoria.
+2. Cada proyecto tuyo (otro repo, en otra carpeta) puede **enlazarse** a este cerebro corriendo `bin/matrix select <nombre>`. Eso crea dos cosas dentro del proyecto:
+   - un **symlink** llamado `_brain` que apunta a esta carpeta `matrix/` (así el proyecto puede "ver" el cerebro sin copiarlo);
+   - un archivo `AGENTS.local.md` con un bloque especial que le dice a Devin: *"antes de responder cualquier cosa en este proyecto, leé primero el contrato de Matrix y el agente maestro Neo"*.
+3. Devin CLI lee automáticamente `AGENTS.local.md` al arrancar en esa carpeta. Por eso la activación de Neo **no depende de que te acuerdes de invocarlo**: es automática, mecánica, no probabilística.
+4. Una vez activo, siempre hablás con **Neo** (el agente maestro). Neo nunca te hace elegir un especialista de un menú: interpreta lo que pedís y, si hace falta, delega en el especialista correcto por su cuenta.
+5. El proyecto en sí **nunca se ensucia** con la inteligencia: solo tiene un symlink y un bloque de texto en un archivo que está en `.gitignore`. Si algún día "desconectás" el proyecto (`matrix deselect`), esos dos elementos se limpian solos.
+
+### ¿Quién hace qué? (el equipo, en criollo)
+
+No hay un solo "modelo" haciendo todo. Matrix reparte el trabajo entre roles con un propósito claro, para que cada tarea la resuelva quien mejor la sabe hacer:
+
+| Quién | Qué hace, en criollo |
+|---|---|
+| **Neo** | Es con quien vos hablás siempre. Entiende el pedido y decide si lo resuelve él mismo (algo chico) o si llama a un especialista (trabajo real). |
+| **The Oracle** | El investigador. Lo llamás (indirectamente, vía Neo) cuando hace falta averiguar algo, comparar opciones, o confirmar hechos antes de actuar. |
+| **Morpheus** | El planificador. Convierte un pedido ambiguo ("quiero que el sistema soporte X") en una lista ordenada de pasos concretos. |
+| **The Architect** | El diseñador. Revisa el plan de Morpheus y decide cómo encaja técnicamente antes de que se escriba una sola línea de código. |
+| **Trinity** | El que construye. Implementa el código real, el que efectivamente cambia archivos. |
+| **Agent Smith** | El evaluador. Prueba lo que construyó Trinity, busca fallas reales (no en la teoría, corriendo comandos de verdad), y bloquea el cierre si algo no anda. |
+| **The Keymaker** | Git/operaciones. Solo entra en juego si el pedido es explícitamente sobre ramas, merges, o control de versiones. |
+
+Un pedido de "arreglame un bug" típicamente pasa por Smith (encuentra la causa) → Trinity (arregla) → Smith (confirma que ahora sí funciona). Un pedido de "quiero una funcionalidad nueva" típicamente pasa por Morpheus (plan) → Architect (revisión) → Trinity (construye) → Smith (gate final). **Vos nunca hablás con ellos directamente** — es Neo quien los invoca como sub-agentes y te cuenta el resultado.
+
+### ¿Por qué tantas capas / nombres raros?
+
+Porque así el sistema no queda atado a Devin CLI para siempre. Las reglas y los agentes (`brain/`) están escritos en un lenguaje neutral — nunca dicen "usá la herramienta X de tal CLI", dicen "necesito la capacidad de leer archivos". Un traductor delgado (**el adaptador de Devin**, en `adapters/devin/`) es lo único que sabe que hoy el CLI es Devin. Si el día de mañana usás otro CLI, se cambia ese traductor (chico) y el cerebro entero se reutiliza tal cual.
+
+### ¿Qué es "el estado" y por qué no se sube a git?
+
+Matrix necesita recordar cosas entre sesiones: qué proyecto es tu foco actual, qué proyectos tenés "calientes", un historial de checkpoints, un log de eventos. Todo eso son **archivos de texto** en `brain/state/` — nunca una base de datos. Cambian todo el tiempo y son específicos de tu máquina, así que están en `.gitignore`: no se commitean, no ensucian el historial del repo.
+
+### ¿Qué es un "checkpoint"?
+
+Es una nota con fecha que Neo (o vos) guarda cuando algo importante pasó ("implementé X, quedó pendiente Y"). Sirve para que la próxima sesión — quizás mañana, quizás en otra terminal — pueda leer qué se hizo sin que tengas que volver a explicar todo. Se escribe con `bin/matrix checkpoint "nota"`, nunca a mano.
+
+---
+
+## El problema que resuelve Matrix
+
+Sin Matrix, cada sesión de Devin CLI en cada proyecto arranca en cero: sin memoria, sin reglas de comportamiento consistentes, sin división de roles. Matrix centraliza esa inteligencia en un solo lugar y la conecta a cualquier proyecto sin copiar nada dentro de él.
 
 ## The three layers
 
@@ -46,7 +106,7 @@ matrix/
 ├── AGENTS.md                  # canonical contract (Layer 2)
 ├── README.md                  # this file
 ├── DEVIN.md                   # Devin adapter notes
-├── .context.yaml              # primary active project
+├── .context.yaml              # primary/default project (fallback, not exclusive — see "Multi-project")
 ├── .registry.json             # all known projects
 ├── bin/matrix                 # CLI orchestrator (Layer 1)
 ├── hooks/                     # Seraph — portable enforcement (python)
@@ -73,12 +133,21 @@ Work artifacts for a **bound project** are written to that project's own `matrix
 ```text
 list                      List registered projects
 add <name> [path]         Register a project
-select <name>             Set primary project + create _brain symlink
-deselect                  Clear primary project
-work <name>               Warm a project into the active set (multi-project)
-unwork <name>             Remove a project from the active set
-workspace                 Show the warm set
-status                    Show system status
+select <name>             Bind a project: create its _brain symlink + AGENTS.local.md
+                           block and make it the primary/default. Does NOT unbind
+                           other already-bound projects (see "Multi-project" below).
+deselect [name]           Unbind the named project (or the current primary if no
+                           name is given). Other bound projects are untouched.
+work <name>               Warm a project into the active set (bookmark; does not
+                           create the _brain symlink and does not unbind anything)
+unwork <name>             Remove a project from the warm set; if it was bound,
+                           unbind it first
+workspace                 Show the warm set, marking which entries are [bound]
+bindings                  List every registered project, verifying in real time
+                           whether its _brain symlink + AGENTS.local.md block
+                           actually exist on disk right now
+status                    Show primary/default, bound count+names, warm count,
+                           registered count, recent checkpoints and Link events
 checkpoint "<note>"       Write a checkpoint (+ Link entry)
 activity [n]              Show last n Link events
 hooks <name> [json]       Run a Seraph hook
@@ -87,6 +156,43 @@ install --target=<cli>    Trainman: deploy generated artifacts into the CLI's di
 help                      Usage
 ```
 
+## Multi-project: varios proyectos "vivos" a la vez
+
+Podés tener **más de un proyecto bindeado (`bound`) al mismo tiempo** — cada uno con su propio symlink `_brain` y su propio bloque en `AGENTS.local.md`, activando a Neo automáticamente sin que se molesten entre sí. Esto es útil si trabajás en paralelo (por ejemplo, dos terminales, dos proyectos distintos, cada uno con su sesión de Devin CLI).
+
+Hay tres conceptos distintos, y es importante no confundirlos:
+
+- **`bound` (bindeado)** — un hecho del *filesystem*, no un flag guardado en ningún archivo: un proyecto está bindeado si y solo si tiene un symlink `_brain` válido apuntando a este cerebro **y** un bloque `AGENTS.local.md` vigente. `matrix bindings` siempre chequea esto en vivo, nunca confía en un caché. Pueden estar bindeados varios proyectos a la vez.
+- **`warm` (caliente)** — un proyecto "de interés" guardado en `brain/state/workspace.yaml`. Es solo una lista de bookmarks; estar en la lista NO implica tener el symlink creado. Todo proyecto bindeado está automáticamente en la lista warm, pero no al revés.
+- **`primary`/default** — el único proyecto guardado en `.context.yaml`. Ya **no es exclusivo**: es simplemente el proyecto que se usa como *fallback* cuando una sesión no puede resolver su proyecto de otra forma (sin `--project`, sin `$MATRIX_PROJECT`, y sin estar parado dentro de una carpeta con `_brain`).
+
+**¿Cómo resuelve Neo qué proyecto es "el suyo" en una sesión dada?** Con esta prioridad: `--project <nombre>` (si lo pasaste explícito) > variable de entorno `$MATRIX_PROJECT` > el symlink `_brain` de la carpeta donde estás parado (`cwd`) > el `primary` de `.context.yaml` como último recurso. En la práctica esto significa: **si abrís una terminal dentro de un proyecto bindeado, esa sesión ya sabe cuál es su proyecto sin importar qué otro proyecto hayas seleccionado como "primary" en otro lado.**
+
+Ejemplo de uso real con dos proyectos a la vez:
+
+```bash
+./bin/matrix add sitio-web /home/vos/proyectos/sitio-web
+./bin/matrix add api-backend /home/vos/proyectos/api-backend
+
+./bin/matrix select sitio-web      # bindea sitio-web (symlink + AGENTS.local.md)
+./bin/matrix select api-backend    # bindea api-backend SIN desbindear a sitio-web
+
+./bin/matrix bindings
+#  ✓ sitio-web -> /home/vos/proyectos/sitio-web [bound]
+#  ✓ api-backend -> /home/vos/proyectos/api-backend [bound]
+
+./bin/matrix status
+# Primary project: api-backend       (el último select-eado, es el default)
+# Bound: 2 project(s) (sitio-web api-backend)
+# Warm set: 2 project(s)
+
+./bin/matrix deselect sitio-web    # desbindea SOLO sitio-web; api-backend sigue intacto
+```
+
+Ahora podés abrir Devin CLI dentro de `sitio-web/` y dentro de `api-backend/` (en dos terminales distintas, o en momentos distintos) y ambas sesiones activan a Neo automáticamente, cada una con el contexto de su propio proyecto — sin que una sesión pise el binding de la otra.
+
+**Seguridad de estado concurrente:** `bin/matrix` toma un lock global (`flock`) al arrancar cualquier comando, así que si corrés dos comandos `bin/matrix` al mismo tiempo desde sesiones distintas no se corrompen los archivos de estado compartidos (`workspace.yaml`, `.registry.json`, `.context.yaml`, el ledger). Si `flock` no está disponible en tu sistema (por ejemplo, macOS sin GNU coreutils), el comando avisa y sigue sin lock — no instala nada nuevo, pero perdés esa protección puntual.
+
 ## Quick start
 
 ```bash
@@ -94,7 +200,12 @@ help                      Usage
 ./bin/matrix add myproject /path/to/project
 ./bin/matrix select myproject
 
-# Or warm several projects at once
+# Bind a second project without losing the first one's binding
+./bin/matrix add otherproject /path/to/otherproject
+./bin/matrix select otherproject
+./bin/matrix bindings          # both show as [bound]
+
+# Or just warm several projects as bookmarks, without binding them
 ./bin/matrix work myproject
 ./bin/matrix work otherproject
 ./bin/matrix workspace
@@ -104,6 +215,14 @@ help                      Usage
 ./bin/matrix install --target=devin
 # (then invoke Neo via `/neo` in Devin CLI, from any project; the user always talks to Neo first)
 ```
+
+## Uso diario típico
+
+- **Un solo proyecto, uso normal:** `matrix select <proyecto>` una vez; después simplemente abrís Devin CLI dentro de esa carpeta cuando quieras trabajar — Neo se activa solo. No hace falta re-seleccionar nada en cada sesión.
+- **Cambiar de foco sin perder el anterior:** `matrix select <otro-proyecto>` no rompe el binding del proyecto anterior — solo cambia cuál es el `primary`/default. Si querés desactivar explícitamente uno, usá `matrix deselect <nombre>`.
+- **Ver qué está pasando:** `matrix status` (resumen general), `matrix bindings` (verificación real en disco de cuáles proyectos tienen Neo activo ahora), `matrix workspace` (lista de bookmarks/warm), `matrix list` (todos los proyectos conocidos).
+- **Dejar una nota para la próxima sesión:** `matrix checkpoint "lo que hice y lo que falta"`. Neo también lo hace automáticamente en hitos importantes.
+- **Trabajar en el propio Matrix (no en un proyecto):** parate en la raíz de este repo y hablale a Neo directamente — entra en "Matrix workspace mode" (sin proyecto bindeado, trabajando sobre el sistema mismo).
 
 ## Principles
 

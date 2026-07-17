@@ -35,15 +35,18 @@ render:
   specialist: subagent       # → .agents/agents/<name>/AGENT.md
 
 model_policy:
-  # Verified against the live model registry (sessions.db) on 2026-07-15:
-  # both "swe-1.7" and "swe-1-7" normalize to the same canonical id below;
-  # "swe-1-7-lightning" is the real, distinct Cerebras-backed fast variant
-  # (Cognition's replacement for the old "-fast" suffix, e.g. swe-1-6-fast).
-  #
-  # IMPORTANT: SWE-1.7 is a FREE PREVIEW only through 2026-08-08. After that
-  # date this tier either reverts to a paid model or starts consuming plan
-  # quota — revisit this map then. Source: docs.devin.ai/desktop/models,
-  # Cognition's SWE-1.7 blog post.
-  cheap: swe-1-7-lightning    # mechanical/fast work (Keymaker): lower latency, same preview pricing
-  reasoning: swe-1-7          # planning/architecture/research/evaluation: full model
-  auto: swe-1-7
+  # Re-derived 2026-07-17 from devin-master-documentation's model pages
+  # (docs/22-devin-cli-models-overview.md, docs/26-cognition-swe-models.md),
+  # which mirror Devin CLI's own model-selection guidance (models.mdx):
+  #   - "multi-file refactors, architecture changes, deep reasoning" -> opus or gpt
+  #   - "quick edits, bug fixes, cost-sensitive work" -> swe (fast)
+  #   - mixed workloads -> adaptive (Cognition's own per-task router)
+  # SWE-1.7 (the prior default for reasoning/auto) is a few points behind
+  # Opus 4.7/4.8 and GPT-5.5 on FrontierCode/Terminal-Bench/SWE-Bench
+  # Multilingual per Cognition's own comparison table, and its free-preview
+  # window ends 2026-08-08 — so pinning reasoning-tier work to it was both
+  # off-guidance and time-bound. User chose capability-first for `reasoning`
+  # (accepting real per-token cost) and `adaptive` for `auto` (2026-07-17).
+  cheap: swe-1-7-lightning    # mechanical/fast work (Keymaker, Lock): lower latency, same preview pricing
+  reasoning: opus             # planning/architecture/research/evaluation (Architect, Morpheus, Oracle, Smith): Devin CLI's own guidance for deep reasoning; $5/$25 per MTok, 1M context
+  auto: adaptive              # mixed workloads (Neo, Trinity): Cognition's per-task router; intro rate $0.50/$2.00 per MTok (re-check after its intro window)

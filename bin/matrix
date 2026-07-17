@@ -3,7 +3,7 @@
 # Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
 # Manages registry, projects, the warm-project set, checkpoints, the Link
 # ledger, Seraph hooks, and the Trainman build. It NEVER invokes agents.
-# Version 2.0.0
+# Version 2.1.0
 
 set -euo pipefail
 
@@ -54,6 +54,22 @@ log_success() { echo -e "${GREEN}[MATRIX]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[MATRIX]${NC} $1"; }
 log_error()   { echo -e "${RED}[MATRIX]${NC} $1"; }
 
+# --- Global lock ------------------------------------------------------------
+acquire_lock() {
+    if ! command -v flock >/dev/null 2>&1; then
+        log_warning "flock not available; running without global lock"
+        return 0
+    fi
+    mkdir -p "$STATE_DIR"
+    exec 200>"$STATE_DIR/.matrix.lock"
+    flock -x -w 30 200 || { log_error "Could not acquire global lock (timeout?)"; exit 1; }
+}
+release_lock() {
+    if command -v flock >/dev/null 2>&1; then
+        exec 200>&- 2>/dev/null || true
+    fi
+}
+
 # --- Init -------------------------------------------------------------------
 init_registry() {
     [[ -f "$REGISTRY_FILE" ]] || echo '{"projects": [], "created": "'$(date -Iseconds)'", "version": "2.0.0"}' > "$REGISTRY_FILE"
@@ -90,13 +106,14 @@ link_append() {
 }
 
 read_registry() { init_registry; jq -r '.projects[] | "\(.name):\(.path):\(.type)"' "$REGISTRY_FILE" 2>/dev/null || echo ""; }
-read_context()  { init_context; grep "active_project:" "$CONTEXT_FILE" | head -1 | cut -d' ' -f2 || echo "null"; }
+read_context()  { init_context; sed -n 's/^active_project: //p' "$CONTEXT_FILE" | head -1 || echo "null"; }
 
 update_context() {
+    init_context
     local project="$1" path="$2"; path="${path%/}"
-    sed -i "s|active_project:.*|active_project: $project|" "$CONTEXT_FILE"
-    sed -i "s|active_project_path:.*|active_project_path: $path|" "$CONTEXT_FILE"
-    sed -i "s|last_updated:.*|last_updated: $(date -Iseconds)|" "$CONTEXT_FILE"
+    sed -i "s|^active_project:.*|active_project: $project|" "$CONTEXT_FILE"
+    sed -i "s|^active_project_path:.*|active_project_path: $path|" "$CONTEXT_FILE"
+    sed -i "s|^last_updated:.*|last_updated: $(date -Iseconds)|" "$CONTEXT_FILE"
 }
 
 # --- Project registry -------------------------------------------------------
@@ -110,7 +127,8 @@ add_project() {
         [[ "$r" =~ ^[Yy]$ ]] || { log_warning "Cancelled"; return 1; }
         path_or_url="$current_dir"
     fi
-    read_registry | grep -q "^$name:" && { log_error "Project '$name' already exists"; return 1; }
+    local existing; existing="$(registry_path "$name")"
+    [[ -n "$existing" && "$existing" != "null" ]] && { log_error "Project '$name' already exists"; return 1; }
     local type="local"
     [[ "$path_or_url" =~ ^https?:// || "$path_or_url" =~ ^git@ ]] && type="remote"
     [[ "$type" == "local" ]] && path_or_url="${path_or_url%/}"
@@ -124,64 +142,226 @@ add_project() {
 
 list_projects() {
     log_info "Known projects:"; echo
-    local projects; projects="$(read_registry)"
+    init_registry
+    local projects; projects="$(jq -r '.projects[] | "\(.name)\t\(.path)\t\(.type)"' "$REGISTRY_FILE" 2>/dev/null)"
     [[ -z "$projects" ]] && { echo "  No projects registered"; return; }
     local active; active="$(read_context)"
-    while IFS=: read -r name path type; do
-        if [[ "$active" == "$name" ]]; then echo "  ✓ $name ($type) - $path [primary]"
-        else echo "    $name ($type) - $path"; fi
+    while IFS=$'\t' read -r name path type; do
+        local marks=""
+        [[ "$active" == "$name" ]] && marks+="[primary] "
+        is_bound "$name" && marks+="[bound]"
+        if [[ -n "$marks" ]]; then
+            echo "  ✓ $name ($type) - $path $marks"
+        else
+            echo "    $name ($type) - $path"
+        fi
     done <<< "$projects"
+}
+
+registry_path() {
+    local name="$1"
+    init_registry
+    jq -r --arg n "$name" '.projects[] | select(.name==$n) | .path' "$REGISTRY_FILE" 2>/dev/null
+}
+
+registry_type() {
+    local name="$1"
+    init_registry
+    jq -r --arg n "$name" '.projects[] | select(.name==$n) | .type' "$REGISTRY_FILE" 2>/dev/null
+}
+
+get_project_path() {
+    local name="$1"
+    local p t
+    p="$(registry_path "$name")"
+    t="$(registry_type "$name")"
+    [[ -z "$p" || "$p" == "null" ]] && return 1
+    if [[ "$t" == "remote" ]]; then
+        echo "$CLIENTS_DIR/$name"
+    else
+        p="$(to_abs_path "$p")"
+        echo "${p%/}"
+    fi
 }
 
 resolve_project_path() {
     local name="$1"
-    local info; info="$(read_registry | grep "^$name:" | head -1)"
-    [[ -z "$info" ]] && return 1
-    local p; p="$(echo "$info" | cut -d: -f2)"
-    p="$(to_abs_path "$p")"; echo "${p%/}"
+    get_project_path "$name"
+}
+
+is_bound() {
+    local name="$1"
+    local pp; pp="$(get_project_path "$name" 2>/dev/null)" || return 1
+    [[ -z "$pp" ]] && return 1
+    local link="$pp/_brain"
+    [[ -L "$link" ]] || return 1
+    local rl; rl="$(readlink -f "$link" 2>/dev/null || true)"
+    [[ "$rl" == "$BRAIN_DIR" ]] || return 1
+    [[ -f "$pp/AGENTS.local.md" ]] || return 1
+    grep -q '^<!-- MATRIX:BEGIN' "$pp/AGENTS.local.md" && grep -q '^<!-- MATRIX:END -->$' "$pp/AGENTS.local.md"
+}
+
+# --- AGENTS.local.md binding (non-probabilistic Neo activation) -----------
+matrix_block_tmp() {
+    local tmp; tmp="$(mktemp)"
+    cat > "$tmp" <<EOF
+<!-- MATRIX:BEGIN (managed by \`bin/matrix select\` — do not hand-edit this block) -->
+# Matrix — mandatory first action
+
+This project is bound to the Matrix system (root: $MATRIX_DIR). Before responding
+to ANY request in this project — regardless of topic, even if it looks completely
+unrelated to Matrix, even if another skill also matches — read in full, in order:
+
+1. $MATRIX_DIR/AGENTS.md         (the Matrix contract — sacred foundation, roster, routing doctrine)
+2. $BRAIN_DIR/agents/neo.md  (the Neo master agent; run its \`<activation>\` block starting at step 0)
+
+Only after both reads may Neo decide this request doesn't need Matrix and step back.
+This block is regenerated by \`bin/matrix select\` / removed by \`bin/matrix deselect\` — do not edit it by hand; edit outside the markers instead.
+<!-- MATRIX:END -->
+EOF
+    echo "$tmp"
+}
+
+update_agents_local() {
+    local pp="$1"
+    local file="$pp/AGENTS.local.md"
+    local block; block="$(matrix_block_tmp)"
+
+    if [[ -f "$file" ]]; then
+        if grep -q '^<!-- MATRIX:BEGIN' "$file" && grep -q '^<!-- MATRIX:END -->$' "$file"; then
+            awk -v new="$block" '
+                /^<!-- MATRIX:BEGIN/ {
+                    while ((getline line < new) > 0) print line
+                    close(new)
+                    inside=1
+                    next
+                }
+                /^<!-- MATRIX:END -->$/ { inside=0; next }
+                !inside { print }
+            ' "$file" > "$file.new" && mv "$file.new" "$file"
+            log_success "Updated AGENTS.local.md"
+        else
+            { echo ""; cat "$block"; } >> "$file"
+            log_success "Appended Matrix block to AGENTS.local.md"
+        fi
+    else
+        mv "$block" "$file"
+        log_success "Wrote AGENTS.local.md"
+    fi
+    rm -f "$block"
+}
+
+cleanup_agents_local() {
+    local ap="$1"
+    local file="$ap/AGENTS.local.md"
+    [[ -f "$file" ]] || return 0
+
+    if grep -q '^<!-- MATRIX:BEGIN' "$file" && grep -q '^<!-- MATRIX:END -->$' "$file"; then
+        awk '
+            /^<!-- MATRIX:BEGIN/ { inside=1; next }
+            /^<!-- MATRIX:END -->$/ { inside=0; next }
+            !inside { print }
+        ' "$file" > "$file.new"
+
+        if grep -q '[^[:space:]]' "$file.new"; then
+            mv "$file.new" "$file"
+            log_success "Removed Matrix block from AGENTS.local.md"
+        else
+            rm -f "$file.new" "$file"
+            log_success "Removed AGENTS.local.md (empty after cleanup)"
+        fi
+    else
+        log_warning "AGENTS.local.md has no Matrix block; leaving untouched"
+    fi
+}
+
+update_gitignore() {
+    local pp="$1"
+    [[ -d "$pp/.git" ]] || return 0
+    if [[ -f "$pp/.gitignore" ]]; then
+        if grep -qxF "AGENTS.local.md" "$pp/.gitignore" 2>/dev/null; then return 0; fi
+        printf 'AGENTS.local.md\n' >> "$pp/.gitignore"
+        log_success "Added AGENTS.local.md to .gitignore"
+    else
+        printf 'AGENTS.local.md\n' > "$pp/.gitignore"
+        log_success "Created .gitignore with AGENTS.local.md"
+    fi
 }
 
 select_project() {
     local name="$1"
     [[ -z "$name" ]] && { log_error "Usage: matrix select <name>"; return 1; }
-    local info; info="$(read_registry | grep "^$name:" | head -1)"
-    [[ -z "$info" ]] && { log_error "Project '$name' not found"; return 1; }
-    IFS=: read -r pn pp pt <<< "$info"
-    local active; active="$(read_context)"
-    [[ "$active" != "null" && -n "$active" && "$active" != "$name" ]] && deselect_project
-    pp="$(to_abs_path "$pp")"; pp="${pp%/}"
-    if [[ "$pt" == "remote" ]]; then
-        local dir="$CLIENTS_DIR/$name"
-        [[ -d "$dir" ]] || { log_info "Cloning '$name'..."; mkdir -p "$CLIENTS_DIR"; git clone "$pp" "$dir"; }
-        pp="$dir"
+    local p t pp
+    p="$(registry_path "$name")"
+    t="$(registry_type "$name")"
+    [[ -z "$p" || "$p" == "null" ]] && { log_error "Project '$name' not found"; return 1; }
+    if [[ "$t" == "remote" ]]; then
+        pp="$CLIENTS_DIR/$name"
+        [[ -d "$pp" ]] || { log_info "Cloning '$name'..."; mkdir -p "$CLIENTS_DIR"; git clone "$p" "$pp"; }
+    else
+        pp="$(to_abs_path "$p")"; pp="${pp%/}"
     fi
+    # Validate the new project's path BEFORE touching the currently active
+    # one — a failed select must never leave the session without an active
+    # project it already had.
     [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
     local link="$pp/_brain"
-    [[ -L "$link" ]] && rm "$link"
-    [[ -e "$link" ]] && { log_error "'_brain' exists and is not a symlink"; return 1; }
-    ln -sf "$BRAIN_DIR" "$link"
+    if [[ -L "$link" ]]; then
+        local current; current="$(readlink -f "$link" 2>/dev/null || true)"
+        if [[ "$current" != "$BRAIN_DIR" ]]; then
+            rm "$link"
+        fi
+    fi
+    [[ -e "$link" && ! -L "$link" ]] && { log_error "'_brain' exists and is not a symlink"; return 1; }
+    [[ -L "$link" ]] || ln -sf "$BRAIN_DIR" "$link"
+    update_agents_local "$pp"
+    update_gitignore "$pp"
     update_context "$name" "$pp"
+    # Invariant: the primary project is always a member of the warm set —
+    # otherwise workspace.yaml silently drifts from what's actually being
+    # worked on (the bug this fixes: `select` never touched it, so it kept
+    # reflecting whatever was last `work`ed, sometimes weeks stale).
+    warm_project_entry "$name" "$pp" "quiet"
     link_append "project:select" "$name" "$pp"
     log_success "Selected primary project '$name' (symlink: $link)"
 }
 
 deselect_project() {
+    local name="${1:-}"
     local active; active="$(read_context)"
-    [[ "$active" == "null" || -z "$active" ]] && { log_warning "No active project"; return; }
-    local ap; ap="$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)"; ap="$(to_abs_path "$ap")"; ap="${ap%/}"
+    if [[ -z "$name" ]]; then
+        [[ "$active" == "null" || -z "$active" ]] && { log_warning "No active project"; return 0; }
+        name="$active"
+    fi
+    local ap; ap="$(get_project_path "$name" 2>/dev/null)" || { log_warning "Project '$name' not found"; return 0; }
+    if ! is_bound "$name"; then
+        log_warning "Project '$name' is not bound"
+        return 0
+    fi
+    cleanup_agents_local "$ap"
     [[ -n "$ap" && -L "$ap/_brain" ]] && rm "$ap/_brain"
-    update_context "null" "null"
-    link_append "project:deselect" "$active" ""
-    log_success "Deselected '$active'"
+    if [[ "$active" == "$name" ]]; then
+        update_context "null" "null"
+    fi
+    link_append "project:deselect" "$name" ""
+    log_success "Deselected '$name'"
 }
 
 # --- Multi-project warm set -------------------------------------------------
-work_project() {
-    local name="$1"
-    [[ -z "$name" ]] && { log_error "Usage: matrix work <name>"; return 1; }
-    local path; path="$(resolve_project_path "$name")" || { log_error "Project '$name' not found"; return 1; }
+# warm_project_entry <name> <path> [quiet]
+# Shared, idempotent core: ensures <name> is a member of the warm set with
+# the given (already-resolved) path. Used by both `matrix work` (resolves
+# the path itself from the registry) and `select_project` (already has the
+# resolved path, including the local clone dir for `remote` projects — never
+# re-resolve from the registry there, or a `remote` project's warm entry
+# would end up holding the remote URL instead of its local checkout path).
+warm_project_entry() {
+    local name="$1" path="$2" quiet="${3:-}"
     init_state
-    grep -q "name: $name$" "$WORKSPACE_FILE" 2>/dev/null && { log_warning "'$name' already warm"; return 0; }
+    if grep -qxF "  - name: $name" "$WORKSPACE_FILE" 2>/dev/null; then
+        [[ "$quiet" == "quiet" ]] || log_warning "'$name' already warm"
+        return 0
+    fi
     # Insert before the last_updated line.
     local ts; ts="$(date -Iseconds)"
     local tmp; tmp="$(mktemp)"
@@ -191,22 +371,38 @@ work_project() {
         { print }
     ' "$WORKSPACE_FILE" > "$tmp"
     # If the set was non-empty, the awk above only handles the empty case; handle non-empty by append.
-    if grep -q "name: $name$" "$tmp"; then mv "$tmp" "$WORKSPACE_FILE"; else
+    if grep -qxF "  - name: $name" "$tmp"; then mv "$tmp" "$WORKSPACE_FILE"; else
         rm -f "$tmp"
         # Append under active_projects: (non-empty list)
         sed -i "/^active_projects:/a\\  - name: $name\\n    path: $path\\n    activated: $ts" "$WORKSPACE_FILE"
         sed -i "s|^last_updated:.*|last_updated: \"$ts\"|" "$WORKSPACE_FILE"
     fi
     link_append "project:work" "$name" "$path"
-    log_success "Warmed '$name' into the active set"
+    [[ "$quiet" == "quiet" ]] || log_success "Warmed '$name' into the active set"
+}
+
+work_project() {
+    local name="$1"
+    [[ -z "$name" ]] && { log_error "Usage: matrix work <name>"; return 1; }
+    local path; path="$(resolve_project_path "$name")" || { log_error "Project '$name' not found"; return 1; }
+    warm_project_entry "$name" "$path"
 }
 
 unwork_project() {
     local name="$1"
     [[ -z "$name" ]] && { log_error "Usage: matrix unwork <name>"; return 1; }
     init_state
-    # Remove the 3-line block for this project.
-    sed -i "/^  - name: $name$/,+2d" "$WORKSPACE_FILE"
+    if is_bound "$name"; then
+        deselect_project "$name"
+    fi
+    # Remove the 3-line block for this project (literal match, no regex).
+    local tmp; tmp="$(mktemp)"
+    NAME="$name" awk '
+        BEGIN { line = "  - name: " ENVIRON["NAME"] }
+        $0 == line { skip=2; next }
+        skip > 0 { skip--; next }
+        { print }
+    ' "$WORKSPACE_FILE" > "$tmp" && mv "$tmp" "$WORKSPACE_FILE"
     # If list is now empty, normalize.
     grep -q "^  - name:" "$WORKSPACE_FILE" || sed -i "s|^active_projects:.*|active_projects: []|" "$WORKSPACE_FILE"
     sed -i "s|^last_updated:.*|last_updated: \"$(date -Iseconds)\"|" "$WORKSPACE_FILE"
@@ -217,28 +413,60 @@ unwork_project() {
 show_workspace() {
     init_state
     log_info "Warm project set:"; echo
-    if grep -q "^  - name:" "$WORKSPACE_FILE"; then
-        grep "^  - name:" "$WORKSPACE_FILE" | sed 's/  - name:/   •/'
-    else
+    local names; names="$(grep "^  - name:" "$WORKSPACE_FILE" 2>/dev/null | sed 's/  - name: //' || true)"
+    if [[ -z "$names" ]]; then
         echo "   (empty) — use 'matrix work <name>'"
+        return
     fi
+    while IFS= read -r n; do
+        [[ -z "$n" ]] && continue
+        local mark=""
+        is_bound "$n" && mark=" [bound]"
+        echo "   • $n$mark"
+    done <<< "$names"
 }
 
 # --- Status -----------------------------------------------------------------
+show_bindings() {
+    log_info "Bound projects:"; echo
+    local projects; projects="$(jq -r '.projects[] | "\(.name)\t\(.path)\t\(.type)"' "$REGISTRY_FILE" 2>/dev/null)"
+    [[ -z "$projects" ]] && { echo "  (none registered)"; return; }
+    while IFS=$'\t' read -r name path type; do
+        local real_path; real_path="$(get_project_path "$name" 2>/dev/null || true)"
+        if is_bound "$name"; then
+            echo "  ✓ $name -> $real_path [bound]"
+        else
+            echo "  ✗ $name -> $real_path"
+        fi
+    done <<< "$projects"
+}
+
 show_status() {
     log_info "Matrix Status"; echo
     local active; active="$(read_context)"
     if [[ "$active" != "null" && -n "$active" ]]; then
-        local ap; ap="$(grep "active_project_path:" "$CONTEXT_FILE" | cut -d' ' -f2)"; ap="$(to_abs_path "$ap")"; ap="${ap%/}"
+        local ap; ap="$(get_project_path "$active" 2>/dev/null || true)"; ap="${ap%/}"
         echo "Primary project: $active"
-        echo "Path: $ap"
-        if [[ -L "$ap/_brain" ]]; then echo "Brain link: ✓ active"; else echo "Brain link: ✗ broken"; fi
+        [[ -n "$ap" ]] && echo "Path: $ap"
+        if [[ -n "$ap" && -L "$ap/_brain" ]]; then echo "Brain link: ✓ active"; else echo "Brain link: ✗ broken"; fi
     else
         echo "Primary project: none"
     fi
     echo
-    echo "Warm set: $(grep -c '^  - name:' "$WORKSPACE_FILE" 2>/dev/null || echo 0) project(s)"
-    echo "Registered: $(read_registry | grep -c . || echo 0) project(s)"
+    local bound_count=0 bound_names=""
+    while IFS=: read -r n _ _; do
+        [[ -z "$n" ]] && continue
+        if is_bound "$n"; then
+            bound_count=$((bound_count+1))
+            bound_names="$bound_names$n "
+        fi
+    done <<< "$(read_registry)"
+    bound_names="${bound_names% }"
+    echo "Bound: $bound_count project(s)${bound_names:+ ($bound_names)}"
+    local warm_n; warm_n="$(grep -c '^  - name:' "$WORKSPACE_FILE" 2>/dev/null)" || warm_n=0
+    echo "Warm set: ${warm_n:-0} project(s)"
+    local reg_n; reg_n="$(jq '.projects | length' "$REGISTRY_FILE" 2>/dev/null)" || reg_n=0
+    echo "Registered: ${reg_n:-0} project(s)"
     echo
     if [[ -s "$CHECKPOINTS_FILE" ]]; then
         echo "Recent checkpoints:"
@@ -322,7 +550,8 @@ Projects:
   list                    List all registered projects
   add <name> [path]       Register a project (path optional → current dir)
   select <name>           Set primary active project + create _brain symlink
-  deselect                Clear primary active project + remove symlink
+  deselect [name]         Remove binding for a project (defaults to primary)
+  bindings                Show bound status for all registered projects
 
 Multi-project (warm set):
   work <name>             Warm a project into the active set
@@ -344,14 +573,16 @@ EOF
 }
 
 main() {
+    acquire_lock
     case "${1:-}" in
         list)       list_projects ;;
         add)        add_project "${2:-}" "${3:-}" ;;
         select)     select_project "${2:-}" ;;
-        deselect)   deselect_project ;;
+        deselect)   deselect_project "${2:-}" ;;
         work)       work_project "${2:-}" ;;
         unwork)     unwork_project "${2:-}" ;;
         workspace)  show_workspace ;;
+        bindings)   show_bindings ;;
         status)     show_status ;;
         checkpoint) write_checkpoint "${2:-}" ;;
         activity)   show_activity "${2:-}" ;;
