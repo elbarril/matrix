@@ -627,6 +627,46 @@ install_target() {
     fi
 }
 
+# --- Devin session retrospectives ------------------------------------------
+session_query() {
+    local subcmd="$1"; shift
+    local target="devin"
+    local args=()
+    local arg
+    for arg in "$@"; do
+        case "$arg" in
+            --target=*) target="${arg#*=}" ;;
+            *) args+=("$arg") ;;
+        esac
+    done
+    local query="$MATRIX_DIR/adapters/$target/session_query.py"
+    if [[ -x "$query" ]]; then
+        python3 "$query" "$subcmd" "${args[@]}"
+    else
+        log_warning "Trainman: no session query at $query (not implemented yet for '$target')."
+        return 1
+    fi
+}
+
+session_report() {
+    local target="devin"
+    local args=()
+    local arg
+    for arg in "$@"; do
+        case "$arg" in
+            --target=*) target="${arg#*=}" ;;
+            *) args+=("$arg") ;;
+        esac
+    done
+    local report="$MATRIX_DIR/adapters/$target/session_report.py"
+    if [[ -x "$report" ]]; then
+        python3 "$report" "${args[@]}"
+    else
+        log_warning "Trainman: no session report at $report (not implemented yet for '$target')."
+        return 1
+    fi
+}
+
 show_help() {
     cat << 'EOF'
 Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
@@ -649,6 +689,13 @@ State & telemetry:
   status                  Show current Matrix status
   checkpoint "<note>"     Write a timestamped checkpoint (+ Link entry)
   activity [n]            Show last n Link ledger events (default 20)
+
+Retrospectivas (Devin-specific):
+  session-find <cwd> [YYYY-MM-DD]  Busca sesiones pasadas (consulta read-only)
+  session-dump <id> [--from HH:MM] [--to HH:MM] [--full]  Reconstruye una sesión pasada (read-only)
+  session-cost [cwd] [YYYY-MM-DD]  Muestra duración, ACU y crédito por sesión (read-only)
+  session-subagents <id>  Muestra duración de invocaciones de subagentes (read-only)
+  session-report [cwd] [YYYY-MM-DD] [--out PATH] [--limit N]  Genera reporte HTML estático
 
 Enforcement & adapters:
   hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close,
@@ -676,6 +723,11 @@ main() {
         hooks)      shift; run_hook "$@" ;;
         build)      shift; build_target "$@" ;;
         install)    shift; install_target "$@" ;;
+        session-find) shift; session_query find "$@" ;;
+        session-dump) shift; session_query dump "$@" ;;
+        session-cost) shift; session_query cost "$@" ;;
+        session-subagents) shift; session_query subagents "$@" ;;
+        session-report) shift; session_report "$@" ;;
         help|--help|-h) show_help ;;
         "") log_error "No command. Use 'matrix help'."; exit 1 ;;
         *)  log_error "Unknown command: $1"; echo "Use 'matrix help'."; exit 1 ;;
