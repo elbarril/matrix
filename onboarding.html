@@ -20,26 +20,264 @@
     --red: #ff4444;
     --yellow: #ffcc00;
     --radius: 8px;
+    --nav-w: 240px;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Digital rain background (decorative, CSS-only) ── */
+  @keyframes rain-fall {
+    0%   { background-position: 0% 0%; }
+    100% { background-position: 0% 300%; }
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    opacity: 0.06;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(90deg,
+        transparent, transparent 28px,
+        var(--green) 28px, var(--green) 29px
+      ),
+      repeating-linear-gradient(180deg,
+        transparent 0px, var(--green-dark) 8px,
+        transparent 16px, transparent 32px
+      );
+    background-size: 30px 30px, 30px 120px;
+    animation: rain-fall 8s linear infinite;
+  }
+
+  /* ── CRT scanline + vignette overlay ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        rgba(0,0,0,0.03) 0px,
+        rgba(0,0,0,0.03) 1px,
+        transparent 1px,
+        transparent 3px
+      ),
+      radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.45) 100%);
+  }
+
+  /* ── Reduced motion: disable ALL effects ── */
+  @media (prefers-reduced-motion: reduce) {
+    body::before { animation: none !important; opacity: 0 !important; }
+    body::after { opacity: 0 !important; }
+    .hero h1 { animation: none !important; border-right-color: transparent !important; width: auto !important; }
+    h2 { animation: none !important; }
+    h2:hover { text-shadow: none !important; }
+    .section { animation: none !important; opacity: 1 !important; transform: none !important; }
+  }
+
   body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.7;
+  }
+
+  /* ── Layout: nav rail + main content ── */
+  .page-layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sticky nav rail (desktop) ── */
+  .nav-rail {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    width: var(--nav-w);
+    min-width: var(--nav-w);
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    padding: 1.2rem 0.6rem;
+    font-size: 0.8rem;
+    z-index: 100;
+    scrollbar-width: thin;
+    scrollbar-color: var(--green-dark) var(--bg);
+  }
+  .nav-rail .nav-title {
+    color: var(--green);
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 0.8rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .nav-rail a {
+    display: block;
+    padding: 0.3rem 0.5rem;
+    color: var(--text);
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+    line-height: 1.4;
+  }
+  .nav-rail a:hover { background: var(--bg-card); color: var(--green); }
+  .nav-rail a.active {
+    background: rgba(0,255,65,0.1);
+    color: var(--green);
+    font-weight: 600;
+  }
+  .nav-rail .nav-hint {
+    margin-top: 1rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border);
+    color: #555;
+    font-size: 0.7rem;
+  }
+  .nav-rail .nav-hint kbd {
+    display: inline-block;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 0.3rem;
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--green-dim);
+  }
+
+  /* ── Mobile: collapsible top bar ── */
+  .mobile-nav-toggle {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0.6rem 1rem;
+    color: var(--green);
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .mobile-nav-toggle::after {
+    content: ' [nav]';
+    color: var(--text);
+    font-weight: 400;
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 899px) {
+    .nav-rail {
+      position: fixed;
+      top: 0;
+      left: -280px;
+      width: 260px;
+      min-width: 260px;
+      height: 100vh;
+      z-index: 201;
+      transition: left 0.2s ease;
+      border-right: 1px solid var(--border);
+    }
+    .nav-rail.open { left: 0; }
+    .mobile-nav-toggle { display: block; }
+    .main-content { padding-top: 3rem; }
+    .main-content table { display: block; overflow-x: auto; }
+  }
+
+  /* ── Main content area ── */
+  .main-content {
+    flex: 1;
     max-width: 960px;
     margin: 0 auto;
-    padding: 2rem 1.5rem 4rem;
+    padding: 2rem 2rem 4rem;
+    min-width: 0;
   }
+
+  /* ── Scroll snap (proximity for fluid feel) ── */
+  @media (min-width: 900px) {
+    .main-content {
+      scroll-snap-type: y proximity;
+      overflow-y: auto;
+      height: 100vh;
+    }
+  }
+  .section {
+    scroll-snap-align: start;
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+  }
+
+  /* ── Scroll-driven reveal (CSS animation-timeline: view) ── */
+  @supports (animation-timeline: view()) {
+    .section {
+      opacity: 0;
+      transform: translateY(24px);
+      animation: reveal-section linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 30%;
+    }
+    @keyframes reveal-section {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  }
+
+  /* ── Typography ── */
   h1, h2, h3, h4 { color: var(--green); font-weight: 600; }
   h1 { font-size: 2.2rem; margin-bottom: 0.3rem; letter-spacing: -0.5px; }
-  h1 span { color: var(--text); font-weight: 300; font-size: 1rem; display: block; margin-top: 0.3rem; }
-  h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+  h1 span.subtitle { color: var(--text); font-weight: 300; font-size: 1rem; display: block; margin-top: 0.3rem; }
+  h2 { font-size: 1.5rem; margin: 2rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
   h3 { font-size: 1.15rem; margin: 1.5rem 0 0.5rem; color: var(--accent2); }
   h4 { font-size: 1rem; margin: 1rem 0 0.4rem; color: var(--text-bright); }
   p { margin-bottom: 0.8rem; }
   a { color: var(--green); text-decoration: none; }
   a:hover { text-decoration: underline; }
+
+  /* ── Typewriter hero h1 ── */
+  @keyframes typewriter {
+    from { width: 0; }
+    to   { width: 100%; }
+  }
+  @keyframes blink-caret {
+    50% { border-right-color: transparent; }
+  }
+  .hero h1 {
+    display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    border-right: 3px solid var(--green);
+    animation:
+      typewriter 2.2s steps(28, end) 0.3s 1 normal both,
+      blink-caret 0.75s step-end infinite;
+    max-width: 100%;
+  }
+
+  /* ── Glitch effect on h2 hover / section-enter ── */
+  @keyframes glitch-clip {
+    0%   { clip-path: inset(0 0 85% 0); }
+    20%  { clip-path: inset(40% 0 30% 0); }
+    40%  { clip-path: inset(80% 0 0 0); }
+    60%  { clip-path: inset(10% 0 60% 0); }
+    80%  { clip-path: inset(50% 0 20% 0); }
+    100% { clip-path: inset(0 0 0 0); }
+  }
+  h2 {
+    position: relative;
+  }
+  h2:hover {
+    text-shadow:
+      2px 0 rgba(255,0,0,0.4),
+      -2px 0 rgba(0,255,65,0.4),
+      0 0 8px rgba(0,255,65,0.15);
+    animation: glitch-clip 0.3s steps(6, end);
+  }
+
+  /* ── Code ── */
   code {
     font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
     background: var(--bg-code);
@@ -59,6 +297,8 @@
     line-height: 1.5;
   }
   pre code { background: none; padding: 0; color: var(--green-dim); }
+
+  /* ── Cards and grid ── */
   .card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -80,9 +320,13 @@
   .tag-specialist { background: #1a3a4a; color: var(--accent2); }
   .tag-infra { background: #3a2a1a; color: var(--yellow); }
   .tag-opt { background: #2a1a2a; color: #cc88ff; }
+
+  /* ── Tables ── */
   table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
   th, td { text-align: left; padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); }
   th { color: var(--green); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── Hero ── */
   .hero {
     text-align: center;
     padding: 3rem 0 2rem;
@@ -90,10 +334,32 @@
     margin-bottom: 2rem;
   }
   .hero p { color: var(--text); max-width: 700px; margin: 0.5rem auto; }
-  .toc { list-style: none; columns: 2; margin: 1rem 0; }
-  .toc li { padding: 0.25rem 0; }
-  .toc a { color: var(--text-bright); }
-  .toc a:hover { color: var(--green); }
+
+  /* ── Progressive disclosure: details/summary ── */
+  details {
+    margin: 0.8rem 0;
+  }
+  details summary {
+    cursor: pointer;
+    color: var(--accent2);
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 0.4rem 0;
+    list-style: none;
+  }
+  details summary::before {
+    content: '\25B6  ';
+    font-size: 0.7em;
+    color: var(--green-dim);
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  details[open] summary::before {
+    content: '\25BC  ';
+  }
+  details summary::-webkit-details-marker { display: none; }
+
+  /* ── Flow diagram ── */
   .flow-diagram {
     font-family: monospace;
     font-size: 0.85rem;
@@ -103,55 +369,141 @@
     text-align: center;
     margin: 1rem 0;
   }
+
+  /* ── Callouts ── */
   .warn { border-left: 3px solid var(--yellow); padding-left: 1rem; margin: 1rem 0; }
   .danger { border-left: 3px solid var(--red); padding-left: 1rem; margin: 1rem 0; }
+
+  /* ── Footer ── */
   footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: #666; font-size: 0.85rem; text-align: center; }
+
+  /* ── Command palette overlay ── */
+  .cmd-palette {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(0,0,0,0.75);
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 15vh;
+  }
+  .cmd-palette.open { display: flex; }
+  .cmd-palette-box {
+    background: var(--bg-card);
+    border: 1px solid var(--green-dark);
+    border-radius: var(--radius);
+    width: 90%;
+    max-width: 480px;
+    max-height: 60vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 40px rgba(0,255,65,0.1);
+  }
+  .cmd-palette-box input {
+    width: 100%;
+    background: var(--bg);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0.8rem 1rem;
+    color: var(--green);
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+    font-size: 1rem;
+    outline: none;
+  }
+  .cmd-palette-list {
+    list-style: none;
+    overflow-y: auto;
+    max-height: 50vh;
+  }
+  .cmd-palette-list li {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    color: var(--text-bright);
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .cmd-palette-list li.highlighted {
+    background: rgba(0,255,65,0.12);
+    color: var(--green);
+  }
+  .cmd-palette-list li:hover {
+    background: rgba(0,255,65,0.08);
+    color: var(--green);
+  }
+  .cmd-palette-list li span.num {
+    display: inline-block;
+    width: 2em;
+    color: var(--green-dim);
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+    font-size: 0.8em;
+  }
+
+  /* ── Responsive ── */
   @media (max-width: 600px) {
-    .toc { columns: 1; }
     .grid { grid-template-columns: 1fr; }
-    body { padding: 1rem; }
+    .main-content { padding: 1rem; }
     h1 { font-size: 1.6rem; }
   }
 </style>
 </head>
 <body>
 
-<div class="hero">
-  <h1>Matrix <span>Personal Intelligence Engine &mdash; construido para Devin CLI</span></h1>
+<!-- ── Mobile nav toggle ── -->
+<div class="mobile-nav-toggle" id="mobileNavToggle">Matrix</div>
+
+<div class="page-layout">
+
+<!-- ── Sticky nav rail ── -->
+<nav class="nav-rail" id="navRail">
+  <div class="nav-title">Matrix</div>
+  <a href="#hero" data-section="hero">Inicio</a>
+  <a href="#que-es" data-section="que-es">1. Que es Matrix</a>
+  <a href="#capas" data-section="capas">2. Las tres capas</a>
+  <a href="#roster" data-section="roster">3. El roster</a>
+  <a href="#infra" data-section="infra">4. Infraestructura</a>
+  <a href="#cli" data-section="cli">5. CLI completo</a>
+  <a href="#quick-start" data-section="quick-start">6. Quick Start</a>
+  <a href="#workflows" data-section="workflows">7. Workflows</a>
+  <a href="#enforcement" data-section="enforcement">8. Enforcement</a>
+  <a href="#source" data-section="source">9. The Source</a>
+  <a href="#construct" data-section="construct">10. Costos</a>
+  <a href="#federacion" data-section="federacion">11. Federacion</a>
+  <a href="#hardline" data-section="hardline">12. AFK / Hardline</a>
+  <a href="#lock" data-section="lock">13. Modo autonomo</a>
+  <a href="#lessons" data-section="lessons">14. Lecciones</a>
+  <a href="#foundation" data-section="foundation">15. Sacred Foundation</a>
+  <a href="#estructura" data-section="estructura">16. Estructura</a>
+  <a href="#trainman" data-section="trainman">17. Adaptar CLI</a>
+  <a href="#sesion" data-section="sesion">18. Higiene</a>
+  <a href="#prohibido" data-section="prohibido">19. Lo prohibido</a>
+  <a href="#faq" data-section="faq">20. FAQ</a>
+  <div class="nav-hint">
+    <kbd>g</kbd> o <kbd>/</kbd> command palette
+  </div>
+</nav>
+
+<!-- ── Main content ── -->
+<main class="main-content" id="mainContent">
+
+<!-- ── Hero ── -->
+<div class="section hero" id="hero">
+  <h1>Matrix</h1>
+  <span class="subtitle" style="color:var(--text);font-weight:300;font-size:1rem;display:block;margin-top:0.3rem;">Personal Intelligence Engine &mdash; construido para Devin CLI</span>
   <p>Un cerebro que vive en un repo y se conecta a tus proyectos por symlink. Esta escrito para ser CLI-agnostico (habla en capacidades, nunca en herramientas de un CLI puntual), pero hoy el unico adaptador implementado y mantenido es Devin.</p>
 </div>
 
-<h2>Tabla de contenidos</h2>
-<ul class="toc">
-  <li><a href="#que-es">1. Que es Matrix</a></li>
-  <li><a href="#capas">2. Las tres capas</a></li>
-  <li><a href="#roster">3. El roster (agentes)</a></li>
-  <li><a href="#infra">4. Infraestructura</a></li>
-  <li><a href="#cli">5. CLI completo</a></li>
-  <li><a href="#quick-start">6. Quick Start</a></li>
-  <li><a href="#workflows">7. Workflows</a></li>
-  <li><a href="#enforcement">8. Enforcement (Seraph)</a></li>
-  <li><a href="#source">9. The Source</a></li>
-  <li><a href="#construct">10. Costos (The Construct)</a></li>
-  <li><a href="#federacion">11. Federacion (la flota)</a></li>
-  <li><a href="#hardline">12. AFK / Hardline</a></li>
-  <li><a href="#lock">13. Modo autonomo (Lock)</a></li>
-  <li><a href="#lessons">14. Lecciones (Zion Archive)</a></li>
-  <li><a href="#foundation">15. Sacred Foundation</a></li>
-  <li><a href="#estructura">16. Estructura de archivos</a></li>
-  <li><a href="#trainman">17. Adaptar a otro CLI</a></li>
-  <li><a href="#sesion">18. Higiene de sesion</a></li>
-  <li><a href="#prohibido">19. Lo prohibido</a></li>
-  <li><a href="#faq">20. FAQ / Troubleshooting</a></li>
-</ul>
-
 <!-- ========== 1 ========== -->
-<h2 id="que-es">1. Que es Matrix</h2>
+<div class="section" id="que-es">
+<h2>1. Que es Matrix</h2>
 <p>Matrix es tu <strong>capa de inteligencia personal</strong>. Un repositorio raiz (<code>matrix/</code>) contiene el cerebro. Tus proyectos viven afuera, se traen on-demand, y se conectan al cerebro via un symlink <code>_brain</code>. La inteligencia nunca se copia al proyecto.</p>
 <p><strong>La tesis central:</strong> los agentes, workflows, lecciones y el contrato se escriben <strong>una sola vez</strong> en markdown, hablando de <em>capacidades abstractas</em> (<code>read</code>, <code>edit</code>, <code>search</code>, <code>code-nav</code>...), nunca de un CLI puntual. Un adaptador fino (&laquo;The Trainman&raquo;) traduce esas capacidades a las herramientas nativas del CLI que estes usando.</p>
+</div>
 
 <!-- ========== 2 ========== -->
-<h2 id="capas">2. Las tres capas</h2>
+<div class="section" id="capas">
+<h2>2. Las tres capas</h2>
 <pre><code>
 LAYER 3 &mdash; Adapters &middot; "The Trainman"
   adapters/devin/   (adapters/&lt;otro&gt;/ mas adelante, ninguno mas existe hoy)
@@ -173,9 +525,11 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   No sabe nada de agentes. Gestiona estado y dispara hooks.
 </code></pre>
 <p><strong>Regla de oro:</strong> la Capa 2 nunca nombra un CLI. Si algo solo funciona bajo un CLI, pertenece a un adaptador (Capa 3), no al cerebro.</p>
+</div>
 
 <!-- ========== 3 ========== -->
-<h2 id="roster">3. El roster (agentes)</h2>
+<div class="section" id="roster">
+<h2>3. El roster (agentes)</h2>
 <p>Un master, cinco especialistas core, un sexto opt-in. <strong>Disciplina de roster:</strong> agregar uno requiere retirar o fusionar otro.</p>
 
 <div class="grid">
@@ -209,24 +563,29 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   </div>
 </div>
 
-<h3>Routing seam</h3>
-<p><strong>Morpheus</strong> responde <em>que/cuando</em>. <strong>The Architect</strong> responde <em>como encaja</em> y revisa el plan de Morpheus antes de que Trinity construya. <strong>Smith</strong> gatekeepea el resultado antes de llamarlo &laquo;listo&raquo;.</p>
+<details>
+  <summary>Routing seam y patrones de coordinacion</summary>
+  <h3>Routing seam</h3>
+  <p><strong>Morpheus</strong> responde <em>que/cuando</em>. <strong>The Architect</strong> responde <em>como encaja</em> y revisa el plan de Morpheus antes de que Trinity construya. <strong>Smith</strong> gatekeepea el resultado antes de llamarlo &laquo;listo&raquo;.</p>
 
-<h3>Patrones de coordinacion</h3>
-<table>
-  <tr><th>Patron</th><th>Cadena</th></tr>
-  <tr><td>Build seguro</td><td>Architect &rarr; Trinity &rarr; Smith</td></tr>
-  <tr><td>Research + accion</td><td>Oracle &rarr; especialista de accion</td></tr>
-  <tr><td>Plan + ejecucion</td><td>Morpheus &rarr; Architect &rarr; Trinity &rarr; Smith</td></tr>
-  <tr><td>Debug + fix</td><td>Smith &rarr; Trinity &rarr; Smith</td></tr>
-</table>
+  <h3>Patrones de coordinacion</h3>
+  <table>
+    <tr><th>Patron</th><th>Cadena</th></tr>
+    <tr><td>Build seguro</td><td>Architect &rarr; Trinity &rarr; Smith</td></tr>
+    <tr><td>Research + accion</td><td>Oracle &rarr; especialista de accion</td></tr>
+    <tr><td>Plan + ejecucion</td><td>Morpheus &rarr; Architect &rarr; Trinity &rarr; Smith</td></tr>
+    <tr><td>Debug + fix</td><td>Smith &rarr; Trinity &rarr; Smith</td></tr>
+  </table>
+</details>
+</div>
 
 <!-- ========== 4 ========== -->
-<h2 id="infra">4. Infraestructura (supporting cast)</h2>
+<div class="section" id="infra">
+<h2>4. Infraestructura (supporting cast)</h2>
 <div class="grid">
   <div class="card">
     <h3><span class="tag tag-infra">HOOKS</span> Seraph</h3>
-    <p>Enforcement portable: <code>pre_activation_check</code>, <code>validate_phase_close</code>, <code>post_run_audit</code>. Python con contrato JSON. Detecta bypass.</p>
+    <p>Enforcement portable: 6 hooks en Python con contrato JSON in/out. Detectan bypass y validan compliance. Ver <a href="#enforcement">&sect;8</a> para la lista canonica.</p>
   </div>
   <div class="card">
     <h3><span class="tag tag-infra">LEDGER</span> Link</h3>
@@ -257,47 +616,73 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <p>Nave federada de research profundo con evidencia graduada y gate de integridad. Lazy-loaded.</p>
   </div>
 </div>
+</div>
 
 <!-- ========== 5 ========== -->
-<h2 id="cli">5. CLI completo &mdash; <code>bin/matrix</code></h2>
+<div class="section" id="cli">
+<h2>5. CLI completo &mdash; <code>bin/matrix</code></h2>
 <p>El CLI es Capa 1: gestiona estado, nunca invoca agentes. Los agentes se invocan via Devin CLI (skill <code>/neo</code> + subagentes).</p>
 
-<h3>Proyectos</h3>
-<table>
-  <tr><th>Comando</th><th>Que hace</th></tr>
-  <tr><td><code>matrix list</code></td><td>Lista todos los proyectos registrados</td></tr>
-  <tr><td><code>matrix add &lt;name&gt; [path]</code></td><td>Registra un proyecto (sin path usa el dir actual)</td></tr>
-  <tr><td><code>matrix select &lt;name&gt;</code></td><td>Setea el proyecto primario activo + crea symlink <code>_brain</code></td></tr>
-  <tr><td><code>matrix deselect</code></td><td>Limpia el proyecto primario activo + elimina symlink</td></tr>
-</table>
+<details>
+  <summary>Proyectos</summary>
+  <table>
+    <tr><th>Comando</th><th>Que hace</th></tr>
+    <tr><td><code>matrix list</code></td><td>Lista todos los proyectos registrados</td></tr>
+    <tr><td><code>matrix add &lt;name&gt; [path] [--replace]</code></td><td>Registra un proyecto (sin path usa el dir actual; <code>--replace</code> actualiza uno existente)</td></tr>
+    <tr><td><code>matrix select &lt;name&gt;</code></td><td>Setea el proyecto primario activo + crea symlink <code>_brain</code></td></tr>
+    <tr><td><code>matrix deselect [name]</code></td><td>Quita el binding del proyecto nombrado (o del primario si no se da nombre); otros proyectos bound quedan intactos</td></tr>
+    <tr><td><code>matrix bindings</code></td><td>Lista los proyectos bound, verificando el estado real de su symlink <code>_brain</code> y bloque <code>AGENTS.local.md</code></td></tr>
+  </table>
+</details>
 
-<h3>Multi-proyecto (warm set)</h3>
-<table>
-  <tr><th>Comando</th><th>Que hace</th></tr>
-  <tr><td><code>matrix work &lt;name&gt;</code></td><td>Agrega un proyecto al set caliente</td></tr>
-  <tr><td><code>matrix unwork &lt;name&gt;</code></td><td>Saca un proyecto del set caliente</td></tr>
-  <tr><td><code>matrix workspace</code></td><td>Muestra el set caliente actual</td></tr>
-</table>
+<details>
+  <summary>Multi-proyecto (warm set)</summary>
+  <table>
+    <tr><th>Comando</th><th>Que hace</th></tr>
+    <tr><td><code>matrix work &lt;name&gt;</code></td><td>Agrega un proyecto al set caliente</td></tr>
+    <tr><td><code>matrix unwork &lt;name&gt;</code></td><td>Saca un proyecto del set caliente</td></tr>
+    <tr><td><code>matrix workspace</code></td><td>Muestra el set caliente actual</td></tr>
+  </table>
+</details>
 
-<h3>Estado y telemetria</h3>
-<table>
-  <tr><th>Comando</th><th>Que hace</th></tr>
-  <tr><td><code>matrix status</code></td><td>Muestra el estado del sistema (proyecto, link, set caliente, checkpoints, ledger)</td></tr>
-  <tr><td><code>matrix checkpoint "&lt;nota&gt;"</code></td><td>Escribe un checkpoint timestamped (+ entrada en Link)</td></tr>
-  <tr><td><code>matrix activity [n]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20)</td></tr>
-</table>
+<details>
+  <summary>Estado y telemetria</summary>
+  <table>
+    <tr><th>Comando</th><th>Que hace</th></tr>
+    <tr><td><code>matrix status</code></td><td>Muestra el estado del sistema (proyecto, link, set caliente, checkpoints, ledger)</td></tr>
+    <tr><td><code>matrix checkpoint "&lt;nota&gt;"</code></td><td>Escribe un checkpoint timestamped (+ entrada en Link)</td></tr>
+    <tr><td><code>matrix activity [n]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20)</td></tr>
+  </table>
+</details>
 
-<h3>Enforcement y adaptadores</h3>
-<table>
-  <tr><th>Comando</th><th>Que hace</th></tr>
-  <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph (<code>pre_activation_check</code>, <code>validate_phase_close</code>, <code>post_run_audit</code>, <code>the_source</code>)</td></tr>
-  <tr><td><code>matrix build --target=&lt;cli&gt;</code></td><td>Trainman: genera artefactos nativos para un CLI (hoy solo <code>devin</code>)</td></tr>
-  <tr><td><code>matrix install --target=&lt;cli&gt;</code></td><td>Trainman: despliega los artefactos generados al discovery path del CLI (global)</td></tr>
-  <tr><td><code>matrix help</code></td><td>Muestra la ayuda completa</td></tr>
-</table>
+<details>
+  <summary>Enforcement y adaptadores</summary>
+  <table>
+    <tr><th>Comando</th><th>Que hace</th></tr>
+    <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph (<code>pre_activation_check</code>, <code>validate_phase_close</code>, <code>post_run_audit</code>, <code>the_source</code>)</td></tr>
+    <tr><td><code>matrix build --target=&lt;cli&gt;</code></td><td>Trainman: genera artefactos nativos para un CLI (hoy solo <code>devin</code>)</td></tr>
+    <tr><td><code>matrix install --target=&lt;cli&gt;</code></td><td>Trainman: despliega los artefactos generados al discovery path del CLI (global)</td></tr>
+    <tr><td><code>matrix help</code></td><td>Muestra la ayuda completa</td></tr>
+  </table>
+</details>
+
+<details>
+  <summary>Retrospectivas (Devin-specific)</summary>
+  <p>Comandos read-only del adaptador Devin (Capa 3, no del core). Consultan la base de sesiones local de Devin.</p>
+  <table>
+    <tr><th>Comando</th><th>Que hace</th></tr>
+    <tr><td><code>matrix session-find &lt;cwd&gt; [YYYY-MM-DD]</code></td><td>Busca sesiones pasadas (consulta read-only)</td></tr>
+    <tr><td><code>matrix session-dump &lt;id&gt; [--from HH:MM] [--to HH:MM] [--full]</code></td><td>Reconstruye una sesion pasada (read-only)</td></tr>
+    <tr><td><code>matrix session-cost [cwd] [YYYY-MM-DD]</code></td><td>Muestra duracion, ACU y credito por sesion (read-only)</td></tr>
+    <tr><td><code>matrix session-subagents &lt;id&gt;</code></td><td>Muestra duracion de invocaciones de subagentes (read-only)</td></tr>
+    <tr><td><code>matrix session-report [cwd] [YYYY-MM-DD] [--out PATH] [--limit N]</code></td><td>Genera un reporte HTML estatico auto-contenido (default: <code>brain/output/session-report.html</code>)</td></tr>
+  </table>
+</details>
+</div>
 
 <!-- ========== 6 ========== -->
-<h2 id="quick-start">6. Quick Start</h2>
+<div class="section" id="quick-start">
+<h2>6. Quick Start</h2>
 <pre><code># 1. Registrar un proyecto
 ./bin/matrix add mi-proyecto /ruta/al/proyecto
 
@@ -325,9 +710,11 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 # 8. Ver el ledger de actividad
 ./bin/matrix activity 10
 </code></pre>
+</div>
 
 <!-- ========== 7 ========== -->
-<h2 id="workflows">7. Workflows componibles</h2>
+<div class="section" id="workflows">
+<h2>7. Workflows componibles</h2>
 <p>Cuatro workflows que componen en una cadena, con thin-pointer: el cuerpo vive en <code>brain/workflows/</code> (agnostico), cada adaptador lo expone como comando nativo.</p>
 <div class="flow-diagram">spec  &rarr;  develop  &rarr;  test  &rarr;  eval</div>
 
@@ -349,44 +736,65 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <p>Juzga el resultado contra el objetivo original, captura lecciones y escribe checkpoint. Neo reporta al usuario.</p>
   </div>
 </div>
+</div>
 
 <!-- ========== 8 ========== -->
-<h2 id="enforcement">8. Enforcement (Seraph)</h2>
+<div class="section" id="enforcement">
+<h2>8. Enforcement (Seraph)</h2>
 <p>Hooks portables en <code>hooks/</code>, Python/bash con contrato JSON in/out. Se corren via <code>bin/matrix hooks &lt;nombre&gt;</code>.</p>
 
-<table>
-  <tr><th>Hook</th><th>Que hace</th><th>Cuando</th></tr>
-  <tr>
-    <td><code>pre_activation_check</code></td>
-    <td>Valida: contrato presente, config valida, roster intacto, estado OK</td>
-    <td>Antes de que cualquier agente actue</td>
-  </tr>
-  <tr>
-    <td><code>validate_phase_close</code></td>
-    <td>Bloquea cerrar una fase sin evidencia real E2E. Implementa Foundation 3.</td>
-    <td>Antes de declarar una fase &laquo;done&raquo;</td>
-  </tr>
-  <tr>
-    <td><code>post_run_audit</code></td>
-    <td>Verifica que los pasos enforced corrieron, detecta bypass, escribe <code>validation-report.json</code></td>
-    <td>Despues de una corrida</td>
-  </tr>
-  <tr>
-    <td><code>the_source</code></td>
-    <td>Genera <code>docs/SYSTEM_TRUTH.md</code> desde el brain vivo. Con <code>{"check":true}</code> valida que no hay drift.</td>
-    <td>Mantenimiento / verificacion</td>
-  </tr>
-</table>
-<pre><code># Ejemplos
+<details>
+  <summary>Tabla de hooks (6 hooks)</summary>
+  <table>
+    <tr><th>Hook</th><th>Que hace</th><th>Cuando</th></tr>
+    <tr>
+      <td><code>pre_activation_check</code></td>
+      <td>Valida: contrato presente, config valida, roster intacto, estado OK</td>
+      <td>Antes de que cualquier agente actue</td>
+    </tr>
+    <tr>
+      <td><code>validate_phase_close</code></td>
+      <td>Bloquea cerrar una fase sin evidencia real E2E. Implementa Foundation 3.</td>
+      <td>Antes de declarar una fase &laquo;done&raquo;</td>
+    </tr>
+    <tr>
+      <td><code>post_run_audit</code></td>
+      <td>Verifica que los pasos enforced corrieron, detecta bypass, escribe <code>validation-report.json</code></td>
+      <td>Despues de una corrida</td>
+    </tr>
+    <tr>
+      <td><code>the_source</code></td>
+      <td>Genera <code>docs/SYSTEM_TRUTH.md</code> desde el brain vivo. Con <code>{"check":true}</code> valida que no hay drift.</td>
+      <td>Mantenimiento / verificacion</td>
+    </tr>
+    <tr>
+      <td><code>audit_event</code></td>
+      <td>Log append-only de metadatos de eventos de ciclo de vida (metadata-only, nunca contenido de prompts)</td>
+      <td>Cada evento de lifecycle</td>
+    </tr>
+    <tr>
+      <td><code>session_close</code></td>
+      <td>Cierre manual/CI de sesion: reconstruye los pasos desde el audit log y corre <code>post_run_audit</code> para generar el reporte de validacion</td>
+      <td>Al cerrar una sesion</td>
+    </tr>
+  </table>
+</details>
+
+<details>
+  <summary>Ejemplos de uso</summary>
+  <pre><code># Ejemplos
 ./bin/matrix hooks pre_activation_check '{"project":"mck"}'
 ./bin/matrix hooks validate_phase_close '{"phase":"develop","e2e":true,"evidence":"ran pytest, 12/12 pass"}'
 ./bin/matrix hooks post_run_audit '{"agent":"neo","steps":["load_config","resolve_context","pre_activation_check"]}'
 ./bin/matrix hooks the_source                    # regenerar
 ./bin/matrix hooks the_source '{"check":true}'   # validar sync
 </code></pre>
+</details>
+</div>
 
 <!-- ========== 9 ========== -->
-<h2 id="source">9. The Source &mdash; verdad generada</h2>
+<div class="section" id="source">
+<h2>9. The Source &mdash; verdad generada</h2>
 <p><code>docs/SYSTEM_TRUTH.md</code> se genera desde el brain vivo (agentes, workflows, hooks). <strong>Nunca se edita a mano.</strong> Reemplaza los 22 docs manuales del sistema anterior (que se desincronizaban). Un doc generado no puede driftear.</p>
 <pre><code># Regenerar
 ./bin/matrix hooks the_source
@@ -394,21 +802,25 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 # Verificar que esta en sync (exit 0 = ok, exit 1 = stale)
 ./bin/matrix hooks the_source '{"check":true}'
 </code></pre>
+</div>
 
 <!-- ========== 10 ========== -->
-<h2 id="construct">10. Optimizacion de costos (The Construct)</h2>
+<div class="section" id="construct">
+<h2>10. Optimizacion de costos (The Construct)</h2>
 <p>&laquo;Carga exactamente lo que necesitas, nada mas.&raquo; Codificado como reglas operativas y expuesto como capacidades abstractas.</p>
 <ul>
   <li><strong><code>code-nav</code></strong> &mdash; navegacion/edit a nivel de simbolo (Serena o equivalente) en vez de leer archivos enteros. 5-10x mas barato.</li>
-  <li><strong><code>model_policy</code></strong> &mdash; <code>cheap</code> para trabajo mecanico, <code>reasoning</code> para problemas duros, <code>auto</code> para mixto. Declarado por agente; <code>adapters/devin/adapter.yaml</code> mapea cada tier a un modelo concreto y el Trainman lo escribe como frontmatter <code>model:</code> en cada skill/subagent generado. Hoy: <code>cheap</code> &rarr; <code>swe-1-7-lightning</code> (variante rapida, Cerebras), <code>reasoning</code>/<code>auto</code> &rarr; <code>swe-1-7</code> (modelo completo). Ambos gratis en preview hasta el 2026-08-08 &mdash; revisar el mapa despues de esa fecha.</li>
+  <li><strong><code>model_policy</code></strong> &mdash; <code>cheap</code> para trabajo mecanico, <code>reasoning</code> para problemas duros, <code>auto</code> para mixto. Declarado por agente; <code>adapters/devin/adapter.yaml</code> mapea cada tier a un modelo concreto y el Trainman lo escribe como frontmatter <code>model:</code> en cada skill/subagent generado. Hoy: <code>cheap</code> &rarr; <code>swe-1-7-lightning</code> (variante rapida, preview-priced hasta el 2026-08-08), <code>reasoning</code> &rarr; <code>opus</code> ($5/$25 por MTok, 1M contexto), <code>auto</code> &rarr; <code>adaptive</code> ($0.50/$2.00 por MTok, tasa intro; re-verificar al cerrar su ventana intro).</li>
   <li><strong><code>allowed-tools</code> (least-privilege)</strong> &mdash; el adaptador Devin tambien resuelve las <code>capabilities:</code> de cada agente a un grant nativo <code>allowed-tools:</code> (categorias: <code>read</code>, <code>edit</code>, <code>grep</code>, <code>glob</code>, <code>exec</code>, mas <code>mcp__server__tool</code>), asi un especialista no puede ejercer herramientas que no declaro necesitar. Neo (skill, no subagent) queda sin restringir a proposito &mdash; ver DEVIN.md.</li>
   <li><strong>Delegacion</strong> &mdash; artefactos &gt;10 KB van a un sub-agente con word cap, para no inflar el contexto.</li>
   <li><strong>Checkpoints de resume</strong> &mdash; escribir checkpoint antes de truncar contexto; split de sesion en cambios de modo (build &rarr; eval &rarr; fix).</li>
 </ul>
 <p>El mapa completo esta en <code>brain/data/capability-map.md</code>.</p>
+</div>
 
 <!-- ========== 11 ========== -->
-<h2 id="federacion">11. Federacion (la flota)</h2>
+<div class="section" id="federacion">
+<h2>11. Federacion (la flota)</h2>
 <p>Un subsistema es una <strong>nave</strong>: su propio master, su propio roster, su propio <code>AGENTS.md</code>, bajo <code>brain/subsystems/&lt;nave&gt;/</code>. Las naves coordinan solo a traves del ledger <strong>Link</strong> compartido &mdash; nunca tocando el estado de otra.</p>
 
 <table>
@@ -423,9 +835,11 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <li>Crear los agentes de la nave bajo <code>brain/subsystems/&lt;nave&gt;/agents/</code>.</li>
   <li>Coordinar con el core solo via el ledger Link (<code>research:request</code> / <code>research:result</code>, etc.).</li>
 </ol>
+</div>
 
 <!-- ========== 12 ========== -->
-<h2 id="hardline">12. AFK / The Hardline (opt-in)</h2>
+<div class="section" id="hardline">
+<h2>12. AFK / The Hardline (opt-in)</h2>
 <p>Modulo desacoplado que reacciona a eventos externos (Telegram, webhooks, file drops) y despierta a Matrix. Patron <code>Monitor(persistent)</code> sobre <code>tail -F</code>: cero tokens en idle.</p>
 <pre><code># Iniciar el monitor (foreground; correr bajo tmux para AFK)
 modules/hardline/hardline-monitor.sh
@@ -434,18 +848,22 @@ modules/hardline/hardline-monitor.sh
 echo 'develop --headless mck' >> modules/hardline/inbox.log
 </code></pre>
 <p>Los bridges de canal (bot de Telegram, receptor webhook) son deployment-specific y viven fuera del core.</p>
+</div>
 
 <!-- ========== 13 ========== -->
-<h2 id="lock">13. Modo autonomo (Commander Lock)</h2>
+<div class="section" id="lock">
+<h2>13. Modo autonomo (Commander Lock)</h2>
 <p>Cuando un workflow corre en modo <code>--headless</code> (sin operador), Commander Lock actua como guardrail:</p>
 <ul>
   <li><strong>Valida el formato del prompt</strong> autonomo. Si no matchea, <code>TASK_ABORTED</code>.</li>
   <li><strong>Reglas FS absolutas:</strong> no tocar archivos fundacionales de Matrix, no <code>git reset --hard</code>, no commits sin instruccion explicita.</li>
   <li><strong>Fail loud:</strong> en input corrupto, violation de scope, o proyecto no resuelto, emite <code>TASK_ABORTED: &lt;razon&gt;</code> y para. Nunca adivina.</li>
 </ul>
+</div>
 
 <!-- ========== 14 ========== -->
-<h2 id="lessons">14. Lecciones (Zion Archive)</h2>
+<div class="section" id="lessons">
+<h2>14. Lecciones (Zion Archive)</h2>
 <p>Lecciones de errores reales. Se leen al inicio de cada sesion. Append-only.</p>
 
 <table>
@@ -455,9 +873,11 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 </table>
 <p>Routing: si la leccion aplica a todos los proyectos &rarr; pool core. Si aplica solo a uno &rarr; archivo scoped. Ejemplo: <code>brain/data/lessons/chronicle.md</code>, <code>brain/data/lessons/pas.md</code>.</p>
 <p>Para crear una nueva leccion scoped, copia <code>brain/data/lessons/_template.md</code>.</p>
+</div>
 
 <!-- ========== 15 ========== -->
-<h2 id="foundation">15. Sacred Foundation (Zion)</h2>
+<div class="section" id="foundation">
+<h2>15. Sacred Foundation (Zion)</h2>
 <p>No son reglas. Son quienes <em>somos</em>. Cada decision de ruteo, cada pushback, cada eleccion viene de aca. No negociables.</p>
 <ol>
   <li><strong>Conocimiento total del workspace.</strong></li>
@@ -471,10 +891,14 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
   <li><strong>Ideologia de alternativas.</strong> Nunca decir &laquo;imposible&raquo;.</li>
   <li><strong>Si se rompe, es nuestro.</strong> Responsabilidad de punta a punta.</li>
 </ol>
+</div>
 
 <!-- ========== 16 ========== -->
-<h2 id="estructura">16. Estructura de archivos</h2>
-<pre><code>matrix/
+<div class="section" id="estructura">
+<h2>16. Estructura de archivos</h2>
+<details>
+  <summary>Arbol completo del repositorio</summary>
+  <pre><code>matrix/
 ├── AGENTS.md                        # contrato canonico (Layer 2)
 ├── README.md
 ├── DEVIN.md                         # notas del adaptador Devin
@@ -486,10 +910,14 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 │   ├── pre_activation_check.py
 │   ├── validate_phase_close.py
 │   ├── post_run_audit.py
-│   └── the_source.py
+│   ├── the_source.py
+│   ├── audit_event.py
+│   └── session_close.py
 ├── adapters/                        # Trainman &mdash; Layer 3
 │   ├── _build.py                    # renderer (hoy: solo devin)
 │   └── devin/                       # adapter.yaml + build.sh + install.sh
+│       ├── session_query.py         # motor de consulta de sesiones (Devin-specific)
+│       └── session_report.py        # generador de reporte HTML
 ├── brain/                           # Layer 2 &mdash; core de inteligencia
 │   ├── config.yaml                  # GITIGNORED: configuracion del usuario
 │   ├── agents/                      # neo, oracle, morpheus, architect,
@@ -504,6 +932,7 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 │   ├── state/                       # GITIGNORED: workspace.yaml, activity.log,
 │   │                                # checkpoints.jsonl
 │   └── output/                      # GITIGNORED: scratch de Matrix-workspace-mode
+│       └── session-report.html      # default output de session-report (gitignored)
 ├── modules/hardline/                # The Hardline (AFK, opt-in)
 ├── docs/SYSTEM_TRUTH.md             # The Source (generado)
 └── clients/                         # GITIGNORED: repos de proyectos
@@ -511,9 +940,12 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 # Los artefactos de trabajo de un PROYECTO (reports, planes, etc.) van a
 # &lt;proyecto&gt;/matrix-output/, nunca aca &mdash; ver AGENTS.md &sect;1.
 </code></pre>
+</details>
+</div>
 
 <!-- ========== 17 ========== -->
-<h2 id="trainman">17. Adaptar a otro CLI (The Trainman)</h2>
+<div class="section" id="trainman">
+<h2>17. Adaptar a otro CLI (The Trainman)</h2>
 <p>Hoy solo existe el adaptador de Devin. El cerebro esta escrito para que agregar otro sea barato (~1 renderer + 1 yaml + 1 installer) y no requiera tocarlo, pero nadie mas esta implementado en este momento.</p>
 <ol>
   <li>Crear <code>adapters/&lt;cli&gt;/adapter.yaml</code> con el mapa de capacidades + <code>model_policy</code>.</li>
@@ -521,7 +953,9 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
   <li>Crear <code>adapters/&lt;cli&gt;/build.sh</code> (una linea) y <code>adapters/&lt;cli&gt;/install.sh</code>.</li>
   <li><code>bin/matrix build --target=&lt;cli&gt;</code> y despues <code>bin/matrix install --target=&lt;cli&gt;</code>.</li>
 </ol>
-<pre><code># Ejemplo ilustrativo (hipotetico, no implementado): adapter.yaml para otro CLI
+<details>
+  <summary>Ejemplo de adapter.yaml (hipotetico)</summary>
+  <pre><code># Ejemplo ilustrativo (hipotetico, no implementado): adapter.yaml para otro CLI
 target: otro-cli
 capabilities:
   read: Read
@@ -539,9 +973,12 @@ model_policy:
   reasoning: modelo-fuerte
   auto: modelo-barato
 </code></pre>
+</details>
+</div>
 
 <!-- ========== 18 ========== -->
-<h2 id="sesion">18. Higiene de sesion</h2>
+<div class="section" id="sesion">
+<h2>18. Higiene de sesion</h2>
 <p>Cada sesion debe:</p>
 <ul>
   <li>Leer <code>AGENTS.md</code> (el contrato).</li>
@@ -553,9 +990,11 @@ model_policy:
   <li>Escribir checkpoint cuando algo importa.</li>
   <li>Verificar realidad antes de declarar &laquo;listo&raquo;.</li>
 </ul>
+</div>
 
 <!-- ========== 19 ========== -->
-<h2 id="prohibido">19. Lo prohibido</h2>
+<div class="section" id="prohibido">
+<h2>19. Lo prohibido</h2>
 <div class="danger">
 <ul>
   <li>Dejar que el usuario hable directo con especialistas (sin pasar por Neo).</li>
@@ -569,55 +1008,228 @@ model_policy:
   <li>Invocar git autonomamente (solo con pedido explicito del usuario).</li>
 </ul>
 </div>
+</div>
 
 <!-- ========== 20 ========== -->
-<h2 id="faq">20. FAQ / Troubleshooting</h2>
+<div class="section" id="faq">
+<h2>20. FAQ / Troubleshooting</h2>
 
-<h4>El symlink <code>_brain</code> esta roto</h4>
-<pre><code>./bin/matrix deselect
+<details>
+  <summary>El symlink <code>_brain</code> esta roto</summary>
+  <pre><code>./bin/matrix deselect
 ./bin/matrix select &lt;nombre&gt;
 </code></pre>
+</details>
 
-<h4>No hay proyecto activo</h4>
-<pre><code>./bin/matrix status        # ver el estado
+<details>
+  <summary>No hay proyecto activo</summary>
+  <pre><code>./bin/matrix status        # ver el estado
 ./bin/matrix list          # ver proyectos disponibles
 ./bin/matrix select &lt;nombre&gt;
 </code></pre>
+</details>
 
-<h4>El pre_activation_check falla</h4>
-<p>Corre <code>./bin/matrix hooks pre_activation_check</code> y lee la lista de errores. Los mas comunes:</p>
-<ul>
-  <li><strong>contract_present:</strong> falta <code>AGENTS.md</code> en la raiz de Matrix.</li>
-  <li><strong>config_present:</strong> falta <code>brain/config.yaml</code>. Copialo de otro backup o crealo con <code>user</code> y <code>language</code>.</li>
-  <li><strong>roster_intact:</strong> falta un agente en <code>brain/agents/</code>. Verificá que esten los 7+1.</li>
-</ul>
+<details>
+  <summary>El pre_activation_check falla</summary>
+  <p>Corre <code>./bin/matrix hooks pre_activation_check</code> y lee la lista de errores. Los mas comunes:</p>
+  <ul>
+    <li><strong>contract_present:</strong> falta <code>AGENTS.md</code> en la raiz de Matrix.</li>
+    <li><strong>config_present:</strong> falta <code>brain/config.yaml</code>. Copialo de otro backup o crealo con <code>user</code> y <code>language</code>.</li>
+    <li><strong>roster_intact:</strong> falta un agente en <code>brain/agents/</code>. Verificá que esten los 7+1.</li>
+  </ul>
+</details>
 
-<h4>SYSTEM_TRUTH.md esta desactualizado (The Source stale)</h4>
-<pre><code># Verificar
+<details>
+  <summary>SYSTEM_TRUTH.md esta desactualizado (The Source stale)</summary>
+  <pre><code># Verificar
 ./bin/matrix hooks the_source '{"check":true}'
 # Regenerar
 ./bin/matrix hooks the_source
 </code></pre>
+</details>
 
-<h4>Quiero agregar un nuevo CLI</h4>
-<p>Ver seccion <a href="#trainman">17. Adaptar a otro CLI</a>. Costo: ~1 yaml + 1 funcion render + 1 installer. Ninguno esta implementado hoy salvo Devin.</p>
+<details>
+  <summary>Quiero agregar un nuevo CLI</summary>
+  <p>Ver seccion <a href="#trainman">17. Adaptar a otro CLI</a>. Costo: ~1 yaml + 1 funcion render + 1 installer. Ninguno esta implementado hoy salvo Devin.</p>
+</details>
 
-<h4>Quiero agregar un especialista nuevo</h4>
-<div class="warn">
-<p><strong>Roster discipline:</strong> agregar uno requiere retirar o fusionar uno existente. Crear el <code>.md</code> en <code>brain/agents/</code> con el formato canonico (frontmatter + XML blocks). Luego regenerar The Source.</p>
+<details>
+  <summary>Quiero agregar un especialista nuevo</summary>
+  <div class="warn">
+  <p><strong>Roster discipline:</strong> agregar uno requiere retirar o fusionar uno existente. Crear el <code>.md</code> en <code>brain/agents/</code> con el formato canonico (frontmatter + XML blocks). Luego regenerar The Source.</p>
+  </div>
+</details>
+
+<details>
+  <summary>Quiero una nave federada nueva</summary>
+  <p>Ver seccion <a href="#federacion">11. Federacion</a>. Crear <code>brain/subsystems/&lt;nave&gt;/AGENTS.md</code> + agentes. Coordinar solo via Link.</p>
+</details>
+
+<details>
+  <summary>Donde guardo lecciones de un proyecto especifico?</summary>
+  <p>En <code>brain/data/lessons/&lt;proyecto&gt;.md</code>. Copiar <code>_template.md</code> como punto de partida.</p>
+</details>
 </div>
-
-<h4>Quiero una nave federada nueva</h4>
-<p>Ver seccion <a href="#federacion">11. Federacion</a>. Crear <code>brain/subsystems/&lt;nave&gt;/AGENTS.md</code> + agentes. Coordinar solo via Link.</p>
-
-<h4>Donde guardo lecciones de un proyecto especifico?</h4>
-<p>En <code>brain/data/lessons/&lt;proyecto&gt;.md</code>. Copiar <code>_template.md</code> como punto de partida.</p>
 
 <footer>
   Matrix v2.0 &mdash; Personal Intelligence Engine (construido para Devin CLI)<br>
   Tematica de la trilogia de Matrix. Cada nombre es mnemonico, no decorativo.<br>
-  Actualizado: julio 2026.
+  Actualizado: 2026-07-21.
 </footer>
+
+</main>
+</div><!-- .page-layout -->
+
+<!-- ── Command palette overlay ── -->
+<div class="cmd-palette" id="cmdPalette">
+  <div class="cmd-palette-box">
+    <input type="text" id="cmdInput" placeholder="Ir a seccion..." autocomplete="off">
+    <ul class="cmd-palette-list" id="cmdList"></ul>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ── Section data for nav + palette ── */
+  var NAV_LINKS = document.querySelectorAll('.nav-rail a[data-section]');
+  var SECTIONS = [];
+  NAV_LINKS.forEach(function(a){
+    var id = a.getAttribute('data-section');
+    var el = document.getElementById(id);
+    if(el) SECTIONS.push({id:id, el:el, link:a, label:a.textContent});
+  });
+
+  /* ── Scroll-spy (IntersectionObserver) ── */
+  var scrollRoot = null;
+  if(window.innerWidth >= 900){
+    scrollRoot = document.getElementById('mainContent');
+  }
+
+  function activateLink(id){
+    NAV_LINKS.forEach(function(a){
+      a.classList.toggle('active', a.getAttribute('data-section') === id);
+    });
+  }
+
+  if('IntersectionObserver' in window){
+    var currentId = '';
+    var observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting && entry.intersectionRatio > 0){
+          currentId = entry.target.id;
+          activateLink(currentId);
+        }
+      });
+    }, {
+      root: scrollRoot,
+      rootMargin: '-10% 0px -70% 0px',
+      threshold: 0
+    });
+    SECTIONS.forEach(function(s){ observer.observe(s.el); });
+  }
+
+  /* ── Mobile nav toggle ── */
+  var mobileToggle = document.getElementById('mobileNavToggle');
+  var navRail = document.getElementById('navRail');
+  if(mobileToggle && navRail){
+    mobileToggle.addEventListener('click', function(){
+      navRail.classList.toggle('open');
+    });
+    navRail.addEventListener('click', function(e){
+      if(e.target.tagName === 'A'){
+        navRail.classList.remove('open');
+      }
+    });
+  }
+
+  /* ── Command palette ── */
+  var palette = document.getElementById('cmdPalette');
+  var cmdInput = document.getElementById('cmdInput');
+  var cmdList = document.getElementById('cmdList');
+  var highlighted = 0;
+
+  function buildList(filter){
+    cmdList.innerHTML = '';
+    highlighted = 0;
+    var filt = (filter || '').toLowerCase();
+    var items = [];
+    SECTIONS.forEach(function(s, i){
+      if(filt && s.label.toLowerCase().indexOf(filt) === -1) return;
+      var li = document.createElement('li');
+      var num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = (i < 10 ? (i+1)%10 : '') + ' ';
+      li.appendChild(num);
+      li.appendChild(document.createTextNode(s.label));
+      li.setAttribute('data-idx', items.length);
+      li.setAttribute('data-id', s.id);
+      li.addEventListener('click', function(){ jumpTo(s.id); });
+      cmdList.appendChild(li);
+      items.push(li);
+    });
+    if(items.length > 0) items[0].classList.add('highlighted');
+    return items;
+  }
+
+  function jumpTo(id){
+    closePalette();
+    var el = document.getElementById(id);
+    if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  function openPalette(){
+    palette.classList.add('open');
+    cmdInput.value = '';
+    buildList('');
+    cmdInput.focus();
+  }
+
+  function closePalette(){
+    palette.classList.remove('open');
+    cmdInput.value = '';
+  }
+
+  cmdInput.addEventListener('input', function(){
+    buildList(cmdInput.value);
+  });
+
+  cmdInput.addEventListener('keydown', function(e){
+    var items = cmdList.querySelectorAll('li');
+    if(e.key === 'Escape'){ closePalette(); return; }
+    if(e.key === 'Enter'){
+      var hl = cmdList.querySelector('li.highlighted');
+      if(hl) jumpTo(hl.getAttribute('data-id'));
+      return;
+    }
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      items.forEach(function(li){ li.classList.remove('highlighted'); });
+      if(e.key === 'ArrowDown') highlighted = Math.min(highlighted+1, items.length-1);
+      else highlighted = Math.max(highlighted-1, 0);
+      if(items[highlighted]) items[highlighted].classList.add('highlighted');
+    }
+  });
+
+  palette.addEventListener('click', function(e){
+    if(e.target === palette) closePalette();
+  });
+
+  /* ── Global keyboard shortcut ── */
+  document.addEventListener('keydown', function(e){
+    if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    if(palette.classList.contains('open')){
+      if(e.key === 'Escape') closePalette();
+      return;
+    }
+    if(e.key === 'g' || e.key === '/'){
+      e.preventDefault();
+      openPalette();
+    }
+  });
+})();
+</script>
 
 </body>
 </html>
