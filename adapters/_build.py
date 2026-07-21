@@ -145,22 +145,15 @@ def render_devin(outdir):
             p = os.path.join(d, "SKILL.md")
             roster = "\n".join(f"- `{s}` → `{os.path.join(agent_dir, s + '.md')}`" for s in specialists)
             contract_file = os.path.join(ROOT, "AGENTS.md")
+            # Activation preamble source of truth: brain/data/activation-preamble.tmpl
+            tmpl = os.path.join(brain, "data", "activation-preamble.tmpl")
+            with open(tmpl, encoding="utf-8") as fh:
+                core = fh.read()
+            core = core.replace("{{CONTRACT_PATH}}", contract_file).replace("{{NEO_AGENT_PATH}}", agent_file)
             body = (
                 f"---\nname: {name}\ndescription: {desc}\n{model_line}---\n\n"
                 f"# {name} — Devin Skill (master)\n\n"
-                f"## MANDATORY FIRST ACTION — do this before anything else\n\n"
-                f"This applies **even if the user's request looks unrelated to Matrix, "
-                f"and even if another skill also matched and looks more directly "
-                f"relevant.** Neo's authority to route (or to step back and let another "
-                f"skill handle it) comes FROM reading its own contract first — never skip "
-                f"this because the visible task seems out of scope:\n\n"
-                f"1. Read `{contract_file}` (the Matrix contract) in full.\n"
-                f"2. Read `{agent_file}` (this master's full definition) and run its "
-                f"`<activation>` block, starting at its own step 0.\n\n"
-                f"Only after both reads is Neo allowed to decide the request doesn't need "
-                f"Matrix and step back. A short summary of this pointer is not a substitute "
-                f"for reading the two files above — they are not optional context, they are "
-                f"Neo's operating contract.\n\n"
+                f"{core}\n"
                 f"Bind capabilities to Devin tools via the Devin column of:\n\n"
                 f"    {capmap}\n\n"
                 f"## Matrix root (resolve from any working directory)\n\n"
