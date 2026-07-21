@@ -122,8 +122,24 @@ update_context() {
 
 # --- Project registry -------------------------------------------------------
 add_project() {
-    local name="$1" path_or_url="${2:-}"
-    [[ -z "$name" ]] && { log_error "Usage: matrix add <name> [path-or-url]"; return 1; }
+    local name="" path_or_url="" replace=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --replace|--force) replace=true ;;
+            --*) log_error "Unknown flag '$arg'"; return 1 ;;
+            *)
+                if [[ -z "$name" ]]; then
+                    name="$arg"
+                elif [[ -z "$path_or_url" ]]; then
+                    path_or_url="$arg"
+                else
+                    log_error "Unexpected argument '$arg'"
+                    return 1
+                fi
+                ;;
+        esac
+    done
+    [[ -z "$name" ]] && { log_error "Usage: matrix add <name> [path-or-url] [--replace]"; return 1; }
     if [[ -z "$path_or_url" ]]; then
         local current_dir; current_dir="$(pwd)"
         log_info "No path provided. Current directory: $current_dir"
@@ -131,11 +147,34 @@ add_project() {
         [[ "$r" =~ ^[Yy]$ ]] || { log_warning "Cancelled"; return 1; }
         path_or_url="$current_dir"
     fi
-    local existing; existing="$(registry_path "$name")"
-    [[ -n "$existing" && "$existing" != "null" ]] && { log_error "Project '$name' already exists"; return 1; }
     local type="local"
     [[ "$path_or_url" =~ ^https?:// || "$path_or_url" =~ ^git@ ]] && type="remote"
-    [[ "$type" == "local" ]] && path_or_url="${path_or_url%/}"
+    if [[ "$type" == "local" ]]; then
+        path_or_url="$(to_abs_path "$path_or_url")"
+        path_or_url="${path_or_url%/}"
+        [[ -d "$path_or_url" ]] || { log_error "Path '$path_or_url' does not exist"; return 1; }
+    fi
+    local existing; existing="$(registry_path "$name")"
+    if [[ -n "$existing" && "$existing" != "null" ]]; then
+        if [[ "$replace" != true ]]; then
+            log_error "Project '$name' already exists — use 'matrix add <name> <path> --replace' to update it"
+            return 1
+        fi
+        if is_bound "$name"; then
+            local was_primary=false
+            [[ "$(read_context)" == "$name" ]] && was_primary=true
+            log_info "Project '$name' is bound; removing old binding before replacing..."
+            deselect_project "$name"
+            [[ "$was_primary" == true ]] && log_info "Primary project cleared; run 'matrix select $name' to rebind when ready"
+        fi
+        local tmp; tmp="$(mktemp)"
+        jq --arg n "$name" --arg p "$path_or_url" --arg t "$type" \
+           '.projects |= map(if .name==$n then . + {path:$p, type:$t} else . end)' \
+           "$REGISTRY_FILE" > "$tmp" && mv "$tmp" "$REGISTRY_FILE"
+        link_append "project:replace" "$name" "$existing -> $path_or_url"
+        log_success "Replaced project '$name'"
+        return 0
+    fi
     local tmp; tmp="$(mktemp)"
     jq --arg n "$name" --arg p "$path_or_url" --arg t "$type" \
        '.projects += [{"name": $n, "path": $p, "type": $t, "added": "'$(date -Iseconds)'"}]' \
@@ -596,7 +635,7 @@ Usage: matrix <command> [args]
 
 Projects:
   list                    List all registered projects
-  add <name> [path]       Register a project (path optional → current dir)
+  add <name> [path] [--replace]  Register a project (path optional → current dir; --replace updates existing)
   select <name>           Set primary active project + create _brain symlink
   deselect [name]         Remove binding for a project (defaults to primary)
   bindings                Show bound status for all registered projects
@@ -624,7 +663,7 @@ main() {
     acquire_lock
     case "${1:-}" in
         list)       list_projects ;;
-        add)        add_project "${2:-}" "${3:-}" ;;
+        add)        shift; add_project "$@" ;;
         select)     select_project "${2:-}" ;;
         deselect)   deselect_project "${2:-}" ;;
         work)       work_project "${2:-}" ;;
