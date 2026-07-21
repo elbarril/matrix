@@ -60,6 +60,9 @@ log_error()   { echo -e "${RED}[MATRIX]${NC} $1"; }
 
 # --- Global lock ------------------------------------------------------------
 acquire_lock() {
+    if [[ -n "${MATRIX_LOCKED:-}" ]]; then
+        return 0
+    fi
     if ! command -v flock >/dev/null 2>&1; then
         log_warning "flock not available; running without global lock"
         return 0
@@ -67,6 +70,7 @@ acquire_lock() {
     mkdir -p "$STATE_DIR"
     exec 200>"$STATE_DIR/.matrix.lock"
     flock -x -w 30 200 || { log_error "Could not acquire global lock (timeout?)"; exit 1; }
+    export MATRIX_LOCKED=1
 }
 release_lock() {
     if command -v flock >/dev/null 2>&1; then
@@ -707,30 +711,39 @@ EOF
 }
 
 main() {
-    acquire_lock
     case "${1:-}" in
-        list)       list_projects ;;
-        add)        shift; add_project "$@" ;;
-        select)     select_project "${2:-}" ;;
-        deselect)   deselect_project "${2:-}" ;;
-        work)       work_project "${2:-}" ;;
-        unwork)     unwork_project "${2:-}" ;;
-        workspace)  show_workspace ;;
-        bindings)   show_bindings ;;
-        status)     show_status ;;
-        checkpoint) write_checkpoint "${2:-}" ;;
-        activity)   show_activity "${2:-}" ;;
-        hooks)      shift; run_hook "$@" ;;
-        build)      shift; build_target "$@" ;;
-        install)    shift; install_target "$@" ;;
-        session-find) shift; session_query find "$@" ;;
-        session-dump) shift; session_query dump "$@" ;;
-        session-cost) shift; session_query cost "$@" ;;
-        session-subagents) shift; session_query subagents "$@" ;;
-        session-report) shift; session_report "$@" ;;
-        help|--help|-h) show_help ;;
-        "") log_error "No command. Use 'matrix help'."; exit 1 ;;
-        *)  log_error "Unknown command: $1"; echo "Use 'matrix help'."; exit 1 ;;
+        help|--help|-h)
+            show_help
+            ;;
+        "")
+            log_error "No command. Use 'matrix help'."
+            exit 1
+            ;;
+        *)
+            acquire_lock
+            case "${1:-}" in
+                list)       list_projects ;;
+                add)        shift; add_project "$@" ;;
+                select)     select_project "${2:-}" ;;
+                deselect)   deselect_project "${2:-}" ;;
+                work)       work_project "${2:-}" ;;
+                unwork)     unwork_project "${2:-}" ;;
+                workspace)  show_workspace ;;
+                bindings)   show_bindings ;;
+                status)     show_status ;;
+                checkpoint) write_checkpoint "${2:-}" ;;
+                activity)   show_activity "${2:-}" ;;
+                hooks)      shift; run_hook "$@" ;;
+                build)      shift; build_target "$@" ;;
+                install)    shift; install_target "$@" ;;
+                session-find) shift; session_query find "$@" ;;
+                session-dump) shift; session_query dump "$@" ;;
+                session-cost) shift; session_query cost "$@" ;;
+                session-subagents) shift; session_query subagents "$@" ;;
+                session-report) shift; session_report "$@" ;;
+                *)  log_error "Unknown command: $1"; echo "Use 'matrix help'."; exit 1 ;;
+            esac
+            ;;
     esac
 }
 

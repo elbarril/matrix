@@ -12,6 +12,8 @@ Usage:
 """
 
 import os
+import re
+import subprocess
 import sys
 
 from _common import emit, read_input, resolve_root
@@ -40,20 +42,54 @@ def list_md(dirpath):
     return sorted(f for f in os.listdir(dirpath) if f.endswith(".md"))
 
 
+def live_hooks(root):
+    hooks_dir = os.path.join(root, "hooks")
+    return sorted(
+        f[:-3] for f in os.listdir(hooks_dir)
+        if f.endswith(".py") and not f.startswith("_")
+    ) if os.path.isdir(hooks_dir) else []
+
+
+def onboarding_coverage(root):
+    """Return whether onboarding.html covers the current live surface."""
+    onboarding_path = os.path.join(root, "onboarding.html")
+    with open(onboarding_path, encoding="utf-8") as fh:
+        onboarding = fh.read()
+
+    agents_dir = os.path.join(root, "brain", "agents")
+    agents = [
+        parse_frontmatter(os.path.join(agents_dir, filename))[0]
+        for filename in list_md(agents_dir)
+    ]
+    hooks = live_hooks(root)
+
+    proc = subprocess.run(
+        [os.path.join(root, "bin", "matrix"), "help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    # Help commands begin with two spaces and a lowercase hyphenated token.
+    commands = re.findall(r"(?m)^  ([a-z]+(?:-[a-z]+)*)\s+", proc.stdout)
+
+    missing = {
+        "agents": [name for name in agents if name not in onboarding],
+        "hooks": [name for name in hooks if name not in onboarding],
+        "commands": [name for name in commands if name not in onboarding],
+    }
+    return {"ok": not any(missing.values()), "missing": missing}
+
+
 def generate(root):
     agents_dir = os.path.join(root, "brain", "agents")
     wf_dir = os.path.join(root, "brain", "workflows")
-    hooks_dir = os.path.join(root, "hooks")
 
     agents = []
     for f in list_md(agents_dir):
         agents.append(parse_frontmatter(os.path.join(agents_dir, f)))
 
     workflows = [f[:-3] for f in list_md(wf_dir) if f.lower() != "readme.md"]
-    hooks = sorted(
-        f[:-3] for f in os.listdir(hooks_dir)
-        if f.endswith(".py") and not f.startswith("_")
-    ) if os.path.isdir(hooks_dir) else []
+    hooks = live_hooks(root)
 
     out = []
     out.append("# SYSTEM_TRUTH — The Source")
@@ -102,13 +138,16 @@ def main():
             with open(target, encoding="utf-8") as fh:
                 existing = fh.read()
         in_sync = existing.strip() == content.strip()
+        coverage = onboarding_coverage(root)
+        ok = in_sync and coverage["ok"]
         emit({
             "hook": "the_source",
-            "ok": in_sync,
+            "ok": ok,
             "mode": "check",
             "in_sync": in_sync,
+            "onboarding_coverage": coverage,
             "target": target,
-            "note": "in sync" if in_sync else "SYSTEM_TRUTH.md is stale — run the_source to regenerate",
+            "note": "in sync" if ok else "SYSTEM_TRUTH.md is stale or onboarding.html is missing live coverage",
         })
         return
 

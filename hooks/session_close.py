@@ -101,6 +101,31 @@ def _run_post_run_audit(root, steps):
     }
 
 
+def _run_the_source_check(root):
+    """Invoke the Source check and return its JSON result defensively."""
+    bin_matrix = os.path.join(root, "bin", "matrix")
+    env = {**os.environ, "MATRIX_ROOT": root}
+    proc = subprocess.run(
+        [bin_matrix, "hooks", "the_source", json.dumps({"check": True})],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        stdin=subprocess.DEVNULL,
+    )
+    if proc.stdout:
+        try:
+            return json.loads(proc.stdout)
+        except ValueError:
+            pass
+    return {
+        "hook": "the_source",
+        "ok": False,
+        "stdout": proc.stdout,
+        "stderr": proc.stderr,
+    }
+
+
 def main():
     data = read_input()
     root = resolve_root()
@@ -112,6 +137,7 @@ def main():
     steps = _derive_steps(filtered)
 
     post_report = _run_post_run_audit(root, steps)
+    the_source_report = _run_the_source_check(root)
 
     result = {
         "hook": "session_close",
@@ -120,6 +146,7 @@ def main():
         "steps_seen": steps,
         "entries_examined": len(filtered),
         "validation": post_report,
+        "the_source_check": the_source_report,
     }
     emit(result)
 
