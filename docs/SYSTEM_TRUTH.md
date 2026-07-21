@@ -24,8 +24,10 @@
 
 ## Enforcement hooks (Seraph, live)
 
+- `audit_event`
 - `post_run_audit`
 - `pre_activation_check`
+- `session_close`
 - `the_source`
 - `validate_phase_close`
 
