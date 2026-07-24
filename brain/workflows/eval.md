@@ -17,7 +17,7 @@ Steps back and judges the whole result against the goal, then records what was l
 
 ## Close
 
-Run `validate_phase_close` with `{"phase":"eval","evidence":"<verdict vs done-criteria + checkpoint ref>"}`.
+Run `validate_phase_close` with `{"phase":"eval","evidence":"<verdict vs done-criteria + checkpoint ref>","lesson":"<what was appended to lessons.md/lessons/<project>.md, or an explicit reasoned N/A>"}`. The hook BLOCKs if `lesson` is missing or trivial — step 2 above is enforced, not optional.
 
 ## Handoff
 

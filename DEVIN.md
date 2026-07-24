@@ -99,6 +99,25 @@ Devin withholds `ask_user_question` from every subagent unconditionally — not 
 
 See [`AGENTS.md`](AGENTS.md) §13. In short: read the contract, know the registry, resolve context, read recent checkpoints + lessons, respect boundaries, never log secrets, checkpoint progress, verify reality before "done".
 
+## Hardening `permissions.deny` for secret stores
+
+`bin/matrix harden --target=devin` reconciles Devin's `permissions.deny` list
+against the declarative `secret_deny` block in `adapters/devin/config.yaml`.
+It is dry-run by default; use `--apply` to write and `--revert` to remove
+Matrix-managed entries. The command only touches `permissions.deny` and uses a
+sidecar (`~/.config/devin/.matrix-managed-deny.json`) so manual deletions are
+respected across runs.
+
+The static list covers common credential stores (SSH, AWS, GPG, kubeconfig,
+browser logins, Devin's own local state, etc.). Auto-discovery scans `$HOME`
+up to `max_depth` for hidden directories containing a `credentials/` folder or
+`.env` files, emitting directory-level `Read(...)` patterns only — it never
+writes specific credential filenames into the repo or logs.
+
+**Important:** `permissions.deny` with `Read(...)` only blocks the `read_file`
+tool. It does **not** block `grep`/`glob` or `exec` (e.g. `cat`). It is a partial
+mitigation against incidental reads, not a sandbox.
+
 ## Why enforcement is portable, not Devin-coupled
 
 Enforcement lives in `hooks/*.py` with a JSON in/out contract, fired by `bin/matrix hooks <name>`. The logic travels with the brain, not with Devin — so the exact same checks would run unchanged under a future CLI adapter, if one is ever built. The adapter only decides *when* to fire them.

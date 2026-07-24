@@ -1,2 +1,33 @@
 experiment:
   activation_inject: false
+
+secret_deny:
+  static:
+    - "~/.ssh/**"
+    - "~/.aws/**"
+    - "~/.gnupg/**"
+    - "~/.git-credentials"
+    - "~/.netrc"
+    - "~/.npmrc"
+    - "~/.pypirc"
+    - "~/.docker/**"
+    - "~/.kube/config"
+    - "~/.config/gh/hosts.yml"
+    - "~/.config/gcloud/credentials.db"
+    - "~/.local/share/devin/**"
+    - "~/.local/share/keyrings/**"
+    - "~/.mozilla/firefox/**/logins.json"
+    - "~/.config/google-chrome/**/Login Data"
+  class_b_repo_secrets:
+    enabled: false
+    patterns:
+      - "**/.env"
+      - "**/.env.local"
+      - "**/.env.production"
+      - "**/*.pem"
+      - "**/id_rsa"
+      - "**/id_ed25519"
+  discover:
+    enabled: true
+    max_depth: 3
+  exclude: []

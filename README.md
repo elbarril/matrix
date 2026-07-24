@@ -46,6 +46,15 @@ No hay un solo "modelo" haciendo todo. Matrix reparte el trabajo entre roles con
 
 Un pedido de "arreglame un bug" típicamente pasa por Smith (encuentra la causa) → Trinity (arregla) → Smith (confirma que ahora sí funciona). Un pedido de "quiero una funcionalidad nueva" típicamente pasa por Morpheus (plan) → Architect (revisión) → Trinity (construye) → Smith (gate final). **Vos nunca hablás con ellos directamente** — es Neo quien los invoca como sub-agentes y te cuenta el resultado.
 
+### Dos gates que se llaman parecido pero preguntan cosas distintas
+
+Es fácil confundirlos porque los dos son hooks de Seraph y los dos aparecen al "cerrar" algo, pero responden preguntas distintas:
+
+- **`validate_phase_close`** — el gate de **realidad del contenido**: "¿esto que decís que funciona, funciona de verdad?". No escribe nada en disco por sí mismo; recibe `{"phase","e2e","evidence","lesson"}` y devuelve PASS/BLOCK por stdout. Es manual: solo corre si el agente decide invocarlo al cerrar una fase (`spec`/`develop`/`test`/`eval`). Nada de Devin lo dispara solo.
+- **`post_run_audit`** — el gate de **proceso**: "¿el agente siguió los pasos obligatorios de activación?" (no si el trabajo es real, sino si se hizo el ritual: `pre_activation_check`, etc.). Este sí persiste: escribe `brain/state/validation-report.json`. Se alimenta automáticamente de eventos reales del ciclo de vida de Devin (`SessionStart`, `PostToolUse`, `SessionEnd`) vía el adaptador (`adapters/devin/hooks/session_audit.py` → `hooks/audit_event.py` → `hooks/session_close.py`).
+
+En criollo: uno audita el **qué** (¿el trabajo es real?), el otro audita el **cómo** (¿se siguió el protocolo?). Podés pasar uno y fallar el otro.
+
 ### ¿Por qué tantas capas / nombres raros?
 
 Porque así el sistema no queda atado a Devin CLI para siempre. Las reglas y los agentes (`brain/`) están escritos en un lenguaje neutral — nunca dicen "usá la herramienta X de tal CLI", dicen "necesito la capacidad de leer archivos". Un traductor delgado (**el adaptador de Devin**, en `adapters/devin/`) es lo único que sabe que hoy el CLI es Devin. Si el día de mañana usás otro CLI, se cambia ese traductor (chico) y el cerebro entero se reutiliza tal cual.
@@ -54,9 +63,13 @@ Porque así el sistema no queda atado a Devin CLI para siempre. Las reglas y los
 
 Matrix necesita recordar cosas entre sesiones: qué proyecto es tu foco actual, qué proyectos tenés "calientes", un historial de checkpoints, un log de eventos. Todo eso son **archivos de texto** en `brain/state/` — nunca una base de datos. Cambian todo el tiempo y son específicos de tu máquina, así que están en `.gitignore`: no se commitean, no ensucian el historial del repo.
 
-### ¿Qué es un "checkpoint"?
+### ¿Qué es un "checkpoint"? ¿Y en qué se diferencia de una "lesson"?
 
-Es una nota con fecha que Neo (o vos) guarda cuando algo importante pasó ("implementé X, quedó pendiente Y"). Sirve para que la próxima sesión — quizás mañana, quizás en otra terminal — pueda leer qué se hizo sin que tengas que volver a explicar todo. Se escribe con `bin/matrix checkpoint "nota"`, nunca a mano.
+Un **checkpoint** es una nota con fecha que Neo (o vos) guarda cuando algo importante pasó ("implementé X, quedó pendiente Y"). Es memoria de **corto plazo**: sirve para retomar un hilo cortado (una sesión que se compactó, un cambio de foco), no para acordarse de algo para siempre. Se escribe con `bin/matrix checkpoint "nota"`, nunca a mano.
+
+Por default, `matrix status` y `matrix activity` muestran los checkpoints/eventos del **proyecto activo únicamente** (resuelto igual que Neo: symlink `_brain` del directorio donde estás parado > `primary` de `.context.yaml`). Esto es a propósito: `checkpoints.jsonl` es un archivo único y compartido entre *todos* tus proyectos, así que una vista global mezclaría el historial de sandisk con el de calian y el que te importa quedaría enterrado apenas trabajes en otro proyecto. Usá `matrix status --all` o `matrix activity --all` cuando de verdad quieras la vista cruzada, o `matrix activity --project=<nombre>` para mirar otro proyecto sin moverte de carpeta.
+
+Una **lesson** (`brain/data/lessons.md` o `brain/data/lessons/<proyecto>.md`) es memoria de **largo plazo**: cosas que la realidad enseñó y que valen para siempre (una decisión del cliente, un link de acceso a una instancia, un bug real y su causa). A diferencia del checkpoint, no se cae de ninguna ventana — se lee siempre, íntegro, al bindear ese proyecto. El workflow `eval` (`brain/workflows/eval.md`) es el que la escribe, y desde ahora el hook `validate_phase_close` **bloquea** cerrar la fase `eval` si no se declaró explícitamente qué se aprendió (o un "N/A" razonado) — antes era solo una convención que se podía saltear en silencio.
 
 ---
 
@@ -126,7 +139,7 @@ matrix/
 └── clients/                   # GITIGNORED: pulled project repos
 ```
 
-Work artifacts for a **bound project** are written to that project's own `matrix-output/` directory (sibling to its `_brain` symlink) — never inside this repo. See `AGENTS.md` §1.
+Work artifacts for a **bound project** are written to that project's own `matrix-output/` directory (sibling to its `_brain` symlink) — never inside this repo. See `AGENTS.md` §1. `matrix select` auto-adds `matrix-output/` (plus `AGENTS.local.md` and `_brain`) to that project's `.gitignore`, so it never leaks into the project's own git history.
 
 ## CLI commands
 
@@ -146,10 +159,13 @@ workspace                 Show the warm set, marking which entries are [bound]
 bindings                  List every registered project, verifying in real time
                            whether its _brain symlink + AGENTS.local.md block
                            actually exist on disk right now
-status                    Show primary/default, bound count+names, warm count,
-                           registered count, recent checkpoints and Link events
+status [--all]            Show primary/default, bound count+names, warm count,
+                           registered count, recent checkpoints and Link events —
+                           scoped to the resolved project by default; --all for
+                           the old unfiltered, cross-project view
 checkpoint "<note>"       Write a checkpoint (+ Link entry)
-activity [n]              Show last n Link events
+activity [n] [--all] [--project=<name>]   Show last n Link events, scoped to the
+                           resolved project by default (default n=20)
 hooks <name> [json]       Run a Seraph hook
 build --target=<cli>      Trainman: generate native CLI artifacts
 install --target=<cli>    Trainman: deploy generated artifacts into the CLI's discovery path

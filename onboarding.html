@@ -649,10 +649,11 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <summary>Estado y telemetria</summary>
   <table>
     <tr><th>Comando</th><th>Que hace</th></tr>
-    <tr><td><code>matrix status</code></td><td>Muestra el estado del sistema (proyecto, link, set caliente, checkpoints, ledger)</td></tr>
+    <tr><td><code>matrix status [--all]</code></td><td>Muestra el estado del sistema (proyecto, link, set caliente, checkpoints, ledger). Por default, checkpoints/eventos Link salen filtrados al proyecto resuelto (symlink <code>_brain</code> del cwd &gt; <code>primary</code>); <code>--all</code> muestra la vista global sin filtrar</td></tr>
     <tr><td><code>matrix checkpoint "&lt;nota&gt;"</code></td><td>Escribe un checkpoint timestamped (+ entrada en Link)</td></tr>
-    <tr><td><code>matrix activity [n]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20)</td></tr>
+    <tr><td><code>matrix activity [n] [--all] [--project=&lt;name&gt;]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20), filtrados al proyecto resuelto por default; <code>--all</code> para todos los proyectos, <code>--project=</code> para consultar otro proyecto sin cambiar de directorio</td></tr>
   </table>
+  <p>Motivo del filtro: <code>checkpoints.jsonl</code> y <code>activity.log</code> son archivos <em>compartidos</em> entre todos los proyectos. Una vista global mezcla el historial de todos, y el de tu proyecto puede quedar enterrado apenas trabajes en otro (ver <a href="#lessons">14. Lecciones</a>).</p>
 </details>
 
 <details>
@@ -754,12 +755,12 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     </tr>
     <tr>
       <td><code>validate_phase_close</code></td>
-      <td>Bloquea cerrar una fase sin evidencia real E2E. Implementa Foundation 3.</td>
+      <td>Bloquea cerrar una fase sin evidencia real E2E. Implementa Foundation 3. En <code>phase=eval</code> tambien exige un campo <code>lesson</code> no trivial (que se capturo y donde, o un N/A razonado) &mdash; no escribe nada en disco, solo devuelve PASS/BLOCK</td>
       <td>Antes de declarar una fase &laquo;done&raquo;</td>
     </tr>
     <tr>
       <td><code>post_run_audit</code></td>
-      <td>Verifica que los pasos enforced corrieron, detecta bypass, escribe <code>validation-report.json</code></td>
+      <td>Verifica que los pasos enforced corrieron (proceso, no contenido), detecta bypass, escribe <code>validation-report.json</code></td>
       <td>Despues de una corrida</td>
     </tr>
     <tr>
@@ -780,11 +781,14 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   </table>
 </details>
 
+<p><strong>Dos gates, dos preguntas distintas:</strong> <code>validate_phase_close</code> audita el <em>contenido</em> (&iquest;el trabajo es real?) y no persiste nada &mdash; es el agente quien decide invocarlo al cerrar una fase. <code>post_run_audit</code> audita el <em>proceso</em> (&iquest;se siguieron los pasos obligatorios?) y s&iacute; persiste (<code>validation-report.json</code>), alimentado automaticamente desde eventos reales de Devin (<code>SessionStart</code>/<code>PostToolUse</code>/<code>SessionEnd</code>) via el adaptador. Se puede pasar uno y fallar el otro.</p>
+
 <details>
   <summary>Ejemplos de uso</summary>
   <pre><code># Ejemplos
 ./bin/matrix hooks pre_activation_check '{"project":"mck"}'
 ./bin/matrix hooks validate_phase_close '{"phase":"develop","e2e":true,"evidence":"ran pytest, 12/12 pass"}'
+./bin/matrix hooks validate_phase_close '{"phase":"eval","e2e":true,"evidence":"...","lesson":"appended brain/data/lessons/mck.md"}'
 ./bin/matrix hooks post_run_audit '{"agent":"neo","steps":["load_config","resolve_context","pre_activation_check"]}'
 ./bin/matrix hooks the_source                    # regenerar
 ./bin/matrix hooks the_source '{"check":true}'   # validar sync
@@ -873,6 +877,10 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 </table>
 <p>Routing: si la leccion aplica a todos los proyectos &rarr; pool core. Si aplica solo a uno &rarr; archivo scoped. Ejemplo: <code>brain/data/lessons/chronicle.md</code>, <code>brain/data/lessons/pas.md</code>.</p>
 <p>Para crear una nueva leccion scoped, copia <code>brain/data/lessons/_template.md</code>.</p>
+
+<div class="warn">
+  <p><strong>Checkpoint &ne; lesson.</strong> El checkpoint es memoria de <em>corto plazo</em> (buffer de recencia, se cae de la ventana) y vive en un archivo <em>compartido</em> entre todos los proyectos (<code>checkpoints.jsonl</code>) &mdash; por eso <code>matrix status</code>/<code>matrix activity</code> filtran por proyecto activo por default (ver <a href="#cli">5. CLI completo</a>). La lesson es memoria de <em>largo plazo</em>, scoped por diseño, y no se cae de ninguna ventana. Caso real que motiv&oacute; esta distincion: <code>brain/data/lessons/sandisk.md</code> &mdash; una sesion de <code>eval</code> cerr&oacute; con informacion util (decisiones del owner, links, gaps declarados) que qued&oacute; solo en un checkpoint largo y nunca se promovi&oacute; a lesson. Desde ahora <code>validate_phase_close</code> exige el campo <code>lesson</code> al cerrar <code>eval</code> &mdash; ver <a href="#enforcement">8. Enforcement</a>.</p>
+</div>
 </div>
 
 <!-- ========== 15 ========== -->
@@ -939,6 +947,9 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 
 # Los artefactos de trabajo de un PROYECTO (reports, planes, etc.) van a
 # &lt;proyecto&gt;/matrix-output/, nunca aca &mdash; ver AGENTS.md &sect;1.
+# matrix select agrega automaticamente matrix-output/ (+ AGENTS.local.md +
+# _brain) al .gitignore de ESE proyecto, para que nunca quede sin trackear
+# ni se cuele en su historial de git.
 </code></pre>
 </details>
 </div>
@@ -1069,12 +1080,22 @@ model_policy:
   <summary>Donde guardo lecciones de un proyecto especifico?</summary>
   <p>En <code>brain/data/lessons/&lt;proyecto&gt;.md</code>. Copiar <code>_template.md</code> como punto de partida.</p>
 </details>
+
+<details>
+  <summary>Mi checkpoint reciente no aparece en <code>matrix status</code>/<code>matrix activity</code></summary>
+  <p>Desde esta version, ambos comandos filtran por default al proyecto resuelto (symlink <code>_brain</code> del directorio donde estas parado &gt; <code>primary</code> de <code>.context.yaml</code>). Si tu checkpoint es de otro proyecto, no vas a verlo salvo que pidas la vista global: <code>matrix status --all</code> o <code>matrix activity --project=&lt;nombre&gt;</code>. Antes de este fix, la vista era global y sin filtrar &mdash; un checkpoint de otro proyecto pod&iacute;a &laquo;tapar&raquo; el tuyo en sesiones cross-project.</p>
+</details>
+
+<details>
+  <summary>Cual es la diferencia entre <code>validate_phase_close</code> y <code>post_run_audit</code>?</summary>
+  <p><code>validate_phase_close</code> pregunta si el <em>trabajo</em> es real (evidencia E2E, y desde ahora una <code>lesson</code> capturada al cerrar <code>eval</code>); no escribe nada en disco, es una llamada manual del agente. <code>post_run_audit</code> pregunta si se sigui&oacute; el <em>proceso</em> obligatorio de activaci&oacute;n; s&iacute; persiste (<code>validation-report.json</code>) y se alimenta solo, desde eventos reales de Devin via el adaptador. Ver <a href="#enforcement">8. Enforcement</a>.</p>
+</details>
 </div>
 
 <footer>
   Matrix v2.0 &mdash; Personal Intelligence Engine (construido para Devin CLI)<br>
   Tematica de la trilogia de Matrix. Cada nombre es mnemonico, no decorativo.<br>
-  Actualizado: 2026-07-21.
+  Actualizado: 2026-07-23.
 </footer>
 
 </main>

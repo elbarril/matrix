@@ -116,6 +116,37 @@ link_append() {
 read_registry() { init_registry; jq -r '.projects[] | "\(.name):\(.path):\(.type)"' "$REGISTRY_FILE" 2>/dev/null || echo ""; }
 read_context()  { init_context; sed -n 's/^active_project: //p' "$CONTEXT_FILE" | head -1 || echo "null"; }
 
+# resolve_scope_project: which project's checkpoints/Link events "status" and
+# "activity" should default to. The cwd's _brain-bound project wins (mirrors
+# the resolution order in AGENTS.md §7); falls back to the .context.yaml
+# primary. Prints nothing if neither resolves (Matrix workspace mode or an
+# unbound directory) — callers then fall back to the unfiltered/global view.
+# Note: bin/matrix has no notion of $MATRIX_PROJECT/--project — those are
+# resolved by the agent layer, not this CLI.
+resolve_scope_project() {
+    local cwd; cwd="$PWD"
+    local dir="$cwd" found=""
+    while [[ "$dir" != "/" ]]; do
+        if [[ -e "$dir/_brain" || -L "$dir/_brain" ]]; then found="$dir"; break; fi
+        dir="$(dirname "$dir")"
+    done
+    if [[ -n "$found" ]]; then
+        local matrix_real found_real
+        matrix_real="$(readlink -f "$MATRIX_DIR" 2>/dev/null || true)"
+        found_real="$(readlink -f "$found" 2>/dev/null || true)"
+        if [[ "$found_real" != "$matrix_real" ]] && path_is_bound "$found" 2>/dev/null; then
+            local reg; reg="$(read_registry)"
+            while IFS=: read -r n p _; do
+                [[ -z "$n" ]] && continue
+                local rp; rp="$(readlink -f "$p" 2>/dev/null || true)"
+                if [[ "$rp" == "$found_real" ]]; then echo "$n"; return 0; fi
+            done <<< "$reg"
+        fi
+    fi
+    local primary; primary="$(read_context)"
+    [[ "$primary" != "null" && -n "$primary" ]] && echo "$primary"
+}
+
 update_context() {
     init_context
     local project="$1" path="$2"; path="${path%/}"
@@ -330,7 +361,7 @@ update_gitignore() {
     local pp="$1"
     [[ -d "$pp/.git" ]] || return 0
     local gi="$pp/.gitignore"
-    local entries=("AGENTS.local.md" "_brain")
+    local entries=("AGENTS.local.md" "_brain" "matrix-output/")
     local changed=0
     for entry in "${entries[@]}"; do
         if [[ -f "$gi" ]] && grep -qxF "$entry" "$gi" 2>/dev/null; then
@@ -559,14 +590,36 @@ show_status() {
     local reg_n; reg_n="$(jq '.projects | length' "$REGISTRY_FILE" 2>/dev/null)" || reg_n=0
     echo "Registered: ${reg_n:-0} project(s)"
     echo
-    if [[ -s "$CHECKPOINTS_FILE" ]]; then
-        echo "Recent checkpoints:"
-        tail -n 3 "$CHECKPOINTS_FILE" | jq -r '"  " + .timestamp + " — " + .note' 2>/dev/null || true
-    fi
-    echo
-    if [[ -s "$ACTIVITY_LOG" ]]; then
-        echo "Recent Link events:"
-        tail -n 3 "$ACTIVITY_LOG" | sed 's/^/  /'
+    # Default view is scoped to the resolved project (cwd _brain > primary) —
+    # global checkpoints/Link events are one project's needle in everyone
+    # else's haystack (see lessons.md: cross-project sessions were pushing a
+    # project's own recent checkpoint out of an unfiltered last-3 window).
+    # `matrix status --all` keeps the old unfiltered, cross-project view.
+    local show_all="${1:-}" scope_project=""
+    [[ "$show_all" != "--all" ]] && scope_project="$(resolve_scope_project)"
+    if [[ -n "$scope_project" ]]; then
+        if [[ -s "$CHECKPOINTS_FILE" ]]; then
+            echo "Recent checkpoints (project: $scope_project):"
+            jq -c --arg p "$scope_project" 'select(.project == $p)' "$CHECKPOINTS_FILE" 2>/dev/null \
+                | tail -n 5 | jq -r '"  " + .timestamp + " — " + .note' 2>/dev/null || true
+        fi
+        echo
+        if [[ -s "$ACTIVITY_LOG" ]]; then
+            echo "Recent Link events (project: $scope_project):"
+            awk -F' *\\| *' -v p="$scope_project" '{if ($3==p) print}' "$ACTIVITY_LOG" | tail -n 5 | sed 's/^/  /'
+        fi
+        echo
+        echo "(run 'matrix status --all' for the unfiltered, cross-project view)"
+    else
+        if [[ -s "$CHECKPOINTS_FILE" ]]; then
+            echo "Recent checkpoints (all projects):"
+            tail -n 3 "$CHECKPOINTS_FILE" | jq -r '"  " + .timestamp + " — " + .note' 2>/dev/null || true
+        fi
+        echo
+        if [[ -s "$ACTIVITY_LOG" ]]; then
+            echo "Recent Link events (all projects):"
+            tail -n 3 "$ACTIVITY_LOG" | sed 's/^/  /'
+        fi
     fi
 }
 
@@ -584,11 +637,29 @@ write_checkpoint() {
     log_success "Checkpoint written"
 }
 
+# show_activity [n] [--all] [--project=<name>]
+# Default scope mirrors show_status: filters to the resolved project (cwd
+# _brain > .context.yaml primary). --all forces the old unfiltered, all-
+# projects tail; --project=<name> filters to an explicit project regardless
+# of cwd/primary (e.g. to check on a project you aren't currently bound to).
 show_activity() {
     init_state
-    local n="${1:-20}"
-    log_info "Link ledger (last $n):"; echo
-    tail -n "$n" "$ACTIVITY_LOG" | sed 's/^/  /'
+    local n=20 show_all=false proj=""
+    for arg in "$@"; do
+        case "$arg" in
+            --all) show_all=true ;;
+            --project=*) proj="${arg#*=}" ;;
+            *[0-9]*) [[ "$arg" =~ ^[0-9]+$ ]] && n="$arg" ;;
+        esac
+    done
+    [[ -z "$proj" && "$show_all" != true ]] && proj="$(resolve_scope_project)"
+    if [[ -n "$proj" && "$show_all" != true ]]; then
+        log_info "Link ledger (last $n, project: $proj):"; echo
+        awk -F' *\\| *' -v p="$proj" '{if ($3==p) print}' "$ACTIVITY_LOG" | tail -n "$n" | sed 's/^/  /'
+    else
+        log_info "Link ledger (last $n, all projects):"; echo
+        tail -n "$n" "$ACTIVITY_LOG" | sed 's/^/  /'
+    fi
 }
 
 # --- Seraph hooks -----------------------------------------------------------
@@ -611,6 +682,22 @@ build_target() {
         link_append "build" "$target" "artifacts generated"
     else
         log_warning "Trainman: no adapter builder at $builder (not implemented yet for '$target')."
+        return 1
+    fi
+}
+
+# --- Trainman harden (reconcile permissions.deny with secret-deny config) ----
+harden_target() {
+    local target=""
+    for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}";; esac; done
+    [[ -z "$target" ]] && { log_error "Usage: matrix harden --target=<cli> [--apply] [--revert]"; return 1; }
+    local hardener="$MATRIX_DIR/adapters/$target/harden.sh"
+    if [[ -x "$hardener" ]]; then
+        log_info "Trainman: hardening permissions.deny for '$target'..."
+        MATRIX_ROOT="$MATRIX_DIR" "$hardener" "$@"
+        link_append "harden" "$target" "permissions.deny reconciled"
+    else
+        log_warning "Trainman: no hardener at $hardener (not implemented yet for '$target')."
         return 1
     fi
 }
@@ -690,9 +777,11 @@ Multi-project (warm set):
   workspace               Show the warm project set
 
 State & telemetry:
-  status                  Show current Matrix status
+  status [--all]          Show current Matrix status (checkpoints/Link scoped to the
+                          resolved project by default; --all for the unfiltered view)
   checkpoint "<note>"     Write a timestamped checkpoint (+ Link entry)
-  activity [n]            Show last n Link ledger events (default 20)
+  activity [n] [--all] [--project=<name>]  Show last n Link ledger events, scoped to
+                          the resolved project by default (default n=20)
 
 Retrospectivas (Devin-specific):
   session-find <cwd> [YYYY-MM-DD]  Busca sesiones pasadas (consulta read-only)
@@ -706,6 +795,8 @@ Enforcement & adapters:
                           post_run_audit, the_source)
   build --target=<cli>    Trainman: generate native artifacts for a CLI (devin)
   install --target=<cli>  Trainman: deploy generated artifacts into the CLI's discovery path
+  harden --target=<cli>   Reconcile permissions.deny with secret-deny config (dry-run;
+                          use --apply to write, --revert to undo Matrix-managed entries)
   help                    Show this help
 EOF
 }
@@ -730,12 +821,13 @@ main() {
                 unwork)     unwork_project "${2:-}" ;;
                 workspace)  show_workspace ;;
                 bindings)   show_bindings ;;
-                status)     show_status ;;
+                status)     shift; show_status "$@" ;;
                 checkpoint) write_checkpoint "${2:-}" ;;
-                activity)   show_activity "${2:-}" ;;
+                activity)   shift; show_activity "$@" ;;
                 hooks)      shift; run_hook "$@" ;;
                 build)      shift; build_target "$@" ;;
                 install)    shift; install_target "$@" ;;
+                harden)     shift; harden_target "$@" ;;
                 session-find) shift; session_query find "$@" ;;
                 session-dump) shift; session_query dump "$@" ;;
                 session-cost) shift; session_query cost "$@" ;;
