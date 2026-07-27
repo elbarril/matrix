@@ -41,17 +41,17 @@ No hay un solo "modelo" haciendo todo. Matrix reparte el trabajo entre roles con
 | **Morpheus** | El planificador. Convierte un pedido ambiguo ("quiero que el sistema soporte X") en una lista ordenada de pasos concretos. |
 | **The Architect** | El diseñador. Revisa el plan de Morpheus y decide cómo encaja técnicamente antes de que se escriba una sola línea de código. |
 | **Trinity** | El que construye. Implementa el código real, el que efectivamente cambia archivos. |
-| **Agent Smith** | El evaluador. Prueba lo que construyó Trinity, busca fallas reales (no en la teoría, corriendo comandos de verdad), y bloquea el cierre si algo no anda. |
+| **Agent Smith** | El evaluador. Prueba lo que construyó Trinity, busca fallas reales (no en la teoría, corriendo comandos de verdad), y bloquea el cierre si algo no anda. Además arregla él mismo las fallas de bajo riesgo que encontró — prosa/docs, o un cambio acotado a un archivo — pero solo después de congelar el comando que falla y su salida cruda, y volviendo a correr ese mismo comando para probarlo. Lo estructural (estado del sistema, lógica de un gate, el contrato) sigue volviendo a Trinity. |
 | **The Keymaker** | Git/operaciones. Solo entra en juego si el pedido es explícitamente sobre ramas, merges, o control de versiones. |
 
-Un pedido de "arreglame un bug" típicamente pasa por Smith (encuentra la causa) → Trinity (arregla) → Smith (confirma que ahora sí funciona). Un pedido de "quiero una funcionalidad nueva" típicamente pasa por Morpheus (plan) → Architect (revisión) → Trinity (construye) → Smith (gate final). **Vos nunca hablás con ellos directamente** — es Neo quien los invoca como sub-agentes y te cuenta el resultado.
+Un pedido de "arreglame un bug" pasa por Smith (encuentra la causa) y ahí se bifurca: si el arreglo es chico y ya existe un comando que lo prueba, Smith mismo lo arregla y lo re-verifica con ese mismo comando (si el cambio toca comportamiento aunque sea acotado, el Architect revisa el diff antes de cerrar); si el arreglo toca algo estructural, vuelve a la cadena Smith (diagnostica) → Trinity (arregla) → Smith (verifica). Un pedido de "quiero una funcionalidad nueva" típicamente pasa por Morpheus (plan) → Architect (revisión) → Trinity (construye) → Smith (gate final). **Vos nunca hablás con ellos directamente** — es Neo quien los invoca como sub-agentes y te cuenta el resultado.
 
 ### Dos gates que se llaman parecido pero preguntan cosas distintas
 
 Es fácil confundirlos porque los dos son hooks de Seraph y los dos aparecen al "cerrar" algo, pero responden preguntas distintas:
 
 - **`validate_phase_close`** — el gate de **realidad del contenido**: "¿esto que decís que funciona, funciona de verdad?". No escribe nada en disco por sí mismo; recibe `{"phase","e2e","evidence","lesson"}` y devuelve PASS/BLOCK por stdout. Es manual: solo corre si el agente decide invocarlo al cerrar una fase (`spec`/`develop`/`test`/`eval`). Nada de Devin lo dispara solo.
-- **`post_run_audit`** — el gate de **proceso**: "¿el agente siguió los pasos obligatorios de activación?" (no si el trabajo es real, sino si se hizo el ritual: `pre_activation_check`, etc.). Este sí persiste: escribe `brain/state/validation-report.json`. Se alimenta de eventos reales del ciclo de vida de Devin (`SessionStart`, `PostToolUse`, `SessionEnd`) vía `adapters/devin/hooks/session_audit.py` → `hooks/audit_event.py`; además, `SessionEnd` dispara `bin/matrix session close`, que corre `hooks/session_close.py` y escribe `session:close` en el ledger Link.
+- **`post_run_audit`** — el gate de **proceso**: "¿el agente siguió los pasos obligatorios de activación?" (no si el trabajo es real, sino si se hizo el ritual: `pre_activation_check`, etc.). Este sí persiste: escribe `brain/state/validation-report.json`. Se alimenta de eventos reales del ciclo de vida de Devin (`SessionStart`, `PostToolUse`, `SessionEnd`) vía `adapters/devin/hooks/session_audit.py` → `hooks/audit_event.py`; además, `SessionEnd` dispara `bin/matrix session close`, que corre `hooks/session_close.py` y escribe `session:close` en el ledger Link. Desde el cambio de rol de Smith, este hook además audita la remediación: si la sesión auditada es de Smith y hubo ediciones, exige el bloque de pre-registro (comando que falla → mismo comando pasando) en su artefacto de eval, y marca la sesión como no conforme si falta, si el comando cambió entre el antes y el después, o si se editó un archivo que el artefacto no declaró.
 
 En criollo: uno audita el **qué** (¿el trabajo es real?), el otro audita el **cómo** (¿se siguió el protocolo?). Podés pasar uno y fallar el otro.
 
@@ -96,10 +96,10 @@ One master, five core specialists, one opt-in sixth. Names map to function.
 - **Morpheus** — *planner*. Turns ambiguity into ordered scope. "What / when."
 - **The Architect** — *architect*. Designs structure, names trade-offs, reviews plans before build. "How it fits."
 - **Trinity** — *builder*. Implements and ships real, working code.
-- **Agent Smith** — *evaluator*. Tests, critiques, finds the flaw, blocks weak work.
+- **Agent Smith** — *evaluator, with scoped remediation*. Tests, critiques, finds the flaw, blocks weak work; fixes the inert/localized defects it reported itself, under pre-registered failing→passing evidence.
 - **The Keymaker** — *git/ops, opt-in*. Branches, paths, access, version control.
 
-**Routing seam:** Morpheus answers *what/when*; the Architect answers *how it fits* and reviews the plan before Trinity builds; Smith gates the result before "done".
+**Routing seam:** Morpheus answers *what/when*; the Architect answers *how it fits* and reviews the plan before Trinity builds; Smith gates the result before "done", and fixes the Tier-1/Tier-2 defects it reported itself (Tier 2 needs an Architect diff review before close). Trinity is still the only agent that builds to a brief.
 
 ## Supporting cast (infrastructure)
 

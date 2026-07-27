@@ -391,6 +391,17 @@ def main():
         envelope["tool_name"] = tool_name
         envelope["tool_paths"] = _extract_tool_paths(tool_name, tool_input)
 
+        if tool_name == "run_subagent":
+            try:
+                if isinstance(tool_input, dict):
+                    for key in ("profile", "subagent_type", "agent", "agent_type", "name"):
+                        value = tool_input.get(key)
+                        if isinstance(value, str) and value.strip():
+                            envelope["subagent_profile"] = value
+                            break
+            except Exception:
+                pass
+
         if tool_name == "skill":
             try:
                 origin = classify_skill_origin(tool_input, tool_response)

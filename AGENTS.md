@@ -1,6 +1,6 @@
 # AGENTS.md — Canonical Contract for Matrix
 
-This is the document of record. Every session, every agent invocation operates under this contract. Matrix is **CLI-agnostic by design**: the intelligence core speaks only in abstract capabilities, never a specific CLI's tools. **Today it is built and maintained for Devin CLI only** — the Layer 3 adapter is what would make adding another CLI later cheap (~one small adapter, no changes to the brain), but no other adapter is currently implemented.
+This is the document of record. Every session, every agent invocation operates under this contract. Matrix is **CLI-agnostic by design**: the intelligence core speaks only in abstract capabilities, never a specific CLI's tools. **Today it is built and maintained for Devin CLI only** — the Layer 3 adapter is what would make adding another CLI later cheap (~one small adapter, no changes to the brain), but no other adapter is currently implemented. <!-- adapter-note: single canonical current-binding disclosure; see DEVIN.md for adapter specifics; do not duplicate this mention elsewhere in this file -->
 
 > **Lore note.** Matrix is named and themed after the trilogy. Each component below carries the name of the character or place whose function it mirrors. The names are mnemonic, not decorative: they tell you what the thing *does*.
 
@@ -21,7 +21,7 @@ The intelligence never ships into project code. The brain stays here. **The reve
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │  LAYER 3 — Adapters · "The Trainman"                         │
-│  adapters/devin/   (adapters/<other>/ later, none built yet) │
+│  adapters/<cli>/   (one dir/CLI; none built for a 2nd yet)   │
 │  Transit between worlds. Maps abstract capabilities to the   │
 │  host CLI's native tools. Generates artifacts via            │
 │  `bin/matrix build` and deploys them into the CLI's          │
@@ -55,15 +55,15 @@ One master, five core specialists, one opt-in sixth. **Roster discipline (from h
 
 | Agent | Trilogy role | Function (capability) |
 |---|---|---|
-| **Neo** | The One — the nexus between worlds | **Master.** The single voice. Routes, holds context, carries the sacred foundation. Bridges the user and the host CLI (Devin today). |
+| **Neo** | The One — the nexus between worlds | **Master.** The single voice. Routes, holds context, carries the sacred foundation. Bridges the user and the host CLI (see the adapter doc at the repo root for which one is current). |
 | **The Oracle** | The seer who knows | **Researcher.** Gathers, compares, cites, foresees. Answers "what is true / what exists". |
 | **Morpheus** | The mentor who shows the path | **Planner.** Turns ambiguity into ordered scope. Answers "what / when". "I can only show you the door." |
 | **The Architect** | Designer of the system | **Architect.** Designs structure, names trade-offs, reviews plans before build. Answers "how it fits". |
 | **Trinity** | The operator who executes | **Builder.** Implements and ships. Real, working code. |
-| **Agent Smith** | The relentless detector of anomalies | **Evaluator.** Tests, critiques, finds the flaw, blocks weak work. |
+| **Agent Smith** | The relentless detector of anomalies | **Evaluator (with scoped remediation).** Tests, critiques, finds the flaw, blocks weak work; fixes the low-blast-radius defects it reported itself, under pre-registered failing→passing evidence. |
 | **The Keymaker** *(opt-in 6th)* | Maker of keys, opener of doors | **Git / Ops.** Branches, paths, access, version control. Loaded only when git work is explicit. |
 
-**Routing seam:** Morpheus answers *what / when*. The Architect answers *how it fits*, and reviews Morpheus's plan before Trinity starts building. Smith gates the result before anything is called "done".
+**Routing seam:** Morpheus answers *what / when*. The Architect answers *how it fits*, and reviews Morpheus's plan before Trinity starts building. Smith gates the result before anything is called "done" — and remediates the defects it finds when they are inert (Tier 1) or narrowly localized (Tier 2, with an Architect diff review before close); semantic, systemic, gate-logic and contract-text defects (Tier 3) go back to Trinity. **Roster discipline note:** Smith's capability set is now close to Trinity's, so the seam that keeps them two specialists and not one is the *trigger*, not the tool list — Smith's edit right derives from a defect Smith itself reported in its own eval artifact, never from a task brief. Trinity is the only agent that builds to a brief. Read that sentence before ever proposing to merge them.
 
 **The user never invokes specialists directly.** Neo routes. Direct invocation is allowed but rare.
 
@@ -194,8 +194,8 @@ Enforcement lives in `hooks/` as **python/bash with a JSON in/out contract**, ca
 "Load exactly what you need, nothing more." Encoded as operating rules, exposed as abstract capabilities so any CLI can satisfy them.
 
 - **`code-nav` capability** — symbol-level navigation/edit (Serena or equivalent) instead of reading whole files. The adapter binds it; agents just request `code-nav`.
-- **Model selection (`model_policy`)** — each agent declares `cheap` (mechanical work), `reasoning` (planning/architecture/research/evaluation), or `auto` (mixed). The adapter's `model_policy` map (`adapters/<cli>/adapter.yaml`) resolves each tier to a concrete model name, which the Trainman bakes into the generated artifact's `model:` frontmatter — so the tier assignment in the brain never has to change, only the adapter's mapping. The Devin adapter currently splits this by actual model variant, not just by tier: `cheap` → a faster/lighter model variant, `reasoning`/`auto` → the full model (see `DEVIN.md` for the exact names — they are time-bound to a free-preview window and worth re-checking periodically).
-- **Least-privilege tool grants** — the Devin adapter also resolves each agent's `capabilities:` into a Devin-native `allowed-tools:` grant on the generated artifact, so a specialist that only declares `read`+`search` cannot exercise `edit` or `exec` even if the platform would otherwise allow it. Capabilities with no representable grant (`ask-user`, `run-subagent`) are simply omitted rather than guessed at.
+- **Model selection (`model_policy`)** — each agent declares `cheap` (mechanical work), `reasoning` (planning/architecture/research/evaluation), or `auto` (mixed). The adapter's `model_policy` map (`adapters/<cli>/adapter.yaml`) resolves each tier to a concrete model name, which the Trainman bakes into the generated artifact's `model:` frontmatter — so the tier assignment in the brain never has to change, only the adapter's mapping. The current adapter splits this by actual model variant, not just by tier: `cheap` → a faster/lighter model variant, `reasoning`/`auto` → the full model (see that adapter's own reference doc at the repo root for the exact names — they are time-bound to a free-preview window and worth re-checking periodically).
+- **Least-privilege tool grants** — the current adapter also resolves each agent's `capabilities:` into a host-native tool-allowlist grant on the generated artifact, so a read-only specialist such as the Architect (`read`, `search`, `code-nav`) cannot exercise `edit` or `exec` even if the platform would otherwise allow it, while Smith — which now declares `edit` — carries that grant deliberately and visibly in its own generated artifact. Capabilities with no representable grant (`ask-user`, `run-subagent`) are simply omitted rather than guessed at. The mapping is **coarse-grained**: one abstract capability may resolve to several native grants, so a grant can be slightly wider than the brain's intent (the file-modification capability also carries file *creation*). That widening is accepted rather than met with a finer capability vocabulary every agent would have to re-declare (Foundation 4); where the extra reach matters, the narrower intent is stated in that agent's own `<boundaries>` prose — see `brain/agents/smith.md`, whose remediation scope is explicitly limited to modifying existing files.
 - **Large-artifact delegation** — outputs > ~10 KB are produced by a sub-agent with a word cap, to avoid inflating the working context.
 - **Proactive resume checkpoints** — write a checkpoint before truncating context; split sessions on mode changes (build → eval → fix).
 
@@ -210,23 +210,53 @@ A subsystem is a **ship**: its own master, roster, and `AGENTS.md` under `brain/
 ## 11. CLI commands (`bin/matrix`)
 
 ```text
-list                      List all registered projects
-add <name> [path]         Register a project (path optional → current dir)
-select <name>             Bind a project: create its _brain symlink + AGENTS.local.md block and make it the primary/default (does not unbind other bound projects)
-deselect [name]           Unbind the named project (or the primary if no name is given); other bound projects are untouched
-work <name>               Warm a project into the active SET (multi-project, does not unbind an already-bound project)
-unwork <name>             Remove a project from the active set; if it is bound, unbind it first
-workspace                 Show the warm project set, marking bound and primary projects
-bindings                  List bound projects, verifying the real state of their _brain symlink and AGENTS.local.md block
-status                    Show primary, warm, bound, and registered project counts
-checkpoint "<note>"       Write a timestamped checkpoint (+ Link entry)
-activity [n]              Show last n Link ledger events (default 20)
-build --target=<cli>      Trainman: generate native artifacts for a CLI
-install --target=<cli>    Trainman: deploy generated artifacts into the CLI's discovery path
-link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event
-ship list | ship validate [<name>|--all]         List ships or validate a ship manifest
-hooks <name> [json]       Run a Seraph hook by name (pre_activation_check…)
-help                      Show usage
+Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
+
+Usage: matrix <command> [args]
+
+Projects:
+  list                    List all registered projects
+  add <name> [path] [--replace]  Register a project (path optional → current dir; --replace updates existing)
+  remove <name>           Remove an unbound, non-warm project from the registry
+  select <name>           Set primary active project + create _brain symlink
+  deselect [name]         Remove binding for a project (defaults to primary)
+  bindings                Show bound status for all registered projects
+
+Multi-project (warm set):
+  work <name>             Warm a project into the active set
+  unwork <name>           Remove a project from the active set
+  workspace               Show the warm project set
+
+State & telemetry:
+  status [--all]          Show current Matrix status (checkpoints/Link scoped to the
+                          resolved project by default; --all for the unfiltered view)
+  checkpoint "<note>"     Write a timestamped checkpoint (+ Link entry)
+  activity [n] [--all] [--project=<name>]  Show last n Link ledger events, scoped to
+                          the resolved project by default (default n=20)
+
+Link ledger & fleet:
+  link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event and echo the ref
+  ship list                                         List discovered federated ships
+  ship validate [<name>|--all]                      Validate a ship manifest (or all ships)
+
+Retrospectivas (adapter-specific, see the current adapter's own reference doc at the repo root):
+  session-find <cwd> [YYYY-MM-DD]  Busca sesiones pasadas (consulta read-only)
+  session-dump <id> [--from HH:MM] [--to HH:MM] [--full]  Reconstruye una sesión pasada (read-only)
+  session-cost [cwd] [YYYY-MM-DD]  Muestra duración, ACU y crédito por sesión (read-only)
+  session-subagents <id>  Muestra duración de invocaciones de subagentes (read-only)
+  session-report [cwd] [YYYY-MM-DD] [--out PATH] [--limit N]  Genera reporte HTML estático
+  session close '[<json>]'  Run the session_close hook and persist a session:close entry to the Link ledger
+
+Enforcement & adapters:
+  phase close '<json>'    Run the validate_phase_close gate and persist the verdict
+                          (PASS or BLOCK) to the Link ledger; exits non-zero on BLOCK
+  hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close,
+                          post_run_audit, the_source)
+  build --target=<cli>    Trainman: generate native artifacts for a CLI
+  install --target=<cli>  Trainman: deploy generated artifacts into the CLI's discovery path
+  harden --target=<cli>   Reconcile permissions.deny with secret-deny config (dry-run;
+                          use --apply to write, --revert to undo Matrix-managed entries)
+  help                    Show this help
 ```
 
 ---

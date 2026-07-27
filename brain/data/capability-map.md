@@ -7,7 +7,7 @@ The brain speaks in **abstract capabilities**. Adapters (the Trainman) bind each
 | Capability | Meaning | Cost note (The Construct) |
 |---|---|---|
 | `read` | Read a file or range | Prefer ranges over whole files |
-| `edit` | Modify a file | Symbol-scoped edits when possible |
+| `edit` | Modify a file | Symbol-scoped edits when possible. An adapter may bind this to a tool set that also **creates** files; that widening is accepted rather than split into a separate `write` capability (a vocabulary change rippling through every agent — unearned, Foundation 4). An agent that must not create files says so in its own `<boundaries>`. **Live subagent note (2026-07-27):** the `write` grant was **CONFIRMED ABSENT** for subagents under the current adapter despite this declared mapping; source: the current adapter's own reference doc at the repo root, "Least-privilege `allowed-tools`". |
 | `search` | Text/glob search across the tree | Narrow the scope; avoid full-tree scans |
 | `code-nav` | Symbol-level navigation/edit (definition, references, rename) | 5–10× cheaper than reading whole files |
 | `run-subagent` | Delegate to another agent | Use for large artifacts (>~10 KB) with a word cap |
@@ -26,43 +26,33 @@ The brain speaks in **abstract capabilities**. Adapters (the Trainman) bind each
 
 ## Trainman binding contract
 
-Each adapter under `adapters/<cli>/` declares a mapping from the capabilities above to that CLI's native tools, plus how to render an agent (`brain/agents/*.md`) into the CLI's native artifact. Example (Devin):
+Each adapter under `adapters/<cli>/` declares a mapping from the capabilities above to that CLI's native tools, plus how to render an agent (`brain/agents/*.md`) into the CLI's native artifact:
 
 ```yaml
-# adapters/devin/adapter.yaml
+# adapters/<cli>/adapter.yaml (illustrative shape, not a real CLI's tool names)
 capabilities:
-  read: read_file
-  edit: [edit, multi_edit, write]
-  search: [grep_search, find_by_name]
-  code-nav: codebase_search        # fallback: search
-  run-subagent: run_subagent
-  run-command: run_command
-  ask-user: ask_user_question
-  browser: mcp__chrome-browser     # visual QA; no-op if unconfigured
-  docs-lookup: mcp__context7       # version-pinned library docs
+  read: <native read tool>
+  edit: [<native edit tool>, <native create tool>]
+  search: [<native grep tool>, <native find tool>]
+  code-nav: <native semantic-search tool>   # fallback: search
+  run-subagent: <native delegate tool>
+  run-command: <native shell tool>
+  ask-user: <native ask-user tool>
+  browser: <native browser MCP binding>     # visual QA; no-op if unconfigured
+  docs-lookup: <native docs MCP binding>    # version-pinned library docs
 render:
-  master: skill        # → .agents/skills/<name>/SKILL.md
-  specialist: subagent # → .agents/agents/<name>/AGENT.md
+  master: <native master-artifact kind>       # e.g. one file per master agent
+  specialist: <native specialist-artifact kind> # e.g. one file per specialist
 ```
 
-The golden rule: **if a capability has no native equivalent in a CLI, the adapter provides a fallback** (e.g. `code-nav` → `search`). The brain never changes.
+The golden rule: **if a capability has no native equivalent in a CLI, the adapter provides a fallback** (e.g. `code-nav` → `search`). The brain never changes. See the current adapter's own reference doc at the repo root for its real tool names and its live `adapter.yaml`.
 
-## Least-privilege: `allowed-tools` on generated artifacts
+## Least-privilege: the concept
 
-Beyond documenting the mapping above, the Devin adapter also declares an `allowed_tools:` block in `adapters/devin/adapter.yaml` — a second mapping, from capability to Devin's actual frontmatter tool categories (`read`, `edit`, `write`, `grep`, `glob`, `exec`, and `mcp__server__tool` patterns; this is a smaller, fixed vocabulary, distinct from the tool-call names in the `capabilities:` map above). The Trainman resolves each agent's declared `capabilities:` through this second map and writes the union as `allowed-tools:` frontmatter. In generated **`AGENT.md` subagent profiles**, this is a real least-privilege restriction: for example, `edit` and `write` are distinct grants. In generated **`SKILL.md` root skills** (such as Neo), do not claim the field is a complete sandbox; the enforceable restriction documented for that surface is `permissions.deny`, which currently covers `read` only, not `grep` or `exec`.
+Beyond documenting the capability mapping above, an adapter may also declare a second, narrower mapping from capability to the host CLI's own least-privilege grant vocabulary (its real frontmatter/permission categories — typically a smaller, fixed set than the tool-call names in the `capabilities:` map above). The Trainman resolves each agent's declared `capabilities:` through that second map and writes the result as the generated artifact's tool-grant frontmatter, so a read-only specialist cannot exercise `edit` or `run-command` even if the underlying platform would otherwise allow it.
 
-`ask-user` is intentionally excluded from `allowed_tools` — it is unconditionally withheld from subagents (see below). `run-subagent` is not an `allowed-tools` grant; instead, agents that need to spawn subagents are represented by a `max-nesting` frontmatter field, derived from the ship manifest's `captain`/`crew` graph by the Trainman.
+Two capabilities typically resist a simple grant-list treatment and need adapter-specific handling instead (see the current adapter's own reference doc at the repo root for how it resolves each): `ask-user` (some host CLIs unconditionally withhold user-prompting from anything but the master agent) and `run-subagent` (some host CLIs require an explicit nesting-depth declaration before a delegate may itself delegate further). Both are least-privilege concerns in the abstract, but their concrete mechanics are adapter-specific and documented there, not here.
 
-## Devin-specific: `run-subagent` in nestable artifacts
+## Model policy → adapter frontmatter
 
-Under Devin, `run_subagent`/`read_subagent` are disabled inside a subagent by default. They become available when the subagent profile carries a `max-nesting` frontmatter field whose value is at least the depth of the children it needs to spawn. The Trainman derives this value from the ship manifest's `captain`/`crew` graph (`depth_from_root + subtree_depth`) and injects it **only** into the captain's artifact. Crew leaves do not carry the field, because they have no subordinates to spawn. This is the Devin representation of the abstract `run-subagent` capability; it is not an `allowed-tools` grant.
-
-## Devin-specific constraint: `ask-user` inside subagents
-
-Devin **never** allows a subagent to call `ask_user_question` — it is withheld from every subagent unconditionally, regardless of `allowed-tools` or permissions (platform rule, not configurable). Several specialists (Architect, Keymaker, Morpheus, Oracle, Trinity) declare the `ask-user` capability in the agnostic brain, but under the Devin adapter they run as **subagents** (`.agents/agents/<name>/AGENT.md`), so they cannot exercise it directly.
-
-Resolution for the Devin adapter: a specialist that needs to ask the user stops and returns the question to **Neo** (the master skill — not a subagent, so it retains `ask_user_question`) instead of calling it itself. Neo relays the question, gets the answer, and re-delegates. This is a Devin-adapter concern only; the brain's `ask-user` capability declaration does not change, because another CLI's adapter may not have this restriction.
-
-## Model policy → Devin frontmatter
-
-The Trainman resolves each agent's `model_policy` tier (`cheap`/`reasoning`/`auto`) through the adapter's `model_policy` map and writes the result as `model: <name>` in the generated `SKILL.md`/`AGENT.md` frontmatter (see `extensibility/skills` and `subagents` in the Devin CLI docs — both support a `model` override field). Re-run `bin/matrix build --target=devin && bin/matrix install --target=devin` after changing `adapters/devin/adapter.yaml`'s `model_policy` map for the change to take effect globally.
+The Trainman resolves each agent's `model_policy` tier (`cheap`/`reasoning`/`auto`) through the adapter's `model_policy` map and writes the result as the model field in the generated artifact's frontmatter, so the tier assignment in the brain never has to change — only the adapter's mapping. See the current adapter's own reference doc at the repo root for its concrete model table and the rebuild/reinstall step required after changing that map.

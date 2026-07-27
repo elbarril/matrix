@@ -13,7 +13,7 @@ from _common import emit, read_input, resolve_root
 
 ALLOWED = {
     "event", "timestamp", "session_id", "project_active", "pre_activation_check_ok",
-    "tool_name", "tool_paths",
+    "tool_name", "tool_paths", "subagent_profile",
     # nunca agregar `tool_response` ni claves que contengan contenido de archivo a
     # esta lista -- ver eval de Smith, ronda 4 de discovery-mediation.
     "invoked_artifact", "invoked_origin",
@@ -29,7 +29,7 @@ def main():
     # Only copy allowed keys; drop anything else (including prompt content).
     envelope = {k: data.get(k) for k in ALLOWED}
     # Drop optional tool metadata when not supplied so non-tool events stay clean.
-    for optional_key in ("tool_name", "tool_paths", "invoked_artifact", "invoked_origin"):
+    for optional_key in ("tool_name", "tool_paths", "subagent_profile", "invoked_artifact", "invoked_origin"):
         if envelope.get(optional_key) is None:
             envelope.pop(optional_key, None)
 

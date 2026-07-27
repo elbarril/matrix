@@ -553,7 +553,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   </div>
   <div class="card">
     <h3><span class="tag tag-specialist">EVAL</span> Agent Smith</h3>
-    <p>Testea, critica, bloquea trabajo debil. Root-cause de bugs. Dueno del reality gate: nada esta &laquo;listo&raquo; sin un check E2E. Para trabajo visual, usa la capacidad <code>browser</code> (screenshot real, no descripcion).</p>
+    <p>Testea, critica, bloquea trabajo debil. Root-cause de bugs. Dueno del reality gate: nada esta &laquo;listo&raquo; sin un check E2E. Para trabajo visual, usa la capacidad <code>browser</code> (screenshot real, no descripcion). Desde el cambio de rol, tambien arregla las fallas de bajo riesgo que el mismo reporto: primero congela el comando que falla y su salida cruda, despues aplica el fix minimo, despues vuelve a correr el mismo comando. Lo estructural (estado del sistema, logica de gates, el contrato) sigue yendo a Trinity.</p>
   </div>
   <div class="card">
     <h3><span class="tag tag-opt">OPT-IN</span> The Keymaker</h3>
@@ -564,15 +564,15 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <details>
   <summary>Routing seam y patrones de coordinacion</summary>
   <h3>Routing seam</h3>
-  <p><strong>Morpheus</strong> responde <em>que/cuando</em>. <strong>The Architect</strong> responde <em>como encaja</em> y revisa el plan de Morpheus antes de que Trinity construya. <strong>Smith</strong> gatekeepea el resultado antes de llamarlo &laquo;listo&raquo;.</p>
+  <p><strong>Morpheus</strong> responde <em>que/cuando</em>. <strong>The Architect</strong> responde <em>como encaja</em> y revisa el plan de Morpheus antes de que Trinity construya. <strong>Smith</strong> gatekeepea el resultado antes de llamarlo &laquo;listo&raquo;. Smith ademas arregla las fallas Tier 1/Tier 2 que el mismo reporto; Tier 2 pasa por una revision de diff del Architect antes de cerrar.</p>
 
   <h3>Patrones de coordinacion</h3>
   <table>
     <tr><th>Patron</th><th>Cadena</th></tr>
-    <tr><td>Build seguro</td><td>Architect &rarr; Trinity &rarr; Smith</td></tr>
+    <tr><td>Build seguro</td><td>Architect &rarr; Trinity &rarr; Smith (Tier 1/2: Smith arregla y re-verifica; Tier 3: vuelve a Trinity)</td></tr>
     <tr><td>Research + accion</td><td>Oracle &rarr; especialista de accion</td></tr>
     <tr><td>Plan + ejecucion</td><td>Morpheus &rarr; Architect &rarr; Trinity &rarr; Smith</td></tr>
-    <tr><td>Debug + fix</td><td>Smith &rarr; Trinity &rarr; Smith</td></tr>
+    <tr><td>Debug + fix</td><td>Tier 1/2: Smith (diagnostica &rarr; arregla &rarr; verifica). Tier 3: Smith &rarr; Trinity &rarr; Smith</td></tr>
   </table>
 </details>
 </div>

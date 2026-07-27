@@ -12,7 +12,7 @@
 | **morpheus** | Planner specialist. Turns ambiguity into ordered scope. Answers "what / when". Route here for planning, roadmaps, and breaking a goal into executable steps. |
 | **neo** | Master agent — the single voice. Routes to specialists, holds context, carries the sacred foundation. The user always talks to Neo first. |
 | **oracle** | Researcher specialist. Gathers, compares, cites, foresees. Answers "what exists / what is true". Route here for fact-finding, comparisons, and analysis before action. |
-| **smith** | Evaluator specialist. Tests, critiques, finds the flaw, blocks weak work. Owns root-cause analysis of bugs and the reality gate before "done". |
+| **smith** | Evaluator specialist with scoped remediation. Tests, critiques, finds the flaw, blocks weak work. Owns root-cause analysis and the reality gate before "done", and applies the minimal fix for the low-blast-radius defects it reported itself, under pre-registered failing-to-passing evidence. |
 | **trinity** | Builder specialist. Implements and ships real, working code from the Architect's design. Route here to write, change, or wire up code. |
 
 ## Fleet (live)
@@ -28,6 +28,7 @@
 - `pre_activation_check`
 - `session_close`
 - `the_source`
+- `validate_layer2`
 - `validate_phase_close`
 - `validate_ship`
 
