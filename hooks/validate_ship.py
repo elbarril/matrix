@@ -244,60 +244,119 @@ def compute_required_nesting(ship, captain, crew):
     return expected
 
 
-def max_nesting_check(root, ship, captain, crew, expected):
+def declared_targets(root):
+    adapters_dir = os.path.join(root, "adapters")
+    out = []
+    for name in sorted(os.listdir(adapters_dir)):
+        if os.path.isfile(os.path.join(adapters_dir, name, "adapter.yaml")):
+            out.append(name)
+    return out
+
+
+def _load_yaml(path):
+    try:
+        import yaml
+        with open(path, encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or {}
+    except Exception:
+        return {}
+
+
+def _artifact_dirs_for_target(root, target):
+    adapter_yaml = os.path.join(root, "adapters", target, "adapter.yaml")
+    if not os.path.isfile(adapter_yaml):
+        return None, None
+    cfg = _load_yaml(adapter_yaml)
+    if not isinstance(cfg, dict):
+        return None, None
+    artifacts = cfg.get("artifacts", {})
+    if not isinstance(artifacts, dict):
+        return None, None
+    generated = artifacts.get("generated_agents_dir")
+    installed = artifacts.get("installed_agents_dir")
+    if not generated or not installed:
+        return None, None
+
+    def resolve(raw):
+        raw = raw.replace("{target}", target)
+        raw = os.path.expanduser(raw)
+        if os.path.isabs(raw):
+            return raw
+        return os.path.join(root, raw)
+
+    return resolve(generated), resolve(installed)
+
+
+def max_nesting_check(root, ship, captain, crew, expected, target=None):
     """Check generated and installed artifacts for the right max-nesting field."""
     agent_stems = {captain: f"{ship}-{captain}"}
     for member in crew:
         agent_stems[member] = f"{ship}-{member}"
 
-    candidates = [
-        os.path.join(root, "adapters", "devin", "generated", ".agents", "agents"),
-        os.path.join(os.path.expanduser("~"), ".config", "devin", "agents"),
-    ]
+    def _check_one_target(target_name):
+        generated_dir, installed_dir = _artifact_dirs_for_target(root, target_name)
+        if generated_dir is None or installed_dir is None:
+            return (
+                False,
+                f"target '{target_name}' has no adapters/{target_name}/adapter.yaml (or it declares no `artifacts` block) — cannot resolve artifact paths; not implemented yet for '{target_name}'",
+            )
 
-    found_any = False
-    errors = []
-    notes = []
+        candidates = [generated_dir, installed_dir]
+        found_any = False
+        errors = []
+        notes = []
 
-    for member, stem in agent_stems.items():
-        exp = expected.get(member)
-        artifacts = []
-        for base in candidates:
-            path = os.path.join(base, stem, "AGENT.md")
-            if os.path.isfile(path):
-                with open(path, encoding="utf-8") as fh:
-                    artifacts.append((path, fh.read()))
-                found_any = True
+        for member, stem in agent_stems.items():
+            exp = expected.get(member)
+            artifacts = []
+            for base in candidates:
+                path = os.path.join(base, stem, "AGENT.md")
+                if os.path.isfile(path):
+                    with open(path, encoding="utf-8") as fh:
+                        artifacts.append((path, fh.read()))
+                    found_any = True
 
-        for path, body in artifacts:
-            has_field = re.search(r"^max-nesting:\s*(\d+)", body, re.MULTILINE)
-            if exp:
-                if not has_field:
-                    errors.append(f"{path} missing max-nesting:{exp}")
-                elif int(has_field.group(1)) != exp:
-                    errors.append(f"{path} has max-nesting {has_field.group(1)}, expected {exp}")
+            for path, body in artifacts:
+                has_field = re.search(r"^max-nesting:\s*(\d+)", body, re.MULTILINE)
+                if exp:
+                    if not has_field:
+                        errors.append(f"{path} missing max-nesting:{exp}")
+                    elif int(has_field.group(1)) != exp:
+                        errors.append(f"{path} has max-nesting {has_field.group(1)}, expected {exp}")
+                    else:
+                        notes.append(f"{path} max-nesting:{exp} ok")
                 else:
-                    notes.append(f"{path} max-nesting:{exp} ok")
-            else:
-                if has_field:
-                    errors.append(f"{path} should not have max-nesting (leaf agent)")
-                else:
-                    notes.append(f"{path} has no max-nesting (ok for leaf)")
+                    if has_field:
+                        errors.append(f"{path} should not have max-nesting (leaf agent)")
+                    else:
+                        notes.append(f"{path} has no max-nesting (ok for leaf)")
 
-        if len(artifacts) > 1:
-            path_a, body_a = artifacts[0]
-            path_b, body_b = artifacts[1]
-            if body_a != body_b:
-                errors.append(f"artifacts diverge: {path_a} != {path_b}")
+            if len(artifacts) > 1:
+                path_a, body_a = artifacts[0]
+                path_b, body_b = artifacts[1]
+                if body_a != body_b:
+                    errors.append(f"artifacts diverge: {path_a} != {path_b}")
 
-    if not found_any:
-        return True, "no generated/installed artifacts found yet; re-run after build+install"
-    if errors:
-        return False, "; ".join(errors) + "; re-run bin/matrix install --target=devin"
-    return True, "; ".join(notes) if notes else "max-nesting fields correct"
+        if not found_any:
+            return (
+                True,
+                f"target '{target_name}': neither {generated_dir} nor {installed_dir} contain '<ship>-<agent>/AGENT.md' yet (pre-build state); re-run after build+install",
+            )
+        if errors:
+            return False, "; ".join(errors) + "; re-run bin/matrix install --target=devin"
+        return True, "; ".join(notes) if notes else "max-nesting fields correct"
+
+    if target:
+        return _check_one_target(target)
+
+    targets = declared_targets(root)
+    results = [_check_one_target(t) for t in targets]
+    ok = all(r[0] for r in results)
+    detail = "; ".join(r[1] for r in results)
+    return ok, detail
 
 
-def validate_ship(root, ship_dir):
+def validate_ship(root, ship_dir, target=None):
     """Run all checks for one ship directory and return a report dict."""
     agents_md = os.path.join(ship_dir, "AGENTS.md")
     manifest = parse_frontmatter(agents_md)
@@ -383,7 +442,7 @@ def validate_ship(root, ship_dir):
     # 8. max_nesting
     if captain and crew:
         expected = compute_required_nesting(ship, captain, crew)
-        ok, detail = max_nesting_check(root, ship, captain, crew, expected)
+        ok, detail = max_nesting_check(root, ship, captain, crew, expected, target=target)
         check("max_nesting", ok, detail)
     else:
         check("max_nesting", False, "cannot compute max-nesting without captain and crew")
@@ -399,13 +458,14 @@ def validate_ship(root, ship_dir):
 def validate(data):
     root = resolve_root()
     requested = data.get("ship", "")
+    target = data.get("target") or None
     reports = []
     any_errors = []
 
     for ship_name, ship_dir in find_manifests(root):
         if requested and requested != "*" and ship_name != requested:
             continue
-        r = validate_ship(root, ship_dir)
+        r = validate_ship(root, ship_dir, target=target)
         reports.append(r)
         if not r["ok"]:
             any_errors.extend([f"{ship_name}: {e}" for e in r["errors"]])

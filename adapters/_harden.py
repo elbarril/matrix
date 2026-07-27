@@ -23,15 +23,41 @@ COVERAGE_NOTE = (
     "(ej. `cat`). Es una mitigación parcial contra lectura incidental, no un sandbox."
 )
 
+KNOWN_SCHEMAS = {"permissions_deny_v1"}
+
 
 def _say(msg):
     print(f"[trainman:harden] {msg}")
 
 
-def _default_config_path(target):
-    if target == "devin":
-        return os.path.join(os.path.expanduser("~"), ".config", "devin", "config.json")
-    return os.path.join(os.path.expanduser("~"), ".config", target, "config.json")
+def _declared_harden_contract(target):
+    adapter_yaml = os.path.join(ROOT, "adapters", target, "adapter.yaml")
+    if not os.path.isfile(adapter_yaml):
+        return None, None
+    cfg = _load_yaml(adapter_yaml)
+    if not isinstance(cfg, dict):
+        return None, None
+    harden = cfg.get("harden", {})
+    if not isinstance(harden, dict):
+        return None, None
+    config_path = harden.get("config_path")
+    schema = harden.get("schema")
+    if not config_path or schema not in KNOWN_SCHEMAS:
+        return None, None
+    return os.path.expanduser(config_path), schema
+
+
+def _declared_harden_schema(target):
+    adapter_yaml = os.path.join(ROOT, "adapters", target, "adapter.yaml")
+    if not os.path.isfile(adapter_yaml):
+        return ""
+    cfg = _load_yaml(adapter_yaml)
+    if not isinstance(cfg, dict):
+        return ""
+    harden = cfg.get("harden", {})
+    if not isinstance(harden, dict):
+        return ""
+    return harden.get("schema", "") or ""
 
 
 def _sidecar_path(config_path):
@@ -250,7 +276,18 @@ def main():
         sys.exit(1)
 
     if not config_path:
-        config_path = _default_config_path(target)
+        config_path, schema = _declared_harden_contract(target)
+        if not config_path:
+            schema_or_empty = _declared_harden_schema(target)
+            print(
+                f"[trainman:harden] error: adapter '{target}' does not declare a harden contract\n"
+                f"(adapters/{target}/adapter.yaml is missing, or has no `harden.config_path`,\n"
+                f"or its `harden.schema` ('{schema_or_empty}') is not implemented: known schemas\n"
+                f"are: {', '.join(sorted(KNOWN_SCHEMAS))}). Refusing to guess a config path or write an unverified\n"
+                f"schema. Pass --config explicitly, or declare `harden:` in adapters/{target}/adapter.yaml.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     # Resolve and load adapter config.
     adapter_config = _load_yaml(os.path.join(ROOT, "adapters", target, "config.yaml"))
