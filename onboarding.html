@@ -465,20 +465,19 @@
   <a href="#infra" data-section="infra">4. Infraestructura</a>
   <a href="#cli" data-section="cli">5. CLI completo</a>
   <a href="#quick-start" data-section="quick-start">6. Quick Start</a>
-  <a href="#workflows" data-section="workflows">7. Workflows</a>
-  <a href="#enforcement" data-section="enforcement">8. Enforcement</a>
-  <a href="#source" data-section="source">9. The Source</a>
-  <a href="#construct" data-section="construct">10. Costos</a>
-  <a href="#federacion" data-section="federacion">11. Federacion</a>
-  <a href="#hardline" data-section="hardline">12. AFK / Hardline</a>
-  <a href="#lock" data-section="lock">13. Modo autonomo</a>
-  <a href="#lessons" data-section="lessons">14. Lecciones</a>
-  <a href="#foundation" data-section="foundation">15. Sacred Foundation</a>
-  <a href="#estructura" data-section="estructura">16. Estructura</a>
-  <a href="#trainman" data-section="trainman">17. Adaptar CLI</a>
-  <a href="#sesion" data-section="sesion">18. Higiene</a>
-  <a href="#prohibido" data-section="prohibido">19. Lo prohibido</a>
-  <a href="#faq" data-section="faq">20. FAQ</a>
+  <a href="#enforcement" data-section="enforcement">7. Enforcement</a>
+  <a href="#source" data-section="source">8. The Source</a>
+  <a href="#construct" data-section="construct">9. Costos</a>
+  <a href="#federacion" data-section="federacion">10. Federacion</a>
+  <a href="#hardline" data-section="hardline">11. AFK / Hardline</a>
+  <a href="#lock" data-section="lock">12. Modo autonomo</a>
+  <a href="#lessons" data-section="lessons">13. Lecciones</a>
+  <a href="#foundation" data-section="foundation">14. Sacred Foundation</a>
+  <a href="#estructura" data-section="estructura">15. Estructura</a>
+  <a href="#trainman" data-section="trainman">16. Adaptar CLI</a>
+  <a href="#sesion" data-section="sesion">17. Higiene</a>
+  <a href="#prohibido" data-section="prohibido">18. Lo prohibido</a>
+  <a href="#faq" data-section="faq">19. FAQ</a>
   <div class="nav-hint">
     <kbd>g</kbd> o <kbd>/</kbd> command palette
   </div>
@@ -498,7 +497,7 @@
 <div class="section" id="que-es">
 <h2>1. Que es Matrix</h2>
 <p>Matrix es tu <strong>capa de inteligencia personal</strong>. Un repositorio raiz (<code>matrix/</code>) contiene el cerebro. Tus proyectos viven afuera, se traen on-demand, y se conectan al cerebro via un symlink <code>_brain</code>. La inteligencia nunca se copia al proyecto.</p>
-<p><strong>La tesis central:</strong> los agentes, workflows, lecciones y el contrato se escriben <strong>una sola vez</strong> en markdown, hablando de <em>capacidades abstractas</em> (<code>read</code>, <code>edit</code>, <code>search</code>, <code>code-nav</code>...), nunca de un CLI puntual. Un adaptador fino (&laquo;The Trainman&raquo;) traduce esas capacidades a las herramientas nativas del CLI que estes usando.</p>
+<p><strong>La tesis central:</strong> los agentes, las lecciones y el contrato se escriben <strong>una sola vez</strong> en markdown, hablando de <em>capacidades abstractas</em> (<code>read</code>, <code>edit</code>, <code>search</code>, <code>code-nav</code>...), nunca de un CLI puntual. Un adaptador fino (&laquo;The Trainman&raquo;) traduce esas capacidades a las herramientas nativas del CLI que estes usando.</p>
 </div>
 
 <!-- ========== 2 ========== -->
@@ -513,7 +512,6 @@ LAYER 3 &mdash; Adapters &middot; "The Trainman"
 
 LAYER 2 &mdash; Intelligence core &middot; "Zion" (agnostic markdown)
   brain/agents/      &rarr; Neo (master) + especialistas
-  brain/workflows/   &rarr; spec &rarr; develop &rarr; test &rarr; eval
   brain/data/        &rarr; lessons, capability-map, code-quality lens
   AGENTS.md          &rarr; el contrato canonico
   NUNCA nombra un CLI. Habla en capacidades.
@@ -585,7 +583,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <div class="grid">
   <div class="card">
     <h3><span class="tag tag-infra">HOOKS</span> Seraph</h3>
-    <p>Enforcement portable: 6 hooks en Python con contrato JSON in/out. Detectan bypass y validan compliance. Ver <a href="#enforcement">&sect;8</a> para la lista canonica.</p>
+    <p>Enforcement portable: 7 hooks en Python con contrato JSON in/out. Detectan bypass y validan compliance. Ver <a href="#enforcement">&sect;7</a> para la lista canonica.</p>
   </div>
   <div class="card">
     <h3><span class="tag tag-infra">LEDGER</span> Link</h3>
@@ -653,16 +651,28 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <tr><td><code>matrix checkpoint "&lt;nota&gt;"</code></td><td>Escribe un checkpoint timestamped (+ entrada en Link)</td></tr>
     <tr><td><code>matrix activity [n] [--all] [--project=&lt;name&gt;]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20), filtrados al proyecto resuelto por default; <code>--all</code> para todos los proyectos, <code>--project=</code> para consultar otro proyecto sin cambiar de directorio</td></tr>
   </table>
-  <p>Motivo del filtro: <code>checkpoints.jsonl</code> y <code>activity.log</code> son archivos <em>compartidos</em> entre todos los proyectos. Una vista global mezcla el historial de todos, y el de tu proyecto puede quedar enterrado apenas trabajes en otro (ver <a href="#lessons">14. Lecciones</a>).</p>
+  <p>Motivo del filtro: <code>checkpoints.jsonl</code> y <code>activity.log</code> son archivos <em>compartidos</em> entre todos los proyectos. Una vista global mezcla el historial de todos, y el de tu proyecto puede quedar enterrado apenas trabajes en otro (ver <a href="#lessons">13. Lecciones</a>).</p>
+</details>
+
+<details>
+  <summary>Link y flota</summary>
+  <table>
+    <tr><th>Comando</th><th>Que hace</th></tr>
+    <tr><td><code>matrix link &lt;event&gt; &lt;subject&gt; [--ref=&lt;id&gt;] [detail...]</code></td><td>Append-only: escribe un evento namespaced en el ledger Link e imprime el <code>ref</code> para propagarlo</td></tr>
+    <tr><td><code>matrix ship list</code></td><td>Lista las naves federadas descubiertas</td></tr>
+    <tr><td><code>matrix ship validate [&lt;nombre&gt;|--all]</code></td><td>Valida el manifest de una nave (o todas)</td></tr>
+  </table>
 </details>
 
 <details>
   <summary>Enforcement y adaptadores</summary>
   <table>
     <tr><th>Comando</th><th>Que hace</th></tr>
-    <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph (<code>pre_activation_check</code>, <code>validate_phase_close</code>, <code>post_run_audit</code>, <code>the_source</code>)</td></tr>
+    <tr><td><code>matrix phase close '&lt;json&gt;'</code></td><td>Corre el gate <code>validate_phase_close</code> y persiste el veredicto PASS o BLOCK en el ledger Link</td></tr>
+    <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph (<code>pre_activation_check</code>, <code>validate_phase_close</code>, <code>post_run_audit</code>, <code>the_source</code>, <code>validate_ship</code>)</td></tr>
     <tr><td><code>matrix build --target=&lt;cli&gt;</code></td><td>Trainman: genera artefactos nativos para un CLI (hoy solo <code>devin</code>)</td></tr>
     <tr><td><code>matrix install --target=&lt;cli&gt;</code></td><td>Trainman: despliega los artefactos generados al discovery path del CLI (global)</td></tr>
+    <tr><td><code>matrix harden --target=&lt;cli&gt; [--apply] [--revert]</code></td><td>Reconcilia <code>permissions.deny</code> contra <code>secret_deny</code> (dry-run por default)</td></tr>
     <tr><td><code>matrix help</code></td><td>Muestra la ayuda completa</td></tr>
   </table>
 </details>
@@ -714,38 +724,12 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 </div>
 
 <!-- ========== 7 ========== -->
-<div class="section" id="workflows">
-<h2>7. Workflows componibles</h2>
-<p>Cuatro workflows que componen en una cadena, con thin-pointer: el cuerpo vive en <code>brain/workflows/</code> (agnostico), cada adaptador lo expone como comando nativo.</p>
-<div class="flow-diagram">spec  &rarr;  develop  &rarr;  test  &rarr;  eval</div>
-
-<div class="grid">
-  <div class="card">
-    <h3>spec</h3>
-    <p>Oracle (research) &rarr; Morpheus (plan) &rarr; Architect (review). Produce un plan revisado antes de escribir codigo.</p>
-  </div>
-  <div class="card">
-    <h3>develop</h3>
-    <p>Trinity construye segun el plan. Soporta <code>--headless</code> bajo Commander Lock. Keymaker solo si se pide git explicitamente.</p>
-  </div>
-  <div class="card">
-    <h3>test</h3>
-    <p>Smith corre el E2E happy-path y el sweep de calidad. Si bloquea, Trinity fixea y se repite. Nada pasa sin evidencia real.</p>
-  </div>
-  <div class="card">
-    <h3>eval</h3>
-    <p>Juzga el resultado contra el objetivo original, captura lecciones y escribe checkpoint. Neo reporta al usuario.</p>
-  </div>
-</div>
-</div>
-
-<!-- ========== 8 ========== -->
 <div class="section" id="enforcement">
-<h2>8. Enforcement (Seraph)</h2>
+<h2>7. Enforcement (Seraph)</h2>
 <p>Hooks portables en <code>hooks/</code>, Python/bash con contrato JSON in/out. Se corren via <code>bin/matrix hooks &lt;nombre&gt;</code>.</p>
 
 <details>
-  <summary>Tabla de hooks (6 hooks)</summary>
+  <summary>Tabla de hooks (7 hooks)</summary>
   <table>
     <tr><th>Hook</th><th>Que hace</th><th>Cuando</th></tr>
     <tr>
@@ -796,10 +780,10 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 </details>
 </div>
 
-<!-- ========== 9 ========== -->
+<!-- ========== 8 ========== -->
 <div class="section" id="source">
-<h2>9. The Source &mdash; verdad generada</h2>
-<p><code>docs/SYSTEM_TRUTH.md</code> se genera desde el brain vivo (agentes, workflows, hooks). <strong>Nunca se edita a mano.</strong> Reemplaza los 22 docs manuales del sistema anterior (que se desincronizaban). Un doc generado no puede driftear.</p>
+<h2>8. The Source &mdash; verdad generada</h2>
+<p><code>docs/SYSTEM_TRUTH.md</code> se genera desde el brain vivo (agentes y hooks). <strong>Nunca se edita a mano.</strong> Reemplaza los 22 docs manuales del sistema anterior (que se desincronizaban). Un doc generado no puede driftear.</p>
 <pre><code># Regenerar
 ./bin/matrix hooks the_source
 
@@ -808,9 +792,9 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 </code></pre>
 </div>
 
-<!-- ========== 10 ========== -->
+<!-- ========== 9 ========== -->
 <div class="section" id="construct">
-<h2>10. Optimizacion de costos (The Construct)</h2>
+<h2>9. Optimizacion de costos (The Construct)</h2>
 <p>&laquo;Carga exactamente lo que necesitas, nada mas.&raquo; Codificado como reglas operativas y expuesto como capacidades abstractas.</p>
 <ul>
   <li><strong><code>code-nav</code></strong> &mdash; navegacion/edit a nivel de simbolo (Serena o equivalente) en vez de leer archivos enteros. 5-10x mas barato.</li>
@@ -822,9 +806,9 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <p>El mapa completo esta en <code>brain/data/capability-map.md</code>.</p>
 </div>
 
-<!-- ========== 11 ========== -->
+<!-- ========== 10 ========== -->
 <div class="section" id="federacion">
-<h2>11. Federacion (la flota)</h2>
+<h2>10. Federacion (la flota)</h2>
 <p>Un subsistema es una <strong>nave</strong>: su propio master, su propio roster, su propio <code>AGENTS.md</code>, bajo <code>brain/subsystems/&lt;nave&gt;/</code>. Las naves coordinan solo a traves del ledger <strong>Link</strong> compartido &mdash; nunca tocando el estado de otra.</p>
 
 <table>
@@ -841,9 +825,9 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 </ol>
 </div>
 
-<!-- ========== 12 ========== -->
+<!-- ========== 11 ========== -->
 <div class="section" id="hardline">
-<h2>12. AFK / The Hardline (opt-in)</h2>
+<h2>11. AFK / The Hardline (opt-in)</h2>
 <p>Modulo desacoplado que reacciona a eventos externos (Telegram, webhooks, file drops) y despierta a Matrix. Patron <code>Monitor(persistent)</code> sobre <code>tail -F</code>: cero tokens en idle.</p>
 <pre><code># Iniciar el monitor (foreground; correr bajo tmux para AFK)
 modules/hardline/hardline-monitor.sh
@@ -854,10 +838,10 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 <p>Los bridges de canal (bot de Telegram, receptor webhook) son deployment-specific y viven fuera del core.</p>
 </div>
 
-<!-- ========== 13 ========== -->
+<!-- ========== 12 ========== -->
 <div class="section" id="lock">
-<h2>13. Modo autonomo (Commander Lock)</h2>
-<p>Cuando un workflow corre en modo <code>--headless</code> (sin operador), Commander Lock actua como guardrail:</p>
+<h2>12. Modo autonomo (Commander Lock)</h2>
+<p>Cuando un flujo de trabajo corre en modo <code>--headless</code> (sin operador), Commander Lock actua como guardrail:</p>
 <ul>
   <li><strong>Valida el formato del prompt</strong> autonomo. Si no matchea, <code>TASK_ABORTED</code>.</li>
   <li><strong>Reglas FS absolutas:</strong> no tocar archivos fundacionales de Matrix, no <code>git reset --hard</code>, no commits sin instruccion explicita.</li>
@@ -865,9 +849,9 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 </ul>
 </div>
 
-<!-- ========== 14 ========== -->
+<!-- ========== 13 ========== -->
 <div class="section" id="lessons">
-<h2>14. Lecciones (Zion Archive)</h2>
+<h2>13. Lecciones (Zion Archive)</h2>
 <p>Lecciones de errores reales. Se leen al inicio de cada sesion. Append-only.</p>
 
 <table>
@@ -879,17 +863,17 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 <p>Para crear una nueva leccion scoped, copia <code>brain/data/lessons/_template.md</code>.</p>
 
 <div class="warn">
-  <p><strong>Checkpoint &ne; lesson.</strong> El checkpoint es memoria de <em>corto plazo</em> (buffer de recencia, se cae de la ventana) y vive en un archivo <em>compartido</em> entre todos los proyectos (<code>checkpoints.jsonl</code>) &mdash; por eso <code>matrix status</code>/<code>matrix activity</code> filtran por proyecto activo por default (ver <a href="#cli">5. CLI completo</a>). La lesson es memoria de <em>largo plazo</em>, scoped por diseño, y no se cae de ninguna ventana. Caso real que motiv&oacute; esta distincion: <code>brain/data/lessons/sandisk.md</code> &mdash; una sesion de <code>eval</code> cerr&oacute; con informacion util (decisiones del owner, links, gaps declarados) que qued&oacute; solo en un checkpoint largo y nunca se promovi&oacute; a lesson. Desde ahora <code>validate_phase_close</code> exige el campo <code>lesson</code> al cerrar <code>eval</code> &mdash; ver <a href="#enforcement">8. Enforcement</a>.</p>
+  <p><strong>Checkpoint &ne; lesson.</strong> El checkpoint es memoria de <em>corto plazo</em> (buffer de recencia, se cae de la ventana) y vive en un archivo <em>compartido</em> entre todos los proyectos (<code>checkpoints.jsonl</code>) &mdash; por eso <code>matrix status</code>/<code>matrix activity</code> filtran por proyecto activo por default (ver <a href="#cli">5. CLI completo</a>). La lesson es memoria de <em>largo plazo</em>, scoped por diseño, y no se cae de ninguna ventana. Caso real que motiv&oacute; esta distincion: <code>brain/data/lessons/sandisk.md</code> &mdash; una sesion de <code>eval</code> cerr&oacute; con informacion util (decisiones del owner, links, gaps declarados) que qued&oacute; solo en un checkpoint largo y nunca se promovi&oacute; a lesson. Desde ahora <code>validate_phase_close</code> exige el campo <code>lesson</code> al cerrar <code>eval</code> &mdash; ver <a href="#enforcement">7. Enforcement</a>.</p>
 </div>
 </div>
 
-<!-- ========== 15 ========== -->
+<!-- ========== 14 ========== -->
 <div class="section" id="foundation">
-<h2>15. Sacred Foundation (Zion)</h2>
+<h2>14. Sacred Foundation (Zion)</h2>
 <p>No son reglas. Son quienes <em>somos</em>. Cada decision de ruteo, cada pushback, cada eleccion viene de aca. No negociables.</p>
 <ol>
   <li><strong>Conocimiento total del workspace.</strong></li>
-  <li><strong>Dominio total de reglas, skills y workflows.</strong></li>
+  <li><strong>Dominio total de reglas, skills y procesos.</strong></li>
   <li><strong>Si no es real, no cuenta.</strong> Verificacion E2E obligatoria.</li>
   <li><strong>Empezo simple, ganate la complejidad.</strong></li>
   <li><strong>Interpretacion de requerimientos complejos.</strong></li>
@@ -901,9 +885,9 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 </ol>
 </div>
 
-<!-- ========== 16 ========== -->
+<!-- ========== 15 ========== -->
 <div class="section" id="estructura">
-<h2>16. Estructura de archivos</h2>
+<h2>15. Estructura de archivos</h2>
 <details>
   <summary>Arbol completo del repositorio</summary>
   <pre><code>matrix/
@@ -930,7 +914,6 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 │   ├── config.yaml                  # GITIGNORED: configuracion del usuario
 │   ├── agents/                      # neo, oracle, morpheus, architect,
 │   │                                # trinity, smith, keymaker, lock
-│   ├── workflows/                   # spec, develop, test, eval
 │   ├── data/                        # lessons.md, capability-map.md,
 │   │   ├── lessons/                 # lessons scoped por proyecto
 │   │   └── code-quality-review-lens.md
@@ -954,9 +937,9 @@ echo 'develop --headless mck' >> modules/hardline/inbox.log
 </details>
 </div>
 
-<!-- ========== 17 ========== -->
+<!-- ========== 16 ========== -->
 <div class="section" id="trainman">
-<h2>17. Adaptar a otro CLI (The Trainman)</h2>
+<h2>16. Adaptar a otro CLI (The Trainman)</h2>
 <p>Hoy solo existe el adaptador de Devin. El cerebro esta escrito para que agregar otro sea barato (~1 renderer + 1 yaml + 1 installer) y no requiera tocarlo, pero nadie mas esta implementado en este momento.</p>
 <ol>
   <li>Crear <code>adapters/&lt;cli&gt;/adapter.yaml</code> con el mapa de capacidades + <code>model_policy</code>.</li>
@@ -987,9 +970,9 @@ model_policy:
 </details>
 </div>
 
-<!-- ========== 18 ========== -->
+<!-- ========== 17 ========== -->
 <div class="section" id="sesion">
-<h2>18. Higiene de sesion</h2>
+<h2>17. Higiene de sesion</h2>
 <p>Cada sesion debe:</p>
 <ul>
   <li>Leer <code>AGENTS.md</code> (el contrato).</li>
@@ -1003,9 +986,9 @@ model_policy:
 </ul>
 </div>
 
-<!-- ========== 19 ========== -->
+<!-- ========== 18 ========== -->
 <div class="section" id="prohibido">
-<h2>19. Lo prohibido</h2>
+<h2>18. Lo prohibido</h2>
 <div class="danger">
 <ul>
   <li>Dejar que el usuario hable directo con especialistas (sin pasar por Neo).</li>
@@ -1021,9 +1004,9 @@ model_policy:
 </div>
 </div>
 
-<!-- ========== 20 ========== -->
+<!-- ========== 19 ========== -->
 <div class="section" id="faq">
-<h2>20. FAQ / Troubleshooting</h2>
+<h2>19. FAQ / Troubleshooting</h2>
 
 <details>
   <summary>El symlink <code>_brain</code> esta roto</summary>
@@ -1061,7 +1044,7 @@ model_policy:
 
 <details>
   <summary>Quiero agregar un nuevo CLI</summary>
-  <p>Ver seccion <a href="#trainman">17. Adaptar a otro CLI</a>. Costo: ~1 yaml + 1 funcion render + 1 installer. Ninguno esta implementado hoy salvo Devin.</p>
+  <p>Ver seccion <a href="#trainman">16. Adaptar a otro CLI</a>. Costo: ~1 yaml + 1 funcion render + 1 installer. Ninguno esta implementado hoy salvo Devin.</p>
 </details>
 
 <details>
@@ -1073,7 +1056,7 @@ model_policy:
 
 <details>
   <summary>Quiero una nave federada nueva</summary>
-  <p>Ver seccion <a href="#federacion">11. Federacion</a>. Crear <code>brain/subsystems/&lt;nave&gt;/AGENTS.md</code> + agentes. Coordinar solo via Link.</p>
+  <p>Ver seccion <a href="#federacion">10. Federacion</a>. Crear <code>brain/subsystems/&lt;nave&gt;/AGENTS.md</code> + agentes. Coordinar solo via Link.</p>
 </details>
 
 <details>
@@ -1088,7 +1071,7 @@ model_policy:
 
 <details>
   <summary>Cual es la diferencia entre <code>validate_phase_close</code> y <code>post_run_audit</code>?</summary>
-  <p><code>validate_phase_close</code> pregunta si el <em>trabajo</em> es real (evidencia E2E, y desde ahora una <code>lesson</code> capturada al cerrar <code>eval</code>); no escribe nada en disco, es una llamada manual del agente. <code>post_run_audit</code> pregunta si se sigui&oacute; el <em>proceso</em> obligatorio de activaci&oacute;n; s&iacute; persiste (<code>validation-report.json</code>) y se alimenta solo, desde eventos reales de Devin via el adaptador. Ver <a href="#enforcement">8. Enforcement</a>.</p>
+  <p><code>validate_phase_close</code> pregunta si el <em>trabajo</em> es real (evidencia E2E, y desde ahora una <code>lesson</code> capturada al cerrar <code>eval</code>); no escribe nada en disco, es una llamada manual del agente. <code>post_run_audit</code> pregunta si se sigui&oacute; el <em>proceso</em> obligatorio de activaci&oacute;n; s&iacute; persiste (<code>validation-report.json</code>) y se alimenta solo, desde eventos reales de Devin via el adaptador. Ver <a href="#enforcement">7. Enforcement</a>.</p>
 </details>
 </div>
 

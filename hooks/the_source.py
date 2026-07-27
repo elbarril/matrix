@@ -2,7 +2,7 @@
 """The Source — generate and validate docs/SYSTEM_TRUTH.md from the brain.
 
 The single source of truth is *generated* from the live brain (agents,
-workflows, hooks), never hand-maintained, so it cannot drift. Run without args
+hooks), never hand-maintained, so it cannot drift. Run without args
 to regenerate; pass {"check": true} (or --check) to validate sync and fail
 (exit 1) if the file is stale.
 
@@ -16,24 +16,11 @@ import re
 import subprocess
 import sys
 
-from _common import emit, read_input, resolve_root
+from _common import emit, parse_frontmatter as _parse_frontmatter, read_input, resolve_root
 
 
 def parse_frontmatter(path):
-    """Return (name, description) from a markdown agent's YAML frontmatter."""
-    name = os.path.splitext(os.path.basename(path))[0]
-    desc = ""
-    with open(path, encoding="utf-8") as fh:
-        lines = fh.read().splitlines()
-    if lines and lines[0].strip() == "---":
-        for ln in lines[1:]:
-            if ln.strip() == "---":
-                break
-            if ln.startswith("name:"):
-                name = ln.split(":", 1)[1].strip()
-            elif ln.startswith("description:"):
-                desc = ln.split(":", 1)[1].strip()
-    return name, desc
+    return (data := _parse_frontmatter(path)).get("name", os.path.splitext(os.path.basename(path))[0]), data.get("description", "")
 
 
 def list_md(dirpath):
@@ -46,8 +33,41 @@ def live_hooks(root):
     hooks_dir = os.path.join(root, "hooks")
     return sorted(
         f[:-3] for f in os.listdir(hooks_dir)
-        if f.endswith(".py") and not f.startswith("_")
+        if f.endswith(".py") and f != "_common.py"
     ) if os.path.isdir(hooks_dir) else []
+
+
+def onboarding_hook_counts(onboarding):
+    """Return the two declared hook counts from onboarding.html."""
+    patterns = {
+        "infrastructure": r"Enforcement portable:\s*(\d+)\s+hooks en Python",
+        "table": r"Tabla de hooks\s*\(\s*(\d+)\s+hooks\s*\)",
+    }
+    return {
+        name: [int(count) for count in re.findall(pattern, onboarding)]
+        for name, pattern in patterns.items()
+    }
+
+
+def parse_ship_manifest(path):
+    """Return ship manifest frontmatter as a dict."""
+    return _parse_frontmatter(path)
+
+
+def live_ships(root):
+    """Return list of ship manifests from brain/subsystems/*/AGENTS.md."""
+    ships_dir = os.path.join(root, "brain", "subsystems")
+    if not os.path.isdir(ships_dir):
+        return []
+    out = []
+    for name in sorted(os.listdir(ships_dir)):
+        agents_md = os.path.join(ships_dir, name, "AGENTS.md")
+        if not os.path.isfile(agents_md):
+            continue
+        m = parse_ship_manifest(agents_md)
+        if m.get("ship"):
+            out.append(m)
+    return out
 
 
 def onboarding_coverage(root):
@@ -77,18 +97,27 @@ def onboarding_coverage(root):
         "hooks": [name for name in hooks if name not in onboarding],
         "commands": [name for name in commands if name not in onboarding],
     }
-    return {"ok": not any(missing.values()), "missing": missing}
+    declared_hook_counts = onboarding_hook_counts(onboarding)
+    hook_count = len(hooks)
+    hook_counts_ok = all(
+        counts == [hook_count] for counts in declared_hook_counts.values()
+    )
+    return {
+        "ok": not any(missing.values()) and hook_counts_ok,
+        "missing": missing,
+        "hook_count": hook_count,
+        "declared_hook_counts": declared_hook_counts,
+        "hook_counts_ok": hook_counts_ok,
+    }
 
 
 def generate(root):
     agents_dir = os.path.join(root, "brain", "agents")
-    wf_dir = os.path.join(root, "brain", "workflows")
 
     agents = []
     for f in list_md(agents_dir):
         agents.append(parse_frontmatter(os.path.join(agents_dir, f)))
 
-    workflows = [f[:-3] for f in list_md(wf_dir) if f.lower() != "readme.md"]
     hooks = live_hooks(root)
 
     out = []
@@ -103,13 +132,21 @@ def generate(root):
     for name, desc in agents:
         out.append(f"| **{name}** | {desc} |")
     out.append("")
-    out.append("## Workflows (live)")
+    out.append("## Fleet (live)")
     out.append("")
-    if workflows:
-        for w in workflows:
-            out.append(f"- `{w}`")
+    ships = live_ships(root)
+    if ships:
+        out.append("| Ship | Captain | Crew |")
+        out.append("|---|---|---|")
+        for m in ships:
+            crew = m.get("crew", [])
+            if isinstance(crew, list):
+                crew_str = ", ".join(crew)
+            else:
+                crew_str = str(crew)
+            out.append(f"| **{m.get('ship', '')}** | {m.get('captain', '')} | {crew_str} |")
     else:
-        out.append("- (none yet)")
+        out.append("- (none registered)")
     out.append("")
     out.append("## Enforcement hooks (Seraph, live)")
     out.append("")
@@ -119,7 +156,7 @@ def generate(root):
     out.append("## Layers")
     out.append("")
     out.append("- **Layer 1** — `bin/matrix` + `hooks/` + `brain/state/` (orchestration, enforcement, state)")
-    out.append("- **Layer 2** — `brain/agents/` + `brain/workflows/` + `AGENTS.md` (agnostic intelligence core)")
+    out.append("- **Layer 2** — `brain/agents/` + `AGENTS.md` (agnostic intelligence core)")
     out.append("- **Layer 3** — `adapters/` (the Trainman; per-CLI bindings)")
     out.append("")
     return "\n".join(out) + "\n"
@@ -147,7 +184,7 @@ def main():
             "in_sync": in_sync,
             "onboarding_coverage": coverage,
             "target": target,
-            "note": "in sync" if ok else "SYSTEM_TRUTH.md is stale or onboarding.html is missing live coverage",
+            "note": "in sync" if ok else "SYSTEM_TRUTH.md is stale, onboarding.html is missing live coverage, or its hook counts drifted",
         })
         return
 
