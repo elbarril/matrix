@@ -113,6 +113,12 @@
       "path": "/home/emiliano/www/Portal-Templates-Group/saintlukes",
       "type": "local",
       "added": "2026-07-20T12:30:30-03:00"
+    },
+    {
+      "name": "claude-master-documentation",
+      "path": "/home/emiliano/www/emisrepos/claude-master-documentation",
+      "type": "local",
+      "added": "2026-07-27T09:43:31-03:00"
     }
   ],
   "created": "2026-05-19T18:31:00-03:00",
