@@ -32,7 +32,7 @@ Each adapter under `adapters/<cli>/` declares a mapping from the capabilities ab
 # adapters/devin/adapter.yaml
 capabilities:
   read: read_file
-  edit: [edit, multi_edit]
+  edit: [edit, multi_edit, write]
   search: [grep_search, find_by_name]
   code-nav: codebase_search        # fallback: search
   run-subagent: run_subagent
@@ -49,9 +49,13 @@ The golden rule: **if a capability has no native equivalent in a CLI, the adapte
 
 ## Least-privilege: `allowed-tools` on generated artifacts
 
-Beyond documenting the mapping above, the Devin adapter also declares an `allowed_tools:` block in `adapters/devin/adapter.yaml` — a second mapping, from capability to Devin's actual frontmatter tool categories (`read`, `edit`, `grep`, `glob`, `exec`, and `mcp__server__tool` patterns; this is a smaller, fixed vocabulary, distinct from the tool-call names in the `capabilities:` map above). The Trainman resolves each agent's declared `capabilities:` through this second map and writes the union as `allowed-tools:` frontmatter, so every generated `SKILL.md`/`AGENT.md` is scoped to only what that agent actually declared needing — "Restricting tools makes skills/subagents safer and more predictable" (Devin CLI docs).
+Beyond documenting the mapping above, the Devin adapter also declares an `allowed_tools:` block in `adapters/devin/adapter.yaml` — a second mapping, from capability to Devin's actual frontmatter tool categories (`read`, `edit`, `write`, `grep`, `glob`, `exec`, and `mcp__server__tool` patterns; this is a smaller, fixed vocabulary, distinct from the tool-call names in the `capabilities:` map above). The Trainman resolves each agent's declared `capabilities:` through this second map and writes the union as `allowed-tools:` frontmatter. In generated **`AGENT.md` subagent profiles**, this is a real least-privilege restriction: for example, `edit` and `write` are distinct grants. In generated **`SKILL.md` root skills** (such as Neo), do not claim the field is a complete sandbox; the enforceable restriction documented for that surface is `permissions.deny`, which currently covers `read` only, not `grep` or `exec`.
 
-`ask-user` and `run-subagent` are intentionally excluded from `allowed_tools` — see the constraint below and the Nesting Depth rule (subagents cannot spawn subagents by default); neither is a grantable `allowed-tools` entry, so including them would be a no-op.
+`ask-user` is intentionally excluded from `allowed_tools` — it is unconditionally withheld from subagents (see below). `run-subagent` is not an `allowed-tools` grant; instead, agents that need to spawn subagents are represented by a `max-nesting` frontmatter field, derived from the ship manifest's `captain`/`crew` graph by the Trainman.
+
+## Devin-specific: `run-subagent` in nestable artifacts
+
+Under Devin, `run_subagent`/`read_subagent` are disabled inside a subagent by default. They become available when the subagent profile carries a `max-nesting` frontmatter field whose value is at least the depth of the children it needs to spawn. The Trainman derives this value from the ship manifest's `captain`/`crew` graph (`depth_from_root + subtree_depth`) and injects it **only** into the captain's artifact. Crew leaves do not carry the field, because they have no subordinates to spawn. This is the Devin representation of the abstract `run-subagent` capability; it is not an `allowed-tools` grant.
 
 ## Devin-specific constraint: `ask-user` inside subagents
 

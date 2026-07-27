@@ -14,6 +14,11 @@ import os
 
 from _common import emit, read_input, resolve_root
 
+try:
+    from validate_ship import validate as validate_ship
+except Exception:
+    validate_ship = None
+
 ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith", "keymaker"]
 
 
@@ -49,10 +54,18 @@ def main():
     state = os.path.join(root, "brain", "state")
     check("state_dir", os.path.isdir(state), f"missing {state}")
 
+    # Ship validation (delegated, generic)
+    if data.get("ship") and validate_ship:
+        v = validate_ship(data)
+        checks.extend(v.get("checks", []))
+        if not v.get("ok"):
+            errors.extend(v.get("errors", []))
+
     result = {
         "hook": "pre_activation_check",
         "ok": not errors,
         "project": data.get("project"),
+        "ship": data.get("ship"),
         "root": root,
         "checks": checks,
         "errors": errors,
