@@ -79,12 +79,71 @@ full narrative if more detail is needed.
   indicator): fix it directly in `agency` (`specifics.css`/`library__theme.css`, consuming the
   already-existing `--t-gs--color--text--link--hover` token) rather than waiting to confirm an
   external/core layer first.
-- Figma's "Link S" (breadcrumbs/footer) and "Link M" (general) variants: formalize as explicit
-  `.link--s`/`.link--m` classes (don't keep the current implicit context-based `.footer .link`
-  sizing).
+- Figma's "Link S" (breadcrumbs/footer) and "Link M" (general) variants: **superseded 2026-07-24
+  after Architect review** — Architect found formalizing this needs 25 markup edits (21 with zero
+  visual change today) vs a 4-edit scoped alternative; when asked to choose, the user said **no
+  size distinction at all** — do NOT create `.link--s`/`.link--m` classes, keep the existing
+  implicit context-based sizing (`.footer .link` 14px vs general `.link` 16px) exactly as-is.
+  Only the link *state* fixes (underline/hover-color/click-focus) apply, not sizing.
 - Tertiary button / Disabled button / link "Selected" state: user wants these actively found and
   tested live (not left as declared gaps) before implementing.
 - Breakpoints: include mobile and tablet in this pass, not just desktop.
+- **Smith gate found footer `.link:hover` never reaches brand red** (a more specific core rule,
+  `.footer .link:hover` via `--t-tc--footer--link--color--hover`, wins over the portal's new
+  `.link:hover` rule) — root cause is real, but the fix was **declined on purpose**: brand red
+  `#E10600` on the footer's black background is 4.23:1, below WCAG AA (4.5:1) for 14px text. User
+  chose to keep footer hover white (compliant) over exact brand-color fidelity in that one
+  dark-background context. Don't silently "complete" this later without re-raising the trade-off.
+- Same contrast shortfall on the breadcrumb Selected color (also landed on a black background from
+  unrelated in-flight work) was accepted as shipped anyway — real improvement over the previous
+  near-invisible `#333`-on-black (1.66:1), even though it doesn't clear AA either. Both are
+  documented as known, accepted gaps in
+  `sandisk/matrix-output/eval/sandisk-agency-actions-links-GATE.md`.
+- **Working tree contamination discovered by Smith**: `agency/css/library__theme.css` and
+  `specifics.css` carry ~10 unrelated uncommitted changes from a parallel styleguide task (new
+  font-size tokens, banner/hero retargeting, `.menu__link` hover, 2 extra `specifics.css` rules)
+  mixed into the same dirty tree as this ticket's 3 edits, with identical mtimes — unattributable
+  without git history. When it's time to commit, split this ticket's `.link`/breadcrumb changes
+  from the rest; don't commit the whole dirty tree as one blob.
+
+## User's manual edits on top of the Actions & Links fix (2026-07-24) — INTENTIONAL, not a regression
+
+After the Trinity implementation + Smith gate above, the user manually edited the working tree
+further. **User explicitly confirmed these are deliberate final decisions, not errors to flag or
+revert:**
+
+- `agency/css/specifics.css`: removed the `.link { text-decoration-color: currentColor; }` rule
+  (fix #5) and the `.breadcrumbs .list__item--active`/`> span` red-color rule (fix #10) that
+  Trinity/Smith had verified. Added instead: `.list--links--top .list__item:not(:last-of-type):after
+  { border-inline-start-color: var(--t-gs--swatch--neutral--100); }` (breadcrumb divider color).
+- `agency/css/library__theme.css`: kept both link-hover token rewires
+  (`--t-gs--color--text--link--hover` and `--t-gs--color--text--on--fill--link--hover`, both now
+  `var(--t-gs--color--text--brand)`) — these are unchanged from the Trinity/Smith-verified state.
+  Added a new `.breadcrumbs .link { ... }` block scoping all link-state tokens
+  (`text-link`, `--hover`, `--focus`, `--active`, `--selected`, `--disabled`) to
+  `var(--t-gs--swatch--neutral--100)` (white) — this covers the two non-current breadcrumb
+  `<a class="link">` items, NOT the current/active `<span>` step (which has no `.link` class and is
+  therefore not reached by this rule).
+- **Net effect**: the breadcrumb "Selected" (current step) element no longer has an explicit color
+  rule after these edits — the earlier session's red (`#E10600`) fix for it was removed. This is a
+  known, deliberate change per the user, not something to "fix back" without being asked again.
+- `agency/BaseTemplate.nopage`: removed the `footer__rights__copy` (copyright) span entirely, and
+  wrapped the 3 social link URLs (LinkedIn/YouTube/Instagram) in `url('footerSocialItem*Link', ...)`
+  builder calls (CMS-configurable URLs) instead of hardcoded hrefs.
+- `agency/images/logo--small.svg` and `agency/images/social-media.svg` deleted — confirmed
+  (grep, zero hits) that nothing in `.page`/`.nopage`/`.tpt`/`.css` references either file, so this
+  is a safe, intentional cleanup of unused assets.
+- Also present in the same dirty working tree (pre-existing, from a parallel in-flight styleguide
+  task, per Smith's contamination note in the eval report — not part of this link/breadcrumb
+  ticket specifically, but shipped together in the same commit per the user's request): new
+  `--t-gs--font--size--14/20/22/24` tokens, `.submitButton` reclassified from Secondary to Primary
+  style globally (previously only inside `.article--alert`), `.menu__link:hover` background token
+  swapped for the literal `Transparent`, banner height/background-image position+size converted
+  from `px` to `rem`, strip background/font tokens repointed to raw `neutral--000`/`neutral--100`
+  swatches instead of the semantic `surface--tertiary`/`text--default` tokens, and 2 more
+  `specifics.css` rules (`.article--result .article__content__values` flex-wrap,
+  `.list--links--top` divider — the divider rule doubles as this ticket's breadcrumb-related fix
+  too, see above).
 
 ## Roster-discipline fix applied (2026-07-24), per the pending gap from the banner text-size session
 
