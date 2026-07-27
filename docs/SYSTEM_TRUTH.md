@@ -15,12 +15,11 @@
 | **smith** | Evaluator specialist. Tests, critiques, finds the flaw, blocks weak work. Owns root-cause analysis of bugs and the reality gate before "done". |
 | **trinity** | Builder specialist. Implements and ships real, working code from the Architect's design. Route here to write, change, or wire up code. |
 
-## Workflows (live)
+## Fleet (live)
 
-- `develop`
-- `eval`
-- `spec`
-- `test`
+| Ship | Captain | Crew |
+|---|---|---|
+| **logos** | niobe | ghost, sparks |
 
 ## Enforcement hooks (Seraph, live)
 
@@ -30,10 +29,11 @@
 - `session_close`
 - `the_source`
 - `validate_phase_close`
+- `validate_ship`
 
 ## Layers
 
 - **Layer 1** — `bin/matrix` + `hooks/` + `brain/state/` (orchestration, enforcement, state)
-- **Layer 2** — `brain/agents/` + `brain/workflows/` + `AGENTS.md` (agnostic intelligence core)
+- **Layer 2** — `brain/agents/` + `AGENTS.md` (agnostic intelligence core)
 - **Layer 3** — `adapters/` (the Trainman; per-CLI bindings)
 
