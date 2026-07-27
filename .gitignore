@@ -14,7 +14,7 @@ brain/state/*
 # Work artifacts produced in Matrix-workspace-mode (working on Matrix itself).
 # Project-bound work artifacts live in the PROJECT's own `matrix-output/`
 # directory (sibling to its `_brain` symlink), never here — see
-# brain/workflows/spec.md.
+# AGENTS.md §1.
 brain/output/*
 !brain/output/.gitkeep
 
@@ -29,7 +29,8 @@ adapters/*/generated/
 modules/hardline/inbox.log
 
 # Federated ship corpora (per-machine)
-brain/subsystems/*/corpus/
+brain/subsystems/*/corpus/*
+!brain/subsystems/*/corpus/.gitkeep
 
 # OS files
 .DS_Store

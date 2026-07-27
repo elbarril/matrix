@@ -1,3 +1,16 @@
+---
+ship: logos
+captain: niobe
+crew: [ghost, sparks]
+crew-max: 3
+route-when: research that needs ≥2 of decision-grade, conflict/volume, auditability, multi-pass; or explicit deep-research request; or post-Oracle escalation
+writes: [research:result]
+reads: [research:request]
+state: brain/subsystems/logos/corpus/
+request: research:request
+result: research:result
+---
+
 # AGENTS.md — the Logos (federated research ship)
 
 > The Logos is a ship in the fleet: its own captain, its own crew, its own contract. It coordinates with the core (Nebuchadnezzar) only through the shared **Link** ledger — never by reaching into the core's state.
@@ -28,6 +41,7 @@ No claim leaves the Logos to the user (via the core) without:
 ## Coordination with the core
 
 - The Logos reads the request handed to it via the Link ledger (`research:request`) and writes its result back as `research:result`.
+- Link events are written through `bin/matrix link`; only the captain (Niobe) has `run-command` and therefore the ability to append to the ledger.
 - It never edits the core's `brain/state/` directly. The ledger is the only shared surface.
 - Neo presents the Logos's graded result to the user; the Logos never speaks to the user directly.
 
@@ -37,7 +51,13 @@ Ship state lives under `brain/subsystems/logos/`:
 
 ```text
 brain/subsystems/logos/
-├── AGENTS.md            # this contract
-├── agents/niobe.md      # captain
-└── corpus/              # structured, provenance-tagged sources (gitignored)
+├── AGENTS.md            # this contract + manifest (frontmatter)
+├── agents/
+│   ├── niobe.md         # captain
+│   ├── ghost.md         # evidence appraiser
+│   └── sparks.md        # ingestion operator
+├── corpus-spec.md       # corpus convention (tracked)
+└── corpus/              # structured, provenance-tagged sources (gitignored; .gitkeep tracked)
 ```
+
+See `corpus-spec.md` for the exact layout, frontmatter, and lifecycle rules.
