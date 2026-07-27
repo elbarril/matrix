@@ -53,13 +53,13 @@ Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, reso
 
 | Tier | Model | Used by | Why |
 |---|---|---|---|
-| `cheap` | `swe-1-7-lightning` | Keymaker, Lock | Cerebras-backed fast variant — same intelligence, lower latency, for mechanical/plumbing work |
-| `reasoning` | `opus` (Claude Opus 4.8) | Architect, Morpheus, Oracle, Smith | Devin CLI's own guidance names `opus`/`gpt` for deep reasoning/architecture/research/evaluation; SWE-1.7 trails Opus by a few points on FrontierCode/Terminal-Bench/SWE-Bench Multilingual per Cognition's own comparison table. Real cost: $5/$25 per MTok, 1M context. |
-| `auto` | `adaptive` | Neo, Trinity | Mixed work (routing + implementation spans trivial to complex); Cognition's own per-task router picks cheap/fast vs. capable per request instead of pinning one model. Intro rate $0.50/$2.00 per MTok at time of writing — re-check after the intro window. |
+| `cheap` | `swe-1-7-medium` | Keymaker, Lock, Logos Sparks | Gratis hoy durante su beta; apto para trabajo mecánico/plumbing. La fecha exacta de cierre de su free preview no es re-verificable hoy en una fuente viva. |
+| `reasoning` | `opus` (Claude Opus 5) | Architect, Morpheus, Oracle, Smith | `opus` es un alias flotante: la documentación de Devin confirma explícitamente que sigue la versión más reciente de la familia Claude Opus. Devin también lo recomienda, junto con `gpt`, para deep reasoning/architecture/research/evaluation. Real cost hoy: $5/$25 per MTok, 1M context. |
+| `auto` | `adaptive` | Neo, Trinity | Mixed work (routing + implementation spans trivial to complex); Cognition's own per-task router picks cheap/fast vs. capable per request instead of pinning one model. La ventana de precio introductorio ($0.50/$2.00 per MTok) venció el 2026-07-07; la tarifa posterior es desconocida y depende del plan de billing del usuario. |
 
 **Both `swe-1.7` and `swe-1-7` are accepted and normalize to the same canonical id** (confirmed via the sessions database — do not assume dash vs. dot matters). `swe-1-7-lightning` is a genuinely distinct, faster model, not just an alias.
 
-**Time-bound: SWE-1.7 is a free preview only through 2026-08-08; Adaptive's intro pricing window ended 2026-07-07 (may already be standard rate).** Re-verify this table periodically (repeat the `--model X -p "OK"` + sessions.db check, or just watch `/model`'s selector) and update the map if needed. This is exactly the kind of drift this file exists to catch.
+**Time-bound:** SWE-1.7 está gratis hoy durante su beta, pero la fecha 2026-08-08 atribuida al fin de su free preview no es re-verificable hoy en una fuente viva; conservarla solo como fecha no confirmada y hacer un próximo recheck sugerido el 2026-08-08 (además de revisiones periódicas). La ventana introductoria de Adaptive venció el 2026-07-07; no afirmar una tarifa post-intro sin consultar el plan de billing del usuario. Re-verify this table periodically (repeat the `--model X -p "OK"` + sessions.db check, or just watch `/model`'s selector) and update the map if needed. This is exactly the kind of drift this file exists to catch.
 
 To move a tier onto a different model, edit the map in `adapters/devin/adapter.yaml` and rerun:
 
@@ -87,7 +87,19 @@ Neo's `SKILL.md` is the one exception — deliberately left with no `allowed-too
 
 ## Subagents can never ask the user directly
 
-Devin withholds `ask_user_question` from every subagent unconditionally — not configurable via `allowed-tools` or `permissions`. Specialists that declare the `ask-user` capability (Architect, Keymaker, Morpheus, Oracle, Trinity) run as Devin subagents, so they cannot call it. When one of them needs a decision from the user, it stops and reports the question back to Neo (the master skill, not a subagent — it keeps `ask_user_question`), which asks and re-delegates. `run_subagent`/`read_subagent` are similarly unavailable inside a subagent by default (nesting is disabled beyond the root agent unless `max-nesting` is set — none of our specialists need it). See `brain/data/capability-map.md` for the full note.
+Devin withholds `ask_user_question` from every subagent unconditionally — not configurable via `allowed-tools` or `permissions`. Specialists that declare the `ask-user` capability (Architect, Keymaker, Morpheus, Oracle, Trinity) run as Devin subagents, so they cannot call it. When one of them needs a decision from the user, it stops and reports the question back to Neo (the master skill, not a subagent — it keeps `ask_user_question`), which asks and re-delegates. `run_subagent`/`read_subagent` are similarly unavailable inside a subagent by default (nesting is disabled beyond the root agent unless `max-nesting` is set — none of our core specialists need it, they're all depth-1 children of Neo).
+
+**Nesting spike (verified, not just documented):** a temporary custom subagent profile (`max-nesting: 2` in its frontmatter, no other restriction) was spawned by Neo and successfully called `run_subagent` itself, spawning a grandchild `subagent_explore` and reading its result back via `read_subagent(block=true)` — full round trip, no denial, no silent fallback. Confirms the docs' claim (`subagents.mdx` "Nesting Depth") is accurate in this environment: a depth-1 custom subagent with `max-nesting` set can legitimately spawn and read depth-2 children. This matters for federated ships (see `brain/subsystems/FEDERATION.md`): a ship's captain (e.g. Niobe) can be generated with `max-nesting: 2` and delegate directly to her own crew, instead of needing a courier protocol where the root agent spawns the crew on the captain's behalf.
+
+## Federated ships and `max-nesting`
+
+Federated ship captains (e.g. `logos-niobe`) are generated as custom subagent profiles with a `max-nesting` frontmatter value. The value is derived by the Trainman from the ship manifest's `captain`/`crew` graph (`depth_from_root + subtree_depth`) and injected **only** into the captain's artifact. Crew leaves (e.g. `logos-ghost`, `logos-sparks`) do not carry the field.
+
+For Logos:
+- `logos-niobe/AGENT.md` → `max-nesting: 2` (captain at depth 1 from Neo, crew at depth 2).
+- `logos-ghost/AGENT.md` and `logos-sparks/AGENT.md` → no `max-nesting` field.
+
+This lets Niobe call `run_subagent` and `read_subagent` directly on her crew without a courier protocol. The formula is verified only for depth 2; a ship with sub-captains (depth ≥3) needs a new spike before trusting the same derivation.
 
 ## Mapping to Devin's native structure
 
@@ -97,7 +109,7 @@ Devin withholds `ask_user_question` from every subagent unconditionally — not 
 
 ## Session hygiene
 
-See [`AGENTS.md`](AGENTS.md) §13. In short: read the contract, know the registry, resolve context, read recent checkpoints + lessons, respect boundaries, never log secrets, checkpoint progress, verify reality before "done".
+See [`AGENTS.md`](AGENTS.md) §12. In short: read the contract, know the registry, resolve context, read recent checkpoints + lessons, respect boundaries, never log secrets, checkpoint progress, verify reality before "done".
 
 ## Hardening `permissions.deny` for secret stores
 

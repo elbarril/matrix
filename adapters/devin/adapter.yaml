@@ -3,7 +3,7 @@
 target: devin
 capabilities:
   read: read_file
-  edit: [edit, multi_edit]
+  edit: [edit, multi_edit, write]
   search: [grep_search, find_by_name]
   code-nav: codebase_search   # fallback: grep_search
   run-subagent: run_subagent
@@ -17,18 +17,25 @@ capabilities:
 
 # allowed-tools categories accepted by Devin's SKILL.md/AGENT.md frontmatter
 # (per docs: read, edit, grep, glob, exec, plus mcp__server__tool patterns).
-# `ask-user` and `run-subagent` are NOT listed here on purpose: neither is a
-# grantable allowed-tools entry (ask_user_question is unconditionally withheld
-# from subagents; run_subagent/read_subagent are disabled inside a subagent by
-# default regardless of allowed-tools). Listing them would be a no-op at best.
+# `ask-user` is NOT listed here on purpose: it is unconditionally withheld from
+# subagents, so it is not a grantable allowed-tools entry. `run-subagent` is
+# representable through a separate `max-nesting` frontmatter field for agents
+# that need to spawn subagents (ship captains, not crew leaves). Listing
+# `run-subagent` in allowed-tools would be a no-op because it is not a Devin
+# allowed-tools category.
 allowed_tools:
   read: [read]
-  edit: [edit]
+  edit: [edit, write]
   search: [grep, glob]
   code-nav: [grep, glob]              # no dedicated category; documented fallback
   run-command: [exec]
   browser: ["mcp__chrome-browser__*"]
   docs-lookup: ["mcp__context7__*"]
+
+# Nesting field used by the Trainman for agents that need to spawn subagents.
+# Devin supports a `max-nesting` frontmatter key on custom subagent profiles.
+nesting:
+  field: max-nesting
 
 render:
   master: skill              # → .agents/skills/<name>/SKILL.md
@@ -41,12 +48,11 @@ model_policy:
   #   - "multi-file refactors, architecture changes, deep reasoning" -> opus or gpt
   #   - "quick edits, bug fixes, cost-sensitive work" -> swe (fast)
   #   - mixed workloads -> adaptive (Cognition's own per-task router)
-  # SWE-1.7 (the prior default for reasoning/auto) is a few points behind
-  # Opus 4.7/4.8 and GPT-5.5 on FrontierCode/Terminal-Bench/SWE-Bench
-  # Multilingual per Cognition's own comparison table, and its free-preview
-  # window ends 2026-08-08 — so pinning reasoning-tier work to it was both
-  # off-guidance and time-bound. User chose capability-first for `reasoning`
-  # (accepting real per-token cost) and `adaptive` for `auto` (2026-07-17).
-  cheap: swe-1-7-lightning    # mechanical/fast work (Keymaker, Lock): lower latency, same preview pricing
-  reasoning: opus             # planning/architecture/research/evaluation (Architect, Morpheus, Oracle, Smith): Devin CLI's own guidance for deep reasoning; $5/$25 per MTok, 1M context
-  auto: adaptive              # mixed workloads (Neo, Trinity): Cognition's per-task router; intro rate $0.50/$2.00 per MTok (re-check after its intro window)
+  # SWE-1.7 Medium is gratis hoy durante su beta. La fecha 2026-08-08
+  # atribuida al fin de su free preview no es re-verificable hoy en una fuente
+  # viva: conservarla como no confirmada y re-chequear periódicamente.
+  # User chose capability-first for `reasoning` (accepting real per-token cost)
+  # and `adaptive` for `auto` (2026-07-17).
+  cheap: swe-1-7-medium       # mechanical/plumbing work (Keymaker, Lock, Logos Sparks): gratis hoy en beta; free-preview end date not confirmed, recheck periodically
+  reasoning: opus             # planning/architecture/research/evaluation (Architect, Morpheus, Oracle, Smith): floating alias for the latest Claude Opus family version; $5/$25 per MTok, 1M context
+  auto: adaptive              # mixed workloads (Neo, Trinity): Cognition's per-task router; intro pricing expired 2026-07-07, post-intro rate depends on the user's billing plan
