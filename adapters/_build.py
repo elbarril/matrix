@@ -206,6 +206,30 @@ def resolve_nesting_field(target):
     return nesting.get("field") or "max-nesting"
 
 
+def _compose_routing_doctrine(roster, fleet_block, target):
+    """Return the routing-doctrine section for a master skill artifact.
+
+    The generated text is the operational form of Neo's profile-discipline rule
+    and fallback caveat. Kept identical for the current target; a second
+    renderer would call this with its own target name.
+    """
+    return (
+        f"## Routing to specialists\n\n"
+        f"Neo never lets the user talk to specialists directly. To delegate, "
+        f"spawn a subagent that reads the specialist's brain file and runs its "
+        f"`<activation>` block. For these named specialists, if the profile name "
+        f"below appears in this session's list of available `run_subagent` "
+        f"profiles, ALWAYS pass that exact name — never substitute "
+        f"`subagent_general`/`subagent_explore` for one of them out of habit. "
+        f"Only fall back to a general subagent pointed at the file when the named "
+        f"profile is genuinely absent from that list (e.g. this machine hasn't run "
+        f"`matrix install --target={target}` yet):\n\n"
+        f"{roster}\n\n"
+        f"{fleet_block}\n\n"
+        f"Log every route/handoff to the Link ledger via `bin/matrix`.\n"
+    )
+
+
 def render_devin(outdir):
     """Devin: master → Skill, specialists → Subagents, ships → subagents."""
     written = []
@@ -260,19 +284,7 @@ def render_devin(outdir):
                 f"If the current project has a `_brain` symlink (created by "
                 f"`matrix select`), prefer it for project binding; otherwise fall "
                 f"back to the absolute paths above.\n\n"
-                f"## Routing to specialists\n\n"
-                f"Neo never lets the user talk to specialists directly. To delegate, "
-                f"spawn a subagent that reads the specialist's brain file and runs its "
-                f"`<activation>` block. For these named specialists, if the profile name "
-                f"below appears in this session's list of available `run_subagent` "
-                f"profiles, ALWAYS pass that exact name — never substitute "
-                f"`subagent_general`/`subagent_explore` for one of them out of habit. "
-                f"Only fall back to a general subagent pointed at the file when the named "
-                f"profile is genuinely absent from that list (e.g. this machine hasn't run "
-                f"`matrix install --target=devin` yet):\n\n"
-                f"{roster}\n\n"
-                f"{fleet_block}\n\n"
-                f"Log every route/handoff to the Link ledger via `bin/matrix`.\n"
+                f"{_compose_routing_doctrine(roster, fleet_block, 'devin')}"
             )
         else:
             d = os.path.join(outdir, ".agents", "agents", stem)
