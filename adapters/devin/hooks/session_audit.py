@@ -145,12 +145,7 @@ SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
 
 
 def _session_id_from_devin(payload, ctx):
-    """Devin's own hook payloads never include a session identifier as of
-    CLI 3000.1.27 (confirmed empirically: SessionStart/UserPromptSubmit/
-    PostToolUse/SessionEnd payloads only ever carry hook_event_name plus a
-    couple of event-specific fields — no session/sessionId anywhere, and no
-    DEVIN_SESSION_* env var either). Kept as a defensive fallback in case a
-    future CLI version starts sending one; never rely on this alone."""
+    """Devin may provide a real session id in newer CLI versions."""
     for k in SESSION_ID_KEYS:
         v = payload.get(k)
         if v:
@@ -158,36 +153,42 @@ def _session_id_from_devin(payload, ctx):
     return ctx.get("session_id")
 
 
+def _persist_session_marker(root, sid):
+    """Persist sid to the shared marker so bin/matrix can correlate."""
+    marker = os.path.join(root, SESSION_MARKER)
+    try:
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        with open(marker, "w", encoding="utf-8") as fh:
+            fh.write(sid)
+    except OSError:
+        pass
+
+
 def _synthetic_session_id(root, event):
     """Generate/read a synthetic session id, since Devin provides none.
 
     `session_start` mints a fresh id and persists it to a marker file;
-    every other event in the same Devin process reads that same marker.
+    every other event in the same Devin process reads that same marker via
+    _common.current_session_id() so the read path is centralized in Layer 1.
     This only disambiguates sessions run sequentially on one machine — two
     Devin processes writing to the same MATRIX_ROOT concurrently can still
-    interleave, but that is a real platform gap (no session identifier is
-    exposed to hooks at all), not something a Layer 3 adapter can fully
-    solve without Devin's cooperation. Documented as a known limitation.
+    interleave, but that is a real platform gap, not something a Layer 3
+    adapter can fully solve without Devin's cooperation.
     """
-    marker = os.path.join(root, SESSION_MARKER)
     if event == "session_start":
         sid = uuid.uuid4().hex[:12]
-        try:
-            os.makedirs(os.path.dirname(marker), exist_ok=True)
-            with open(marker, "w", encoding="utf-8") as fh:
-                fh.write(sid)
-        except OSError:
-            pass
+        _persist_session_marker(root, sid)
         return sid
-    try:
-        with open(marker, encoding="utf-8") as fh:
-            return fh.read().strip() or None
-    except OSError:
-        return None
+    return common.current_session_id(root)
 
 
 def _session_id(root, event, payload, ctx):
-    return _session_id_from_devin(payload, ctx) or _synthetic_session_id(root, event)
+    sid = _session_id_from_devin(payload, ctx)
+    if sid:
+        if event == "session_start":
+            _persist_session_marker(root, sid)
+        return sid
+    return _synthetic_session_id(root, event)
 
 
 def _extract_tool_paths(tool_name, tool_input):
@@ -321,6 +322,28 @@ def _call_audit_event(envelope):
         return ""
 
 
+def _run_session_close(session_id):
+    """Best-effort session close: must never block or fail the Devin session."""
+    try:
+        close_payload = {"session_id": session_id} if session_id else {}
+        env = {**os.environ, "MATRIX_ROOT": ROOT}
+        proc = subprocess.run(
+            [BIN_MATRIX, "session", "close", json.dumps(close_payload)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=25,
+            stdin=subprocess.DEVNULL,
+        )
+        if proc.returncode != 0:
+            print(
+                f"[session_audit] session close exited {proc.returncode}: {proc.stderr}",
+                file=sys.stderr,
+            )
+    except Exception as e:
+        print(f"[session_audit] session close invocation failed: {e}", file=sys.stderr)
+
+
 def main():
     raw = ""
     if not sys.stdin.isatty():
@@ -377,6 +400,9 @@ def main():
                 pass
 
     _call_audit_event(envelope)
+
+    if event == "session_end":
+        _run_session_close(session_id)
 
     # Etapa G / H3 experiment: optionally inject the neo.md <activation>
     # block into SessionStart / UserPromptSubmit via hookSpecificOutput.

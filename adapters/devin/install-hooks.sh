@@ -42,13 +42,14 @@ command = f'env MATRIX_ROOT={matrix_root} python3 {hook_script}'
 hooks = cfg.setdefault("hooks", {})
 
 for event in ("SessionStart", "UserPromptSubmit", "PostCompaction", "SessionEnd"):
+    timeout = 30 if event == "SessionEnd" else 10
     hooks[event] = [
         {
             "hooks": [
                 {
                     "type": "command",
                     "command": command,
-                    "timeout": 10,
+                    "timeout": timeout,
                 }
             ]
         }

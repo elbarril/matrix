@@ -51,7 +51,7 @@ Un pedido de "arreglame un bug" típicamente pasa por Smith (encuentra la causa)
 Es fácil confundirlos porque los dos son hooks de Seraph y los dos aparecen al "cerrar" algo, pero responden preguntas distintas:
 
 - **`validate_phase_close`** — el gate de **realidad del contenido**: "¿esto que decís que funciona, funciona de verdad?". No escribe nada en disco por sí mismo; recibe `{"phase","e2e","evidence","lesson"}` y devuelve PASS/BLOCK por stdout. Es manual: solo corre si el agente decide invocarlo al cerrar una fase (`spec`/`develop`/`test`/`eval`). Nada de Devin lo dispara solo.
-- **`post_run_audit`** — el gate de **proceso**: "¿el agente siguió los pasos obligatorios de activación?" (no si el trabajo es real, sino si se hizo el ritual: `pre_activation_check`, etc.). Este sí persiste: escribe `brain/state/validation-report.json`. Se alimenta automáticamente de eventos reales del ciclo de vida de Devin (`SessionStart`, `PostToolUse`, `SessionEnd`) vía el adaptador (`adapters/devin/hooks/session_audit.py` → `hooks/audit_event.py` → `hooks/session_close.py`).
+- **`post_run_audit`** — el gate de **proceso**: "¿el agente siguió los pasos obligatorios de activación?" (no si el trabajo es real, sino si se hizo el ritual: `pre_activation_check`, etc.). Este sí persiste: escribe `brain/state/validation-report.json`. Se alimenta de eventos reales del ciclo de vida de Devin (`SessionStart`, `PostToolUse`, `SessionEnd`) vía `adapters/devin/hooks/session_audit.py` → `hooks/audit_event.py`; además, `SessionEnd` dispara `bin/matrix session close`, que corre `hooks/session_close.py` y escribe `session:close` en el ledger Link.
 
 En criollo: uno audita el **qué** (¿el trabajo es real?), el otro audita el **cómo** (¿se siguió el protocolo?). Podés pasar uno y fallar el otro.
 
@@ -69,7 +69,7 @@ Un **checkpoint** es una nota con fecha que Neo (o vos) guarda cuando algo impor
 
 Por default, `matrix status` y `matrix activity` muestran los checkpoints/eventos del **proyecto activo únicamente** (resuelto igual que Neo: symlink `_brain` del directorio donde estás parado > `primary` de `.context.yaml`). Esto es a propósito: `checkpoints.jsonl` es un archivo único y compartido entre *todos* tus proyectos, así que una vista global mezclaría el historial de sandisk con el de calian y el que te importa quedaría enterrado apenas trabajes en otro proyecto. Usá `matrix status --all` o `matrix activity --all` cuando de verdad quieras la vista cruzada, o `matrix activity --project=<nombre>` para mirar otro proyecto sin moverte de carpeta.
 
-Una **lesson** (`brain/data/lessons.md` o `brain/data/lessons/<proyecto>.md`) es memoria de **largo plazo**: cosas que la realidad enseñó y que valen para siempre (una decisión del cliente, un link de acceso a una instancia, un bug real y su causa). A diferencia del checkpoint, no se cae de ninguna ventana — se lee siempre, íntegro, al bindear ese proyecto. El workflow `eval` (`brain/workflows/eval.md`) es el que la escribe, y desde ahora el hook `validate_phase_close` **bloquea** cerrar la fase `eval` si no se declaró explícitamente qué se aprendió (o un "N/A" razonado) — antes era solo una convención que se podía saltear en silencio.
+Una **lesson** (`brain/data/lessons.md` o `brain/data/lessons/<proyecto>.md`) es memoria de **largo plazo**: cosas que la realidad enseñó y que valen para siempre (una decisión del cliente, un link de acceso a una instancia, un bug real y su causa). A diferencia del checkpoint, no se cae de ninguna ventana — se lee siempre, íntegro, al bindear ese proyecto. La fase `eval` del ciclo de trabajo (ver `hooks/validate_phase_close.py`) es la que la exige, y el hook `validate_phase_close` **bloquea** cerrar la fase `eval` si no se declaró explícitamente qué se aprendió (o un "N/A" razonado) — antes era solo una convención que se podía saltear en silencio.
 
 ---
 
@@ -130,7 +130,6 @@ matrix/
 ├── brain/                     # Layer 2 — the intelligence core
 │   ├── config.yaml            # GITIGNORED: per-machine (user, language, timezone)
 │   ├── agents/                # neo, oracle, morpheus, architect, trinity, smith, keymaker
-│   ├── workflows/             # spec → develop → test → eval
 │   ├── data/                  # lessons.md, code-quality-review-lens.md, capability-map.md
 │   ├── subsystems/            # the fleet (federated ships)
 │   ├── state/                 # GITIGNORED: workspace.yaml, activity.log, checkpoints.jsonl, ...
@@ -183,6 +182,8 @@ Hay tres conceptos distintos, y es importante no confundirlos:
 - **`primary`/default** — el único proyecto guardado en `.context.yaml`. Ya **no es exclusivo**: es simplemente el proyecto que se usa como *fallback* cuando una sesión no puede resolver su proyecto de otra forma (sin `--project`, sin `$MATRIX_PROJECT`, y sin estar parado dentro de una carpeta con `_brain`).
 
 **¿Cómo resuelve Neo qué proyecto es "el suyo" en una sesión dada?** Con esta prioridad: `--project <nombre>` (si lo pasaste explícito) > variable de entorno `$MATRIX_PROJECT` > el symlink `_brain` de la carpeta donde estás parado (`cwd`) > el `primary` de `.context.yaml` como último recurso. En la práctica esto significa: **si abrís una terminal dentro de un proyecto bindeado, esa sesión ya sabe cuál es su proyecto sin importar qué otro proyecto hayas seleccionado como "primary" en otro lado.**
+
+Una regla adicional define qué pasa cuando cwd está dentro de más de una raíz posible (por ejemplo, `matrix/` adentro de un proyecto bindeado, o un proyecto bindeado adentro de `clients/` del propio Matrix): **innermost-root-wins** — caminando hacia arriba desde cwd, el primer directorio que sea la raíz de Matrix o tenga un `_brain` válido decide el modo. Si la raíz de Matrix gana, se entra en **Matrix workspace mode** y no se considera bindeado a ningún proyecto. Ejemplo real de proyecto anidado dentro de otro: `emi ⊃ deseo` (ambos bindeados).
 
 Ejemplo de uso real con dos proyectos a la vez:
 

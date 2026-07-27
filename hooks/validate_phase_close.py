@@ -7,7 +7,7 @@ win.
 
 Input JSON:
   {
-    "phase": "develop",          # spec | develop | test | eval | <free>
+    "phase": "develop",          # spec | develop | test | eval — closed set; anything else BLOCKs
     "e2e": true,                 # was an end-to-end happy-path check run?
     "evidence": "ran ./run ... output X",   # concrete proof (command/output/url)
     "tests": "passed 12/12",     # optional
@@ -17,8 +17,8 @@ Input JSON:
 Exit 0 (PASS) only when e2e is true AND evidence is non-trivial.
 Exit 1 (BLOCK) otherwise.
 
-For phase == "eval", `eval.md` step 2 ("Capture lessons") is a contract step, not
-optional flavor text — a phase cannot close on reality it didn't record. So
+For phase == "eval", the eval-phase contract (capturing lessons) is mandatory,
+not optional flavor text — a phase cannot close on reality it didn't record. So
 `lesson` must also be present and non-trivial: either a pointer to what was
 appended to `brain/data/lessons.md` / `brain/data/lessons/<project>.md`, or an
 explicit, reasoned "N/A" (reality taught nothing new worth keeping). A missing
@@ -28,8 +28,11 @@ a valid answer to "what did we learn".
 
 from _common import emit, read_input, resolve_root
 
-# Phases that may legitimately have no runtime E2E (pure planning/research).
-NO_RUNTIME_PHASES = {"spec", "plan", "research"}
+# The canonical phase vocabulary (retired brain workflow reference docs;
+# this set is now the single source of truth).
+VALID_PHASES = {"spec", "develop", "test", "eval"}
+# Phases that may legitimately have no runtime E2E (artifact-closing phases).
+NO_RUNTIME_PHASES = {"spec"}
 EVAL_PHASES = {"eval"}
 
 
@@ -41,8 +44,12 @@ def main():
     lesson = (data.get("lesson") or "").strip()
     errors = []
 
-    if phase in NO_RUNTIME_PHASES:
-        # Planning/research phases close on a concrete artifact, not a runtime check.
+    if phase not in VALID_PHASES:
+        errors.append(
+            f"unknown phase '{phase}' — valid phases are spec|develop|test|eval"
+        )
+    elif phase in NO_RUNTIME_PHASES:
+        # Artifact-closing phases close on a concrete artifact, not a runtime check.
         if len(evidence) < 8:
             errors.append("planning phase needs a concrete artifact reference as evidence")
     else:
@@ -53,7 +60,7 @@ def main():
 
     if phase in EVAL_PHASES and len(lesson) < 8:
         errors.append(
-            "eval closes the loop (eval.md step 2) — 'lesson' is missing or trivial; "
+            "eval closes the loop by capturing lessons — 'lesson' is missing or trivial; "
             "state what was appended to lessons.md/lessons/<project>.md, or an explicit reasoned N/A"
         )
 
