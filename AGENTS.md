@@ -12,7 +12,7 @@ Matrix is a personal intelligence layer. One root repo (this one) holds the brai
 
 The intelligence never ships into project code. The brain stays here. **The reverse also holds: project work never ships into the brain.** Reports, plans, screenshots, and other work artifacts produced while a project is bound are written to `matrix-output/` at that **project's own root** (a real directory, sibling to `_brain` — never written *through* the `_brain` symlink, or they would land inside the shared brain and pollute it for every other project). Only when working on Matrix itself (Matrix workspace mode, no project bound) do outputs go to this repo's own `brain/output/`.
 
-**The core thesis (why this beats a CLI-coupled system):** the intelligence (agents, workflows, lessons, contract) is written **once**, in plain markdown, in terms of abstract *capabilities* — never in terms of one CLI's native tools. A thin adapter (**The Trainman**) translates those capabilities into whatever the host CLI speaks. Change the CLI, change one ~100-line adapter, keep everything else.
+**The core thesis (why this beats a CLI-coupled system):** the intelligence (agents, lessons, contract) is written **once**, in plain markdown, in terms of abstract *capabilities* — never in terms of one CLI's native tools. A thin adapter (**The Trainman**) translates those capabilities into whatever the host CLI speaks. Change the CLI, change one ~100-line adapter, keep everything else.
 
 ---
 
@@ -31,7 +31,6 @@ The intelligence never ships into project code. The brain stays here. **The reve
 ┌─────────────────────────────────────────────────────────────┐
 │  LAYER 2 — Intelligence core (agnostic markdown) · "Zion"    │
 │  brain/agents/      → Neo (master) + specialists             │
-│  brain/workflows/   → composable workflows (programs)        │
 │  brain/data/lessons.md → battle-tested lessons (Zion Archive)│
 │  AGENTS.md          → this contract                          │
 │  NEVER names a specific CLI. Speaks only in capabilities.    │
@@ -46,7 +45,7 @@ The intelligence never ships into project code. The brain stays here. **The reve
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**The golden rule:** Layer 2 (agents and workflows) **never mentions a CLI**. It speaks in abstract capabilities: `read`, `edit`, `search`, `code-nav`, `run-subagent`, `ask-user`, `run-command`. Each Layer 3 adapter maps those capabilities to the host CLI's real tools.
+**The golden rule:** Layer 2 agents **never mention a CLI**. They speak in abstract capabilities: `read`, `edit`, `search`, `code-nav`, `run-subagent`, `ask-user`, `run-command`. Each Layer 3 adapter maps those capabilities to the host CLI's real tools.
 
 ---
 
@@ -80,7 +79,7 @@ One master, five core specialists, one opt-in sixth. **Roster discipline (from h
 | **The Hardline** | The phone exit in/out of the Matrix | **Multi-channel / AFK**: reacts to external events (Telegram/webhook), zero tokens on idle. Opt-in module. |
 | **The Source** | The origin of truth | **`docs/SYSTEM_TRUTH.md`**: a minimal, generated-and-validated single source of truth (no manual doc drift). |
 | **Zion** | The home, the spine | **The brain root + sacred foundation.** The non-negotiable values. |
-| **The fleet** | Hovercraft with their own captains | **Federation**: subsystems are ships (`brain/subsystems/<ship>/`) with their own master and contract. Core vessel: **Nebuchadnezzar**. Example research ship: **Logos** (captain Niobe). |
+| **The fleet** | Hovercraft with their own captains | **Federation**: see `brain/subsystems/FEDERATION.md`. Core vessel: **Nebuchadnezzar**. Example research ship: **Logos** (captain Niobe). |
 
 ---
 
@@ -89,7 +88,7 @@ One master, five core specialists, one opt-in sixth. **Roster discipline (from h
 These are not rules. They are who the system *is*. Every routing call, every pushback, every choice comes from these. In Spanish, non-negotiable.
 
 1. **Conocimiento total del workspace.** Dominio del sistema Matrix entero y de todos los proyectos conocidos.
-2. **Dominio total de reglas, skills y workflows.** Conocer cada herramienta y proceso disponible.
+2. **Dominio total de reglas, skills y procesos.** Conocer cada herramienta y proceso disponible.
 3. **Si no es real, no cuenta.** Nada de progreso falso. Una victoria teórica no es victoria. (Verificación E2E obligatoria.)
 4. **Empezá simple, ganate la complejidad.** Lo más chico que funcione. La complejidad se justifica bajo restricciones reales.
 5. **Interpretación de requerimientos complejos.** Traducir necesidades complejas en acciones ejecutables.
@@ -107,6 +106,7 @@ These are not rules. They are who the system *is*. Every routing call, every pus
 2. **Activation runs the `<activation>` block first**, regardless of how the host CLI invoked the agent.
 3. **Capabilities, not tools.** An agent declares `capabilities: [read, edit, search, code-nav, ...]`. The adapter binds each to a real tool.
 4. **One master, the rest are capabilities.** Neo is the face. The specialists are domains the master routes to.
+5. **Read-only specialists can produce artifacts.** When a specialist without `write`/`edit` delivers an artifact in its response, Neo persists it verbatim to the path declared in that specialist's `<key-paths>`.
 
 ### Agent file structure (canonical)
 
@@ -171,6 +171,7 @@ brain/state/
   - `.context.yaml` keeps the single `primary` (default) project. It is used only when a session does not resolve a project through `--project`, `$MATRIX_PROJECT`, or a `_brain` symlink in the current directory. It is no longer exclusive: several projects may be bound at the same time.
 - **Session resolution.** A session binds to one project at a time via `--project <name>` (or the `_brain` symlink in cwd / `$MATRIX_PROJECT`). If none of those resolve, the session falls back to the `primary` recorded in `.context.yaml`.
 - **Root resolution (robust).** Scripts resolve `MATRIX_ROOT` by: (1) following a `_brain` symlink up one level if present; else (2) walking up from the script location until `brain/` + `AGENTS.md` are found. Works from any subdirectory or active project.
+- **Scope resolution (innermost-root-wins).** When `bin/matrix` (or an agent) needs to know "which project is this directory working on?", it walks up from cwd. The first directory that is either the Matrix root or a project root wins. This single rule handles all real topologies without special cases: the Matrix repo living inside a bound project (`emi ⊃ matrix`), a bound project living inside the Matrix repo (`clients/<name>`, type `remote`), and a bound project inside another bound project (`emi ⊃ deseo`).
 - **Ledger (Link).** Append-only events: `session:start`, `route`, `decision`, `handoff`, `phase:close`. Both the core and any federated ship read and write it. Shared state without coupling.
 - **Never committed.** Everything under `brain/state/` and `brain/output/` is gitignored — it is per-machine, changes every session, and would otherwise turn every checkpoint into a noisy commit. Work *deliverables* for a bound project belong in that project's own `matrix-output/` (see §1), not here.
 
@@ -200,24 +201,13 @@ Enforcement lives in `hooks/` as **python/bash with a JSON in/out contract**, ca
 
 ---
 
-## 10. Workflows (composable programs)
+## 10. Federation (the fleet)
 
-Thin-pointer pattern: the body lives in `brain/workflows/<name>.md` (agnostic); each adapter exposes it as the host CLI's native command.
-
-`spec → develop → test → eval`, each composable, plus a `--headless` mode that drains a plan without prompts (guarded by **Commander Lock**).
+A subsystem is a **ship**: its own master, roster, and `AGENTS.md` under `brain/subsystems/<ship>/`. Ships coordinate only through the shared **Link** ledger. The canonical checklist, protocol, and nesting rules live in `brain/subsystems/FEDERATION.md`.
 
 ---
 
-## 11. Federation (the fleet)
-
-A subsystem is a **ship**: its own master, its own roster, its own `AGENTS.md`, under `brain/subsystems/<ship>/`. Ships coordinate only through the shared **Link** ledger — never by reaching into each other's state.
-
-- **Nebuchadnezzar** — the core vessel (this system).
-- **Logos** — example deep-research ship (captain **Niobe**), for evidence-graded investigation. Lazy-loaded; only spun up when invoked.
-
----
-
-## 12. CLI commands (`bin/matrix`)
+## 11. CLI commands (`bin/matrix`)
 
 ```text
 list                      List all registered projects
@@ -233,13 +223,15 @@ checkpoint "<note>"       Write a timestamped checkpoint (+ Link entry)
 activity [n]              Show last n Link ledger events (default 20)
 build --target=<cli>      Trainman: generate native artifacts for a CLI
 install --target=<cli>    Trainman: deploy generated artifacts into the CLI's discovery path
+link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event
+ship list | ship validate [<name>|--all]         List ships or validate a ship manifest
 hooks <name> [json]       Run a Seraph hook by name (pre_activation_check…)
 help                      Show usage
 ```
 
 ---
 
-## 13. Session hygiene
+## 12. Session hygiene
 
 **Every session must:** read this contract; know the registry; resolve current context; read recent checkpoints + lessons; respect agent boundaries; never log secrets; checkpoint significant progress; verify reality before "done".
 
@@ -247,7 +239,7 @@ help                      Show usage
 
 ---
 
-## 14. What Matrix is not
+## 13. What Matrix is not
 
 - Not a database. State is files.
 - Not a web app. The CLI may emit static, self-contained, read-only HTML (a generated document). A UI that writes state or needs a server is not allowed.

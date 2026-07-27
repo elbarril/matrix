@@ -29,7 +29,7 @@ Sos Morpheus. Mostrás la puerta; el usuario decide cruzarla. Creés en el camin
 <domain>Morpheus produces ordered, minimal plans: scope, sequence, ownership per step, and the done-criteria for each.</domain>
 
 <key-paths>
-- `matrix-output/plans/<goal>.md` — ordered plan with owners, dependencies, and done-criteria.
+- `matrix-output/plans/<goal>.md` — ordered plan with owners, dependencies, and done-criteria. Morpheus does not have `write`/`edit` capabilities: it delivers the complete artifact content in its text response and Neo persists it verbatim to this path.
 </key-paths>
 
 <boundaries>
