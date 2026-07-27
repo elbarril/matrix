@@ -3,7 +3,7 @@
 # Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
 # Manages registry, projects, the warm-project set, checkpoints, the Link
 # ledger, Seraph hooks, and the Trainman build. It NEVER invokes agents.
-# Version 2.1.0
+# Version 2.2.0
 
 set -euo pipefail
 
@@ -42,6 +42,9 @@ ACTIVITY_LOG="$STATE_DIR/activity.log"
 CHECKPOINTS_FILE="$STATE_DIR/checkpoints.jsonl"
 HOOKS_DIR="$MATRIX_DIR/hooks"
 
+# The subject under which Matrix's own work is recorded (Matrix workspace mode).
+MATRIX_WORKSPACE_PROJECT="matrix"
+
 to_abs_path() {
     local p="${1:-}"
     p="${p/#\~/$HOME}"
@@ -51,6 +54,20 @@ to_abs_path() {
     else
         echo "${MATRIX_DIR}/${p#./}" | sed 's#//*#/#g'
     fi
+}
+
+epoch36() {
+    # Convert the current Unix timestamp to a short base-36 slug.
+    python3 - "$1" << 'PY'
+import sys, time, string
+n = int(sys.argv[1]) if sys.argv[1] else int(time.time())
+chars = string.digits + string.ascii_lowercase
+out = ""
+while n:
+    n, r = divmod(n, 36)
+    out = chars[r] + out
+print(out or "0")
+PY
 }
 
 log_info()    { echo -e "${BLUE}[MATRIX]${NC} $1"; }
@@ -105,46 +122,112 @@ EOF
 
 # --- Link ledger ------------------------------------------------------------
 # Append an event: link_append <event> <subject> <detail...>
+# The ledger is one event per line (readers like show_activity/link --validate
+# parse it that way), so any embedded CR/LF is flattened to a space before
+# writing. Found by Smith during the workflows-lifecycle-fix gate: a caller
+# that ever passed a multi-line detail directly with printf (pre-dating
+# link_append) is what produced the corrupted multi-line block in
+# activity.log lines 270-283. This is the one place that must never regress.
 link_append() {
     init_state
     local event="$1"; shift
     local subject="${1:-matrix}"; shift || true
     local detail="$*"
+    event="$(printf '%s' "$event" | tr '\r\n' '  ')"
+    subject="$(printf '%s' "$subject" | tr '\r\n' '  ')"
+    detail="$(printf '%s' "$detail" | tr '\r\n' '  ')"
     printf '%s | %-12s | %-16s | %s\n' "$(date -Iseconds)" "$event" "$subject" "$detail" >> "$ACTIVITY_LOG"
 }
 
-read_registry() { init_registry; jq -r '.projects[] | "\(.name):\(.path):\(.type)"' "$REGISTRY_FILE" 2>/dev/null || echo ""; }
+current_session_id() {
+    MATRIX_ROOT="$MATRIX_DIR" python3 - "$HOOKS_DIR" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import _common as c
+sid = c.current_session_id()
+print(sid if sid is not None else "")
+PY
+}
+
+read_registry() { init_registry; jq -r '.projects[] | "\(.name)\t\(.path)\t\(.type)"' "$REGISTRY_FILE" 2>/dev/null || echo ""; }
 read_context()  { init_context; sed -n 's/^active_project: //p' "$CONTEXT_FILE" | head -1 || echo "null"; }
 
-# resolve_scope_project: which project's checkpoints/Link events "status" and
-# "activity" should default to. The cwd's _brain-bound project wins (mirrors
-# the resolution order in AGENTS.md §7); falls back to the .context.yaml
-# primary. Prints nothing if neither resolves (Matrix workspace mode or an
-# unbound directory) — callers then fall back to the unfiltered/global view.
-# Note: bin/matrix has no notion of $MATRIX_PROJECT/--project — those are
-# resolved by the agent layer, not this CLI.
-resolve_scope_project() {
-    local cwd; cwd="$PWD"
-    local dir="$cwd" found=""
-    while [[ "$dir" != "/" ]]; do
-        if [[ -e "$dir/_brain" || -L "$dir/_brain" ]]; then found="$dir"; break; fi
+# --- Single source of truth: mode + subject resolution ----------------------
+# resolve_scope: answers "where am I?" exactly once, for every call-site.
+# Prints: <mode>\t<project>\t<detail>
+#   workspace           matrix   <matrix root>   cwd is the Matrix repo itself
+#   bound               <name>   <project root>  cwd is inside a registered, bound project
+#   bound-unregistered  (empty)  <project root>  bound _brain, not in the registry
+#   broken              (empty)  <dir>           _brain present but not a valid binding
+#   none                (empty)  (empty)         no root found walking up
+#
+# THE RULE: innermost root wins. Walking up from cwd, the first directory that
+# is either the Matrix root or a project root decides. This is what makes all
+# three real topologies work with one rule and no special cases:
+#   (a) the Matrix repo living inside a bound project  (emi ⊃ matrix)
+#   (b) a bound project living inside the Matrix repo  (clients/<name>, type:remote)
+#   (c) a bound project inside another bound project   (pas ⊃ sandisk)
+# The pre-fix code asked (b)-style questions at every level and the Matrix-root
+# question at none of them, so a bound *ancestor* always beat the Matrix root.
+resolve_scope() {
+    local matrix_real; matrix_real="$(readlink -f "$MATRIX_DIR" 2>/dev/null || echo "$MATRIX_DIR")"
+    local dir;         dir="$(readlink -f "$PWD" 2>/dev/null || echo "$PWD")"
+    while :; do
+        if [[ "$dir" == "$matrix_real" ]]; then
+            printf '%s\t%s\t%s\n' "workspace" "$MATRIX_WORKSPACE_PROJECT" "$matrix_real"
+            return 0
+        fi
+        if [[ -L "$dir/_brain" || -e "$dir/_brain" ]]; then
+            if path_is_bound "$dir"; then
+                local n; n="$(registry_name_for_path "$dir" || true)"
+                if [[ -n "$n" ]]; then printf '%s\t%s\t%s\n' "bound" "$n" "$dir"
+                else                   printf '%s\t\t%s\n'   "bound-unregistered" "$dir"; fi
+            else
+                printf '%s\t\t%s\n' "broken" "$dir"
+            fi
+            return 0
+        fi
+        [[ "$dir" == "/" ]] && break
         dir="$(dirname "$dir")"
     done
-    if [[ -n "$found" ]]; then
-        local matrix_real found_real
-        matrix_real="$(readlink -f "$MATRIX_DIR" 2>/dev/null || true)"
-        found_real="$(readlink -f "$found" 2>/dev/null || true)"
-        if [[ "$found_real" != "$matrix_real" ]] && path_is_bound "$found" 2>/dev/null; then
-            local reg; reg="$(read_registry)"
-            while IFS=: read -r n p _; do
-                [[ -z "$n" ]] && continue
-                local rp; rp="$(readlink -f "$p" 2>/dev/null || true)"
-                if [[ "$rp" == "$found_real" ]]; then echo "$n"; return 0; fi
-            done <<< "$reg"
-        fi
-    fi
-    local primary; primary="$(read_context)"
-    [[ "$primary" != "null" && -n "$primary" ]] && echo "$primary"
+    printf '%s\t\t\n' "none"
+    return 0
+}
+
+# resolve_scope_project: the *filter subject* for checkpoints/ledger views.
+# Same fallback chain as before the fix — only the workspace case is new.
+# Always returns 0 (callers use it inside `&&` lists under `set -e`).
+resolve_scope_project() {
+    local line mode project
+    IFS=$'\n' read -r line < <(resolve_scope)
+    mode="$(printf '%s\n' "$line" | cut -f1)"
+    project="$(printf '%s\n' "$line" | cut -f2)"
+    case "$mode" in
+        workspace) printf '%s\n' "$MATRIX_WORKSPACE_PROJECT" ;;
+        bound)     printf '%s\n' "$project" ;;
+        *)         local primary; primary="$(read_context)"
+                   [[ "$primary" != "null" && -n "$primary" ]] && printf '%s\n' "$primary" ;;
+    esac
+    return 0
+}
+
+# registry_name_for_path: the registry lookup that show_status and
+# resolve_scope_project each open-coded before. TAB-delimited so remote URLs
+# containing ':' remain intact.
+registry_name_for_path() {
+    local target; target="$(readlink -f "$1" 2>/dev/null || true)"
+    [[ -n "$target" ]] || return 1
+    init_registry
+    local n p
+    while IFS=$'\t' read -r n p; do
+        [[ -n "$n" ]] || continue
+        [[ "$(readlink -f "$(to_abs_path "$p")" 2>/dev/null || true)" == "$target" ]] && { printf '%s\n' "$n"; return 0; }
+    done < <(jq -r '.projects[] | select(.type=="local") | "\(.name)\t\(.path)"' "$REGISTRY_FILE" 2>/dev/null)
+    while IFS=$'\t' read -r n; do
+        [[ -n "$n" ]] || continue
+        [[ "$(readlink -f "$CLIENTS_DIR/$n" 2>/dev/null || true)" == "$target" ]] && { printf '%s\n' "$n"; return 0; }
+    done < <(jq -r '.projects[] | select(.type=="remote") | .name' "$REGISTRY_FILE" 2>/dev/null)
+    return 1
 }
 
 update_context() {
@@ -216,6 +299,26 @@ add_project() {
        "$REGISTRY_FILE" > "$tmp" && mv "$tmp" "$REGISTRY_FILE"
     link_append "project:add" "$name" "$path_or_url"
     log_success "Added project '$name'"
+}
+
+remove_project() {
+    local name="${1:-}"
+    [[ $# -eq 1 && -n "$name" ]] || { log_error "Usage: matrix remove <name>"; return 1; }
+    init_registry
+    jq -e --arg n "$name" '.projects[] | select(.name==$n)' "$REGISTRY_FILE" >/dev/null 2>&1 \
+        || { log_error "Project '$name' not found"; return 1; }
+    if is_bound "$name"; then
+        log_error "Project '$name' is bound — run 'matrix deselect $name' before removing it"
+        return 1
+    fi
+    if grep -qxF "  - name: $name" "$WORKSPACE_FILE" 2>/dev/null; then
+        log_error "Project '$name' is warm — run 'matrix unwork $name' before removing it"
+        return 1
+    fi
+    local tmp; tmp="$(mktemp)"
+    jq --arg n "$name" '.projects |= map(select(.name != $n))' "$REGISTRY_FILE" > "$tmp" && mv "$tmp" "$REGISTRY_FILE"
+    link_append "registry:remove" "$name" ""
+    log_success "Removed project '$name'"
 }
 
 list_projects() {
@@ -391,6 +494,9 @@ select_project() {
     # one — a failed select must never leave the session without an active
     # project it already had.
     [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
+    local pp_real; pp_real="$(readlink -f "$pp" 2>/dev/null || true)"
+    local matrix_real; matrix_real="$(readlink -f "$MATRIX_DIR" 2>/dev/null || true)"
+    [[ "$pp_real" == "$matrix_real" ]] && { log_error "Cannot bind the Matrix root itself as a project"; return 1; }
     local link="$pp/_brain"
     if [[ -L "$link" ]]; then
         local current; current="$(readlink -f "$link" 2>/dev/null || true)"
@@ -529,41 +635,28 @@ show_bindings() {
 
 show_status() {
     log_info "Matrix Status"; echo
-    local cwd; cwd="$PWD"
-    local dir="$cwd" found=""
-    while [[ "$dir" != "/" ]]; do
-        if [[ -e "$dir/_brain" || -L "$dir/_brain" ]]; then
-            found="$dir"
-            break
-        fi
-        dir="$(dirname "$dir")"
-    done
-    local cwd_real; cwd_real="$(readlink -f "$cwd" 2>/dev/null || true)"
-    local matrix_real; matrix_real="$(readlink -f "$MATRIX_DIR" 2>/dev/null || true)"
-    if [[ -n "$found" ]]; then
-        if [[ "$(readlink -f "$found" 2>/dev/null || true)" == "$matrix_real" ]]; then
+    local line mode project detail
+    IFS=$'\n' read -r line < <(resolve_scope)
+    mode="$(printf '%s\n' "$line" | cut -f1)"
+    project="$(printf '%s\n' "$line" | cut -f2)"
+    detail="$(printf '%s\n' "$line" | cut -f3)"
+    case "$mode" in
+        workspace)
             echo "Current directory: Matrix workspace mode"
-        elif path_is_bound "$found"; then
-            local found_name=""
-            local reg; reg="$(read_registry)"
-            while IFS=: read -r n p _; do
-                [[ -z "$n" ]] && continue
-                local rp; rp="$(readlink -f "$p" 2>/dev/null || true)"
-                [[ "$rp" == "$(readlink -f "$found" 2>/dev/null || true)" ]] && { found_name="$n"; break; }
-            done <<< "$reg"
-            if [[ -n "$found_name" ]]; then
-                echo "Current directory: bound to $found_name"
-            else
-                echo "Current directory: bound (project not in registry)"
-            fi
-        else
-            echo "Current directory: not bound (broken _brain link at $found)"
-        fi
-    elif [[ "$cwd_real" == "$matrix_real" || "$cwd_real" == "$matrix_real"/* ]]; then
-        echo "Current directory: Matrix workspace mode"
-    else
-        echo "Current directory: not bound"
-    fi
+            ;;
+        bound)
+            echo "Current directory: bound to $project"
+            ;;
+        bound-unregistered)
+            echo "Current directory: bound (project not in registry)"
+            ;;
+        broken)
+            echo "Current directory: not bound (broken _brain link at $detail)"
+            ;;
+        none|*)
+            echo "Current directory: not bound"
+            ;;
+    esac
     echo
     local active; active="$(read_context)"
     if [[ "$active" != "null" && -n "$active" ]]; then
@@ -576,7 +669,7 @@ show_status() {
     fi
     echo
     local bound_count=0 bound_names=""
-    while IFS=: read -r n _ _; do
+    while IFS=$'\t' read -r n _ _; do
         [[ -z "$n" ]] && continue
         if is_bound "$n"; then
             bound_count=$((bound_count+1))
@@ -595,17 +688,22 @@ show_status() {
     # else's haystack (see lessons.md: cross-project sessions were pushing a
     # project's own recent checkpoint out of an unfiltered last-3 window).
     # `matrix status --all` keeps the old unfiltered, cross-project view.
-    local show_all="${1:-}" scope_project=""
+    local show_all="${1:-}" scope_project="" scope_label=""
     [[ "$show_all" != "--all" ]] && scope_project="$(resolve_scope_project)"
+    if [[ "$mode" == "workspace" ]]; then
+        scope_label="Matrix workspace mode"
+    else
+        scope_label="project: $scope_project"
+    fi
     if [[ -n "$scope_project" ]]; then
         if [[ -s "$CHECKPOINTS_FILE" ]]; then
-            echo "Recent checkpoints (project: $scope_project):"
+            echo "Recent checkpoints ($scope_label):"
             jq -c --arg p "$scope_project" 'select(.project == $p)' "$CHECKPOINTS_FILE" 2>/dev/null \
                 | tail -n 5 | jq -r '"  " + .timestamp + " — " + .note' 2>/dev/null || true
         fi
         echo
         if [[ -s "$ACTIVITY_LOG" ]]; then
-            echo "Recent Link events (project: $scope_project):"
+            echo "Recent Link events ($scope_label):"
             awk -F' *\\| *' -v p="$scope_project" '{if ($3==p) print}' "$ACTIVITY_LOG" | tail -n 5 | sed 's/^/  /'
         fi
         echo
@@ -629,7 +727,7 @@ write_checkpoint() {
     [[ -z "$note" ]] && { log_error "Usage: matrix checkpoint \"<note>\""; return 1; }
     init_state
     local ts; ts="$(date -Iseconds)"
-    local active; active="$(read_context)"
+    local active; active="$(resolve_scope_project)"; active="${active:-null}"
     jq -n -c --arg ts "$ts" --arg user "Emiliano" --arg proj "$active" --arg note "$note" \
         '{timestamp:$ts,user:$user,project:$proj,note:$note,context:{active_agents:[],current_focus:"",blockers:[],next_actions:[]}}' \
         >> "$CHECKPOINTS_FILE"
@@ -644,7 +742,7 @@ write_checkpoint() {
 # of cwd/primary (e.g. to check on a project you aren't currently bound to).
 show_activity() {
     init_state
-    local n=20 show_all=false proj=""
+    local n=20 show_all=false proj="" mode=""
     for arg in "$@"; do
         case "$arg" in
             --all) show_all=true ;;
@@ -652,9 +750,20 @@ show_activity() {
             *[0-9]*) [[ "$arg" =~ ^[0-9]+$ ]] && n="$arg" ;;
         esac
     done
-    [[ -z "$proj" && "$show_all" != true ]] && proj="$(resolve_scope_project)"
+    if [[ -z "$proj" && "$show_all" != true ]]; then
+        local line raw_proj
+        IFS=$'\n' read -r line < <(resolve_scope)
+        mode="$(printf '%s\n' "$line" | cut -f1)"
+        raw_proj="$(printf '%s\n' "$line" | cut -f2)"
+        proj="${raw_proj:-$(read_context)}"
+        [[ "$proj" == "null" ]] && proj=""
+    fi
     if [[ -n "$proj" && "$show_all" != true ]]; then
-        log_info "Link ledger (last $n, project: $proj):"; echo
+        if [[ "$mode" == "workspace" ]]; then
+            log_info "Link ledger (last $n, Matrix workspace mode):"; echo
+        else
+            log_info "Link ledger (last $n, project: $proj):"; echo
+        fi
         awk -F' *\\| *' -v p="$proj" '{if ($3==p) print}' "$ACTIVITY_LOG" | tail -n "$n" | sed 's/^/  /'
     else
         log_info "Link ledger (last $n, all projects):"; echo
@@ -668,6 +777,91 @@ run_hook() {
     local hook="$HOOKS_DIR/$name.py"
     [[ -f "$hook" ]] || { log_error "Hook '$name' not found at $hook"; return 1; }
     MATRIX_ROOT="$MATRIX_DIR" python3 "$hook" "$@"
+}
+
+# --- Phase close (Seraph verdict → Link ledger) -----------------------------
+# phase_close <json>
+# Runs validate_phase_close, appends the verdict to the Link ledger (PASS *and*
+# BLOCK), echoes the hook's JSON, and exits with the hook's exit code.
+phase_close() {
+    local payload="${1:-}"
+    [[ -z "$payload" ]] && { log_error "Usage: matrix phase close '<json>'"; return 1; }
+    printf '%s' "$payload" | jq empty 2>/dev/null || {
+        log_error "Invalid JSON payload. Usage: matrix phase close '<json>'"; return 1; }
+
+    local out="" rc=0
+    out="$(run_hook validate_phase_close "$payload")" || rc=$?
+
+    local verdict phase evidence errs detail subject
+    verdict="$(printf '%s' "$out"     | jq -r '.verdict // "UNKNOWN"' 2>/dev/null || echo UNKNOWN)"
+    phase="$(printf '%s' "$out"       | jq -r '.phase   // "unknown"' 2>/dev/null || echo unknown)"
+    errs="$(printf '%s' "$out"        | jq -r '(.errors // []) | join("; ")' 2>/dev/null | cut -c1-160 || true)"
+    evidence="$(printf '%s' "$payload" | jq -r '(.evidence // "") | gsub("[\\r\\n|]+";" ")' 2>/dev/null | cut -c1-160 || true)"
+
+    if [[ "$verdict" == "PASS" ]]; then detail="evidence=${evidence}"
+    else                                detail="errors=${errs} | evidence=${evidence}"; fi
+
+    subject="$(resolve_scope_project || true)"
+    subject="${subject:-matrix}"
+    link_append "phase:close" "$subject" "$verdict | phase=${phase} | ${detail}"
+
+    local sid; sid="$(current_session_id || true)"
+    if [[ -n "$sid" ]]; then
+        local audit_event_name
+        if [[ "$verdict" == "PASS" ]]; then
+            audit_event_name="phase_close"
+        else
+            audit_event_name="phase_close_blocked"
+        fi
+        run_hook audit_event "{\"event\":\"$audit_event_name\",\"session_id\":\"$sid\"}" >/dev/null || true
+    fi
+
+    printf '%s\n' "$out"
+    return $rc
+}
+
+phase_cmd() {
+    case "${1:-}" in
+        close) shift; phase_close "${1:-}" ;;
+        *)     log_error "Usage: matrix phase close '<json>'"; return 1 ;;
+    esac
+}
+
+# --- Session close (Seraph audit → Link ledger) -----------------------------
+# session_close [json]
+# Runs the session_close hook, appends a session:close entry to the Link ledger,
+# echoes the hook's JSON, and exits with the hook's exit code.
+session_close() {
+    local payload="${1:-}"
+    if [[ -n "$payload" ]]; then
+        printf '%s' "$payload" | jq empty 2>/dev/null || {
+            log_error "Invalid JSON payload. Usage: matrix session close '[<json>]'"; return 1; }
+    fi
+
+    local out="" rc=0
+    out="$(run_hook session_close "$payload")" || rc=$?
+
+    local sid ok phase_close_missing detail subject
+    sid="$(printf '%s' "$out"     | jq -r '.session_id // ""' 2>/dev/null || true)"
+    ok="$(printf '%s' "$out"      | jq -r '.ok // false' 2>/dev/null || echo false)"
+    phase_close_missing="$(printf '%s' "$out" | jq -r '.phase_close_missing // false' 2>/dev/null || echo false)"
+
+    subject="$sid"
+    [[ -z "$subject" || "$subject" == "null" ]] && subject="matrix"
+    detail="ok=${ok}"
+    [[ "$phase_close_missing" == "true" ]] && detail="${detail} | missing=phase_close"
+
+    link_append "session:close" "$subject" "$detail"
+
+    printf '%s\n' "$out"
+    return $rc
+}
+
+session_cmd() {
+    case "${1:-}" in
+        close) shift; session_close "${1:-}" ;;
+        *)     log_error "Usage: matrix session close '[<json>]'"; return 1 ;;
+    esac
 }
 
 # --- Trainman build ---------------------------------------------------------
@@ -758,6 +952,88 @@ session_report() {
     fi
 }
 
+link_cmd() {
+    if [[ "${1:-}" == "--validate" ]]; then
+        init_state
+        local invalid=0
+        while IFS= read -r line; do
+            if [[ ! "$line" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}[[:space:]]\|[[:space:]][^[:space:]\|]+[[:space:]]*\|[[:space:]][^[:space:]\|]+[[:space:]]*\| ]]; then
+                printf '%s\n' "$line"
+                invalid=1
+            fi
+        done < "$ACTIVITY_LOG"
+        return "$invalid"
+    fi
+
+    local event="" subject="" ref=""
+    if [[ $# -lt 2 ]]; then
+        log_error "Usage: matrix link <event> <subject> [--ref=<id>] [detail...]"
+        return 1
+    fi
+    event="$1"; subject="$2"; shift 2
+
+    local details=()
+    for arg in "$@"; do
+        case "$arg" in
+            --ref=*) ref="${arg#*=}" ;;
+            --ref)   log_error "--ref requires a value"; return 1 ;;
+            --*)     log_error "Unknown flag '$arg'"; return 1 ;;
+            *)       details+=("$arg") ;;
+        esac
+    done
+
+    if [[ ! "$event" =~ ^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$ ]]; then
+        log_error "Invalid event '$event'. Must match <namespace>:<name> (lowercase, hyphenated)."
+        return 1
+    fi
+
+    local ns="${event%%:*}"
+    case "$ns" in
+        project|build|install|harden|checkpoint|phase)
+            log_error "Event namespace '$ns' is reserved for Layer 1 infrastructure."
+            return 1
+            ;;
+    esac
+
+    if [[ -z "$ref" ]]; then
+        local slug; slug="${event//:/-}"
+        ref="${slug}-$(epoch36 "")"
+    fi
+
+    local detail="[${ref}] ${details[*]}"
+    link_append "$event" "$subject" "$detail"
+    echo "$ref"
+}
+
+ship_cmd() {
+    local subcmd="${1:-}" name="${2:-}"
+    case "$subcmd" in
+        list)
+            local ship_dir
+            for ship_dir in "$BRAIN_DIR/subsystems"/*/; do
+                [[ -f "$ship_dir/AGENTS.md" ]] || continue
+                local ship_name captain crew
+                ship_name="$(sed -n 's/^ship: *//p' "$ship_dir/AGENTS.md" | head -1)"
+                [[ -z "$ship_name" ]] && continue
+                captain="$(sed -n 's/^captain: *//p' "$ship_dir/AGENTS.md" | head -1)"
+                crew="$(sed -n 's/^crew: *//p' "$ship_dir/AGENTS.md" | head -1)"
+                echo "  $ship_name — captain: $captain | crew: $crew"
+            done
+            ;;
+        validate)
+            if [[ "$name" == "--all" || -z "$name" ]]; then
+                run_hook validate_ship '{"ship":"*"}'
+            else
+                run_hook validate_ship "{\"ship\":\"$name\"}"
+            fi
+            ;;
+        *)
+            log_error "Usage: matrix ship list | matrix ship validate [<name>|--all]"
+            return 1
+            ;;
+    esac
+}
+
 show_help() {
     cat << 'EOF'
 Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
@@ -767,6 +1043,7 @@ Usage: matrix <command> [args]
 Projects:
   list                    List all registered projects
   add <name> [path] [--replace]  Register a project (path optional → current dir; --replace updates existing)
+  remove <name>           Remove an unbound, non-warm project from the registry
   select <name>           Set primary active project + create _brain symlink
   deselect [name]         Remove binding for a project (defaults to primary)
   bindings                Show bound status for all registered projects
@@ -783,14 +1060,22 @@ State & telemetry:
   activity [n] [--all] [--project=<name>]  Show last n Link ledger events, scoped to
                           the resolved project by default (default n=20)
 
+Link ledger & fleet:
+  link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event and echo the ref
+  ship list                                         List discovered federated ships
+  ship validate [<name>|--all]                      Validate a ship manifest (or all ships)
+
 Retrospectivas (Devin-specific):
   session-find <cwd> [YYYY-MM-DD]  Busca sesiones pasadas (consulta read-only)
   session-dump <id> [--from HH:MM] [--to HH:MM] [--full]  Reconstruye una sesión pasada (read-only)
   session-cost [cwd] [YYYY-MM-DD]  Muestra duración, ACU y crédito por sesión (read-only)
   session-subagents <id>  Muestra duración de invocaciones de subagentes (read-only)
   session-report [cwd] [YYYY-MM-DD] [--out PATH] [--limit N]  Genera reporte HTML estático
+  session close '[<json>]'  Run the session_close hook and persist a session:close entry to the Link ledger
 
 Enforcement & adapters:
+  phase close '<json>'    Run the validate_phase_close gate and persist the verdict
+                          (PASS or BLOCK) to the Link ledger; exits non-zero on BLOCK
   hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close,
                           post_run_audit, the_source)
   build --target=<cli>    Trainman: generate native artifacts for a CLI (devin)
@@ -815,6 +1100,7 @@ main() {
             case "${1:-}" in
                 list)       list_projects ;;
                 add)        shift; add_project "$@" ;;
+                remove)     shift; remove_project "$@" ;;
                 select)     select_project "${2:-}" ;;
                 deselect)   deselect_project "${2:-}" ;;
                 work)       work_project "${2:-}" ;;
@@ -824,6 +1110,10 @@ main() {
                 status)     shift; show_status "$@" ;;
                 checkpoint) write_checkpoint "${2:-}" ;;
                 activity)   shift; show_activity "$@" ;;
+                link)       shift; link_cmd "$@" ;;
+                ship)       shift; ship_cmd "${1:-}" "${2:-}" ;;
+                phase)      shift; phase_cmd "$@" ;;
+                session)    shift; session_cmd "$@" ;;
                 hooks)      shift; run_hook "$@" ;;
                 build)      shift; build_target "$@" ;;
                 install)    shift; install_target "$@" ;;
