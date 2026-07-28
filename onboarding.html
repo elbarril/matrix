@@ -828,14 +828,29 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <!-- ========== 11 ========== -->
 <div class="section" id="hardline">
 <h2>11. AFK / The Hardline (opt-in)</h2>
-<p>Modulo desacoplado que reacciona a eventos externos (Telegram, webhooks, file drops) y despierta a Matrix. Patron <code>Monitor(persistent)</code> sobre <code>tail -F</code>: cero tokens en idle.</p>
-<pre><code># Iniciar el monitor (foreground; correr bajo tmux para AFK)
+<p>Modulo desacoplado para eventos externos. Con Telegram la ruta real es: mensaje de Telegram → <code>telegram-bridge.py</code> → <code>modules/hardline/inbox.log</code> → <code>hardline-monitor.sh</code> → <code>bin/matrix hardline dispatch</code> → queue, single-flight, adapter, ack y trail Link. El monitor bloquea en <code>tail -F</code>: cero tokens mientras espera. El bridge usa solo long polling saliente de <code>getUpdates</code>; no abre puertos ni usa webhook.</p>
+<pre><code># Proceso 1: iniciar el monitor (foreground; correr bajo tmux o process manager para AFK)
 modules/hardline/hardline-monitor.sh
 
-# Alimentar un evento desde cualquier puente de canal:
-echo 'develop --headless mck' >> modules/hardline/inbox.log
+# Proceso 2: iniciar el bridge de Telegram, con el token ya provisionado en su entorno
+modules/hardline/telegram-bridge.py
+
+# Formato del mensaje de Telegram, una sola línea:
+# &lt;proyecto&gt; &lt;tarea&gt;
+# Ejemplo: mck Actualizar el README con una nota de una línea sobre Hardline
+# El bridge escribe: mck|Actualizar el README con una nota de una línea sobre Hardline
 </code></pre>
-<p>Los bridges de canal (bot de Telegram, receptor webhook) son deployment-specific y viven fuera del core.</p>
+<h3>Setup del bridge de Telegram</h3>
+<ol>
+  <li>En Telegram, abrir <strong>@BotFather</strong>, enviar <code>/newbot</code>, completar los prompts y copiar el token. Es una contraseña: nunca va como argumento CLI ni en código, <code>inbox.log</code>, queue, checkpoints o Link.</li>
+  <li>Proveer el token exclusivamente al entorno del proceso bridge: <code>export MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN='pegar-token-aqui'</code>. Para un servicio AFK, usar keychain/secret store del SO o un environment file con permisos restringidos que lea el servicio. Para rotarlo, reemplazar ese secreto externo y reiniciar el bridge; no se cambia código.</li>
+  <li>Se recomienda restringir el bot al chat personal. Mandar primero un mensaje cualquiera al bot y, con el token en el entorno, ejecutar <code>modules/hardline/telegram-bridge.py --show-chat-ids</code>. Imprime los chat IDs numéricos pendientes sin escribir el inbox y guarda el cursor, por lo que esos updates mostrados no se despachan después. Elegir el propio y exportar <code>MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID='tu-chat-id-numerico'</code>. Esta variable es opcional para permitir un bot multi-chat deliberado; si está definida, cualquier otro chat se ignora. Alternativamente se puede consultar el ID con un bot de lookup como @userinfobot, pero el comando del bridge lo verifica contra los updates reales del bot.</li>
+  <li>Ejecutar monitor y bridge como dos procesos persistentes separados, por ejemplo en dos panes de tmux, como arriba.</li>
+  <li>Mandar al bot exactamente <code>&lt;proyecto&gt; &lt;tarea&gt;</code> en una sola línea. El proyecto debe estar registrado y bound; debe usar solo letras, números, punto, guion bajo o guion. El bridge divide en el primer espacio y convierte a <code>&lt;proyecto&gt;|&lt;tarea&gt;</code>. Mensajes multilinea, no textuales, sin tarea o con proyecto inválido se ignoran.</li>
+</ol>
+<p>El cursor no secreto para reanudar long polling queda en <code>brain/state/hardline/telegram-offset</code>; se actualiza incluso para updates ignorados y evita replay luego de un reinicio. Borrarlo solo si se quiere reconsiderar updates aún pendientes. <code>getUpdates</code> no funciona mientras el bot tenga un webhook activo: este deployment usa long polling y no webhook.</p>
+<p>Para probar solo el parser sin token: <code>modules/hardline/telegram-bridge.py --parse-response PATH</code> lee un JSON guardado de <code>getUpdates</code>, imprime las líneas aceptadas <code>proyecto|tarea</code> y no hace red ni escribe el inbox.</p>
+<p><strong>Seguridad:</strong> el token solo se lee de <code>MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN</code> dentro del bridge; no se acepta como argumento, no se loguea ni se escribe. No mandar secretos como tarea: el monitor rechaza líneas que parecen secretos, pero no es un canal seguro de entrega de secretos. El gate existente de dispatch impide commit/push.</p>
 </div>
 
 <!-- ========== 12 ========== -->

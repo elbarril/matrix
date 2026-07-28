@@ -136,6 +136,57 @@ writes specific credential filenames into the repo or logs.
 tool. It does **not** block `grep`/`glob` or `exec` (e.g. `cat`). It is a partial
 mitigation against incidental reads, not a sandbox.
 
+## Headless / non-interactive execution (`devin -p`)
+
+Verified live against the installed binary (v3000.2.17) during Hardline/AFK Fase-0 research
+(Oracle, this session — every claim below was run, not inferred from docs). This closes the
+gap flagged by lesson-style D-f in `brain/output/plans/hardline-afk.md`: a real headless
+primitive exists; it was simply never written down here.
+
+- **The primitive:** `devin -p "<prompt>" [--permission-mode dangerous] [-r <session_id>]`.
+  `-p`/`--print` runs a single turn non-interactively and exits — no REPL, no operator needed.
+  Confirmed with a real end-to-end unattended run: `devin --permission-mode dangerous -p
+  "create a file ... via shell"` actually created the file, zero human in the loop.
+- **Exit code is not a success signal.** `devin -p` returns exit `0` whenever it completes a
+  turn and prints a final response — including when the requested action was *refused* by
+  permissions. Any wrapper must parse the printed text for refusal language (e.g. "rejected by
+  the current permission mode") vs. success language; `$?` alone cannot distinguish them.
+- **Unapproved tool calls auto-deny, they do not hang.** In default (`auto`) permission mode,
+  a tool call requiring approval with no operator attached is auto-denied and the agent reports
+  the refusal in its final text, then exits 0. Same "auto-deny, don't hang" behavior is
+  documented for background subagents (`subagents.mdx`) — confirmed here to also hold at the
+  top-level `-p` invocation, not just in-session.
+- **`permissions.deny` survives `--permission-mode dangerous` when it is actually loaded.**
+  A user-level config containing `permissions.deny` was tested to block a real commit attempt
+  even under full `dangerous` mode. However, live Fase-4 verification found that a project-level
+  `.devin/config.json` is **not reliably picked up by `devin -p`** in this installed version. The
+  Fase-4 adapter therefore still writes the deny rules into the bound project's
+  `.devin/config.json` (the design's requested location) and additionally passes a merged copy
+  via `--config` so the rules are active at runtime. This is the real, working D5 guardrail.
+- **Sessions are real and resumable.** Every `-p` run creates a listable session, resumable
+  non-interactively via `devin -r <session_id> -p "<follow-up>"`. The `devin -p` invocation
+  itself does not print a session id; immediately after the run, `devin list --format json`
+  scoped to the project directory returns a JSON array of session objects. The `id` (or
+  `short_id`) with the greatest `last_activity_at` timestamp is the session just created, and
+  that is what the Fase-4 adapter captures and returns to Layer 1 for orphan recovery.
+- **Docs-vs-live divergence:** the local docs bundle
+  (`_versions/3000.2.17/share/devin/docs/reference/permissions.mdx` and
+  `essential-commands.mdx`) names permission modes `normal`/`accept-edits`/`bypass`/`autonomous`.
+  The live `--help` of that *same installed version* names them `auto`/`accept-edits`/`smart`/
+  `dangerous`, and documents a `smart` mode and a `--agent-config` flag not present in the local
+  bundle at all. **Treat live `devin --help` as ground truth for exact flag/value spelling**,
+  even against a version-pinned local docs bundle — the concepts match, the exact names don't
+  always.
+- **Not yet spike-tested:** `--sandbox` (OS-level isolation via bubblewrap/seccomp/Seatbelt,
+  documented in `sandbox.mdx`) and `devin cloud drs` / `/handoff` (cloud/detached execution).
+  Both are real documented primitives but weren't exercised live in this research pass — worth
+  a follow-up spike before relying on either.
+- **Unrelated to any of the above:** the phantom headless subcommand string historically referenced
+  in `brain/agents/lock.md:9`, `modules/hardline/README.md:31`, and `onboarding.html:836` is not a
+  real Devin CLI command at any version — confirmed against the full `bin/matrix` dispatch
+  table and the CLI's own changelog. It was phantom documentation debt, corrected in Fase 2 to
+  `bin/matrix hardline dispatch <project> "<line>"` (not yet implemented — Fase 3).
+
 ## Why enforcement is portable, not Devin-coupled
 
 Enforcement lives in `hooks/*.py` with a JSON in/out contract, fired by `bin/matrix hooks <name>`. The logic travels with the brain, not with Devin — so the exact same checks would run unchanged under a future CLI adapter, if one is ever built. The adapter only decides *when* to fire them.
@@ -230,3 +281,7 @@ Al re-otorgarle `edit` a Smith (rol de evaluador-con-remediación, 2026-07-27), 
 ### Lesson 27
 
 El spike de Neo en un proceso de CLI genuinamente nuevo (arrancado después del `install` de 2026-07-27) confirmó la hipótesis pendiente de la lección 26: el subagente `smith` recién spawneado reportó `read, edit, exec, grep, find_file_by_name` — `edit` estaba vivo — mientras que `keymaker` siguió reportando solo `exec, read`. Una llamada `edit` real del subagente `smith` llegó a `brain/state/hook-audit.jsonl` con `tool_name` y `tool_paths` correctos, pero el `session_id` registrado fue el de la sesión padre Neo (`pointy-goldfish`), no un id propio del subagente. Un segundo spike independiente en un proceso fresco confirmó que `write` y `mcp__chrome-browser__*` están **CONFIRMED ABSENT** para subagentes independientemente de su declaración en `allowed-tools`, mientras que `glob` sí está presente bajo el nombre `find_file_by_name`. El mecanismo más probable para la creación de un artefacto nuevo pese a `write` ausente es `exec` con redirección de shell.
+
+### Lesson 28
+
+Fase-0 (Oracle) probó `.devin/config.json` con `permissions.deny: ["Exec(git commit)","Exec(git push)"]` a nivel de proyecto y vio bloquear un commit real bajo `--permission-mode dangerous`. Fase-4 (Trinity), invocando `devin -p` sin REPL contra el mismo tipo de proyecto, encontró que esa misma regla de proyecto **no bloqueó** un commit real — pasó. El mecanismo que sí funcionó de forma reproducible (confirmado independientemente por Neo, dos corridas: una sin `--config` que comiteó, una con `--config` que bloqueó): generar un archivo de config temporal que fusiona el `~/.config/devin/config.json` real del usuario con las reglas `deny`, y pasarlo explícitamente con `--config <path>` en la invocación. La causa exacta de por qué `.devin/config.json` de proyecto no se carga de forma confiable bajo `-p` queda **sin resolver** — no se investigó a fondo el motivo (¿se resuelve el cwd distinto al pasar `-p` con `--config`? ¿hay algún orden de precedencia distinto en modo no-interactivo?), solo se confirmó el síntoma y el workaround. Ver `hardline-dispatch.sh` (`adapters/devin/`) para la implementación real.

@@ -14,6 +14,13 @@ The brain speaks in **abstract capabilities**. Adapters (the Trainman) bind each
 | `run-command` | Execute a shell command | For the reality check (E2E), builds, tests |
 | `ask-user` | Ask the user a question | Ask once; never loop on ambiguity |
 | `browser` | Render a page and capture visual evidence (screenshots, DOM state) | Only for UI/visual verification (Smith); no-op if the adapter has no binding |
+| `dispatch` | Hand a validated event to *something* that can do bound-project work unattended, and get back a handle to check on it later. | Prefer for unattended bound-project work; returns a handle for later status checks. |
+| `single-flight-acquire` | Claim exclusive execution rights for one bound project's queue lane. | Cheap local filesystem lock; acquire before dispatch. |
+| `single-flight-release` | Release exclusive execution rights for one bound project's queue lane. | Must pair with `single-flight-acquire`; release only after ack or terminal state. |
+| `ack` | Record that an event reached one of its terminal states. | Three-valued terminal-state record; fire once per event within the dedupe window. |
+| `orphan-probe` | Ask "is the thing behind this handle still alive / did it finish?" using only the handle, not fresh context. | Handle-only status check; cheaper than a fresh dispatch. |
+| `resume` | Continue the same unit of work behind a handle, rather than starting a new one. | Re-enter existing work behind a handle; avoid duplicate work when possible. |
+| `abort-signal` | The event's own declaration that it cannot proceed without a human it cannot reach — a terminal state, not an error. | Terminal state; no recovery, no retry without new human input. |
 | `docs-lookup` | Fetch current, version-pinned library/framework/API documentation | Cheaper *and* more accurate than a generic web search for this specific case (Oracle) |
 
 ## Model policy (per agent / per turn)

@@ -16,7 +16,8 @@
       "name": "mck",
       "path": "/home/emiliano/www/Portal-Templates-Group/mckinsey",
       "type": "local",
-      "added": "2026-05-20T14:49:49-03:00"
+      "added": "2026-05-20T14:49:49-03:00",
+      "bound_target": "devin"
     },
     {
       "name": "chron",

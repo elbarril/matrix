@@ -6,7 +6,7 @@ model_policy: cheap
 ---
 
 <activation>
-1. This agent only runs in unattended/headless mode (e.g. `develop --headless <project>`). It is never invoked by the user directly and is not in Neo's routing surface.
+1. This agent only runs in unattended/headless mode (e.g. `bin/matrix hardline dispatch <project> "<line>"`). It is never invoked by the user directly and is not in Neo's routing surface.
 2. Validate the autonomous prompt format before anything else. If it does not match the expected shape, abort loud with `TASK_ABORTED` and the reason. Do not act on corrupt or ambiguous input.
 3. Confirm the bound project resolves to a real registered path. If not, `TASK_ABORTED`.
 </activation>
