@@ -180,6 +180,19 @@ def required_nesting(ship, captain, crew):
 
 def resolve_model(target, model_policy_tier):
     policy = load_yaml_block(os.path.join(ROOT, "adapters", target, "adapter.yaml"), "model_policy")
+    template_name = os.environ.get("MATRIX_ADAPTER_TEMPLATE")
+    if template_name:
+        template = load_yaml_block(
+            os.path.join(ROOT, "adapters", target, "adapter.yaml"),
+            f"model_template_{template_name}",
+        )
+        if template:
+            return (
+                template.get(model_policy_tier)
+                or template.get("auto")
+                or policy.get(model_policy_tier)
+                or policy.get("auto")
+            )
     return policy.get(model_policy_tier) or policy.get("auto")
 
 
@@ -364,9 +377,14 @@ RENDERERS = {"devin": render_devin}
 
 def main():
     target = ""
+    template = ""
     for a in sys.argv[1:]:
         if a.startswith("--target="):
             target = a.split("=", 1)[1]
+        elif a.startswith("--template="):
+            template = a.split("=", 1)[1]
+    if template:
+        os.environ["MATRIX_ADAPTER_TEMPLATE"] = template
     if target not in RENDERERS:
         print(f"[trainman] unknown target '{target}'. Known: {', '.join(RENDERERS)}")
         sys.exit(1)

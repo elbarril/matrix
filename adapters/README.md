@@ -23,14 +23,33 @@ adapters/
 ## Build & install
 
 ```bash
-bin/matrix build   --target=devin   # generate artifacts (gitignored)
-bin/matrix install --target=devin   # deploy into the CLI discovery path
+bin/matrix build   --target=devin [--template=<nombre>]  # generate artifacts (gitignored)
+bin/matrix install --target=devin                          # deploy into the CLI discovery path
 ```
 
-`build` is pure (no side effects outside `generated/`). `install` is what makes
-the artifacts discoverable; it is idempotent and copies self-contained pointers.
-Re-run both after changing an agent's `name`/`description`/`model_policy`, the
-roster, or `adapters/devin/adapter.yaml`'s `model_policy` map.
+`build` accepts an optional `--template=<nombre>` flag (Layer 1) that selects
+one of the cost/quality presets declared in `adapters/devin/adapter.yaml`:
+
+| Template | `cheap` | `reasoning` | `auto` |
+|----------|---------|-------------|--------|
+| `gratis` | `swe-1-7-medium` | `swe-1-7-medium` | `swe-1-7-medium` |
+| `barato` | `swe-1-7-medium` | `swe-1-6-fast` | `swe-1-7-medium` |
+| `equilibrado` | `swe-1-7-medium` | `sonnet` | `adaptive` |
+| `caro` | `sonnet` | `opus` | `adaptive` |
+
+The default is `gratis`. The last explicit or defaulted choice is persisted in
+`brain/state/adapter-templates.json` (per-target) and reused on subsequent
+builds unless overridden with `--template=`.
+
+`build` is pure at Layer 3: `_build.py`/`build.sh` themselves write only under
+`generated/`. The `--template` side-effect (validation + persistence in
+`brain/state/adapter-templates.json`) is deliberately mediated by `bin/matrix`
+(Layer 1), the only component authorized to write `brain/state/`.
+
+`install` is what makes the artifacts discoverable; it is idempotent and copies
+self-contained pointers. Re-run both after changing an agent's
+`name`/`description`/`model_policy`, the roster, or
+`adapters/devin/adapter.yaml`'s `model_policy` map.
 
 ## Adding a new CLI
 

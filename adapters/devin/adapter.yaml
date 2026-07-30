@@ -58,6 +58,35 @@ binding:
     - "_brain"
     - "matrix-output/"
 
+# Model templates: 4 cost/quality presets selectable at build time via
+# `bin/matrix build --target=devin --template=<name>`. The default is `gratis`
+# when no `--template` is supplied and no persisted choice exists.
+# NOTE: model identifiers (`swe-1-6-fast`, `opus`) MUST be re-verified against
+# the real Devin CLI model picker (`/model` without arguments) the next time
+# anyone touches them — same "needs verification" convention as `swe-1-7-medium`
+# below.
+model_templates: [gratis, barato, equilibrado, caro]
+
+model_template_gratis:
+  cheap: swe-1-7-medium
+  reasoning: swe-1-7-medium
+  auto: swe-1-7-medium
+
+model_template_barato:
+  cheap: swe-1-7-medium
+  reasoning: swe-1-6-fast
+  auto: swe-1-7-medium
+
+model_template_equilibrado:
+  cheap: swe-1-7-medium
+  reasoning: sonnet
+  auto: adaptive
+
+model_template_caro:
+  cheap: sonnet
+  reasoning: opus
+  auto: adaptive
+
 model_policy:
   # Re-derived 2026-07-17 from devin-master-documentation's model pages
   # (docs/22-devin-cli-models-overview.md, docs/26-cognition-swe-models.md),
