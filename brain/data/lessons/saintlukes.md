@@ -9,6 +9,10 @@ if the Chrome session expires.
 
 - **referrals**: https://obfint51518.ir02.obfuscate.xcade.dev/DataCompletionRequest?uid=nOfuJotFEHZxrzWY
 - **onboarding**: https://obfint51518.ir02.obfuscate.xcade.dev/DataCompletionRequest?uid=t3xYVYuBv1ZmbQWd
+- **internalcareersmarketplace**: https://obfint51518.ir02.obfuscate.xcade.dev/DataCompletionRequest?uid=HS0S7xm9KTc6XwUG
+  (confirmado por el usuario 2026-07-29; branch de desarrollo activa para este portal:
+  `origin/T1230545_saintlukes_InternalCareersPortalUpdate`, la mas reciente de 3 candidatas
+  -T1142206/T1180702/T1230545- por fecha de commit)
 
 ## Repo/branch context
 
@@ -38,8 +42,16 @@ if the Chrome session expires.
   `video--placeholder.svg`, `icon--add.svg`, `icon--remove.svg`, `icon--quote--opening.svg`,
   `close.svg`, `banner--home--1920.webp`, `banner--home--tablet.webp`.
 
+## Regla dura del usuario (2026-07-29)
+
+- **Nunca revertir un cambio no reconocido en el working tree sin preguntar primero al usuario**, sin importar el tier que Smith le asigne. El usuario puede estar editando archivos del portal en paralelo a la sesión de Devin (mismo working tree compartido) — un diff "no autorizado por ningún plan" puede simplemente ser trabajo manual del usuario, no scope creep de un subagente. Antes de cualquier `git checkout --`/revert, mostrar el diff exacto y preguntar de quién es. Ya pasó una vez: se revirtieron 2 cambios reales del usuario (`referrals/css/specifics.css` y el token `--t-tc--buttons--font--family` en `library__theme.css`) asumiendo que eran drift de un subagente; ambos se restauraron a pedido del usuario.
+- **Los self-reports de subagentes sobre el estado de un archivo NO son confiables** — en la misma sesión, un Smith reportó textualmente "diff después: vacío" para `specifics.css` cuando en realidad el archivo seguía teniendo el contenido completo sin revertir (verificado por Neo leyendo el archivo real después). Siempre re-verificar con `git diff`/lectura directa del archivo, nunca aceptar la palabra de un subagente sobre el estado final de un archivo compartido.
+
 ## Process notes
 
 - obfuscate instance caches rendered HTML per page (unlike CSS, which reflects instantly) — if a
   `.nopage`/`.page`/`.tpt` change doesn't show on first load after applying, retry navigation with
   a cache-busting query string before concluding the fix failed.
+- **sisifo live-sync params for `referrals`**: run from inside `saintlukes/referrals/` with
+  `-oobfint51518 -p22` (confirmed working, 2026-07-29). Use the `sisifo-watch` skill
+  (start/status/stop scripts) rather than the raw `sisifo.sh` prompt loop.
