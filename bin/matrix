@@ -675,9 +675,30 @@ show_workspace() {
 
 # --- Status -----------------------------------------------------------------
 show_bindings() {
-    log_info "Bound projects:"; echo
+    local json=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --json) json=true ;;
+            *) log_error "Unknown flag '$arg'"; return 1 ;;
+        esac
+    done
     local projects; projects="$(jq -r '.projects[] | "\(.name)\t\(.path)\t\(.type)"' "$REGISTRY_FILE" 2>/dev/null)"
-    [[ -z "$projects" ]] && { echo "  (none registered)"; return; }
+    [[ -z "$projects" ]] && { if $json; then echo '[]'; else echo "  (none registered)"; fi; return; }
+    if $json; then
+        local lines=""
+        while IFS=$'\t' read -r name path type; do
+            local real_path; real_path="$(get_project_path "$name" 2>/dev/null || true)"
+            [[ -z "$real_path" ]] && real_path="$path"
+            local bound=false
+            is_bound "$name" && bound=true
+            lines="${lines}$(jq -n -c \
+                --arg name "$name" --arg path "$real_path" --arg type "$type" --argjson bound "$bound" \
+                '{name:$name,path:$path,type:$type,bound:$bound}')"$'\n'
+        done <<< "$projects"
+        printf '%s' "$lines" | jq -s '.'
+        return
+    fi
+    log_info "Bound projects:"; echo
     while IFS=$'\t' read -r name path type; do
         local real_path; real_path="$(get_project_path "$name" 2>/dev/null || true)"
         if is_bound "$name"; then
@@ -938,25 +959,80 @@ hardline_replace_event() {
     exec {queue_fd}>&-
 }
 
+# Heuristic: does the input look like it contains a secret (token, password, etc.)?
+# Shared by hardline_dispatch and hardline_reject so early rejects never persist
+# secret-looking text to queue.jsonl.
+_hardline_looks_like_secret() {
+    printf '%s' "$1" | grep -qiE '\b(token|password|secret|api[_-]?key)([[:space:]]+[[:alnum:]_.-]+){0,2}[[:space:]]*[:=][[:space:]]*[^[:space:]]+'
+}
+
+# Build and append an acked-refused-generic row to queue.jsonl for an
+# early-rejected hardline event, with the same dedupe_key calculation a normal
+# dispatch would use. Secrets are redacted before writing, reusing the existing
+# secret heuristic. Pure queue write: no link_append/log call of its own, so
+# callers that already have their own Link event/log line don't get a duplicate.
+_hardline_write_reject_row() {
+    local project="$1" raw_line="$2" reason="$3"
+    local event_id dedupe_key now safe_line event_json queue_fd tmp
+    init_hardline
+    event_id="hardline-$(epoch36 "$(date +%s)")-$$-$RANDOM"
+    dedupe_key="$(printf '%s\0%s' "$project" "$raw_line" | sha256sum | cut -d' ' -f1)"
+    now="$(date -Iseconds)"
+    safe_line="$raw_line"
+    _hardline_looks_like_secret "$raw_line" && safe_line="[REDACTED]"
+
+    event_json="$(jq -n -c \
+        --arg id "$event_id" --arg project "$project" --arg line "$safe_line" \
+        --arg key "$dedupe_key" --arg now "$now" --arg reason "$reason" \
+        '{event_id:$id,project:$project,raw_line:$line,dedupe_key:$key,
+          state:"acked-refused-generic",session_id:null,queued_at:$now,
+          dispatched_at:null,acked_at:$now,ack_kind:"refused-generic",
+          reject_reason:$reason}')"
+
+    exec {queue_fd}>"$HARDLINE_DIR/.queue.lock"
+    flock -x "$queue_fd"
+    tmp="$(mktemp "$HARDLINE_DIR/queue.jsonl.XXXXXX")"
+    cat "$HARDLINE_QUEUE" > "$tmp" 2>/dev/null || true
+    printf '%s\n' "$event_json" >> "$tmp"
+    mv "$tmp" "$HARDLINE_QUEUE"
+    exec {queue_fd}>&-
+    printf '%s' "$event_id"
+}
+
+# Persist an early-rejected hardline event to queue.jsonl as acked-refused-generic,
+# plus its own Link event and log line. Thin wrapper over
+# _hardline_write_reject_row for callers (hardline_dispatch's early validation,
+# and the `matrix hardline reject` subcommand) that don't already emit their own
+# Link event for this rejection.
+hardline_reject() {
+    local project="$1" raw_line="$2" reason="$3"
+    local event_id
+    event_id="$(_hardline_write_reject_row "$project" "$raw_line" "$reason")"
+    link_append "hardline:reject" "$project" "[$event_id] state=acked-refused-generic reason=$reason"
+    log_error "$reason"
+}
+
 hardline_dispatch() {
     local project="${1:-}" raw_line="${2:-}"
     [[ $# -eq 2 && -n "$project" && -n "$raw_line" ]] || {
         log_error 'Usage: matrix hardline dispatch <project> "<line>"'; return 1; }
     [[ "$project" =~ ^[A-Za-z0-9._-]+$ ]] || {
-        log_error "Invalid project '$project' (allowed: letters, numbers, dot, underscore, hyphen)"; return 1; }
+        hardline_reject "$project" "$raw_line" "Invalid project '$project' (allowed: letters, numbers, dot, underscore, hyphen)"; return 1; }
     [[ "$raw_line" != *$'\n'* && "$raw_line" != *$'\r'* ]] || {
-        log_error "Hardline events must be a single line"; return 1; }
+        hardline_reject "$project" "$raw_line" "Hardline events must be a single line"; return 1; }
     get_project_path "$project" >/dev/null 2>&1 || {
-        log_error "Project '$project' not found"; return 1; }
+        hardline_reject "$project" "$raw_line" "Project '$project' not found"; return 1; }
     is_bound "$project" || {
-        log_error "Project '$project' is not bound"; return 1; }
+        hardline_reject "$project" "$raw_line" "Project '$project' is not bound"; return 1; }
 
     local event_id dedupe_key now event_json queue_fd existing tmp max_depth open_count
     event_id="hardline-$(epoch36 "$(date +%s)")-$$-$RANDOM"
     dedupe_key="$(printf '%s\0%s' "$project" "$raw_line" | sha256sum | cut -d' ' -f1)"
     max_depth="${MATRIX_HARDLINE_MAX_DEPTH:-20}"
 
-    if printf '%s' "$raw_line" | grep -qiE '\b(token|password|secret|api[_-]?key)([[:space:]]+[[:alnum:]_.-]+){0,2}[[:space:]]*[:=][[:space:]]*[^[:space:]]+'; then
+    if _hardline_looks_like_secret "$raw_line"; then
+        _hardline_write_reject_row "$project" "$raw_line" \
+            "contenido con forma de secreto detectado antes de despachar; evento descartado sin ejecutar" >/dev/null
         link_append "hardline:skip-secret" "$project" "[$event_id] event_id=$event_id marker=[REDACTED]"
         log_warning "Skipped secret-looking Hardline event $event_id (redacted)"
         return 0
@@ -982,6 +1058,8 @@ hardline_dispatch() {
     ' "$HARDLINE_QUEUE" 2>/dev/null || echo 0)"
     if [[ "$open_count" -ge "$max_depth" ]]; then
         exec {queue_fd}>&-
+        _hardline_write_reject_row "$project" "$raw_line" \
+            "el proyecto ya tiene $open_count eventos abiertos (límite $max_depth); rechazado para no acumular backlog sin límite" >/dev/null
         link_append "hardline:backpressure-refused" "$project" "[$event_id] reason=max_depth open=$open_count max=$max_depth"
         log_warning "Hardline backpressure: project '$project' has $open_count open events (max $max_depth); event $event_id refused"
         return 1
@@ -1074,31 +1152,109 @@ hardline_resume() {
     return 2
 }
 
+hardline_reject_cmd() {
+    # Project and line may legitimately be empty here: the empty-field branch in
+    # hardline-monitor.sh calls this exact subcommand precisely because one of
+    # them came out empty after splitting on '|'. Only the reason is required.
+    [[ $# -eq 3 && -n "$3" ]] || {
+        log_error 'Usage: matrix hardline reject <project> "<line>" "<reason>"'; return 1; }
+    hardline_reject "$1" "$2" "$3"
+}
+
 hardline_cmd() {
     case "${1:-}" in
         dispatch) shift; hardline_dispatch "$@" ;;
+        reject)   shift; hardline_reject_cmd "$@" ;;
         status)   shift; hardline_status "$@" ;;
         resume)   shift; hardline_resume "$@" ;;
         queue)    shift; [[ $# -eq 0 ]] || { log_error "Usage: matrix hardline queue"; return 1; }
                   init_hardline; cat "$HARDLINE_QUEUE" ;;
-        *)        log_error 'Usage: matrix hardline dispatch <project> "<line>" | status [project] | resume <event_id> | queue'; return 1 ;;
+        *)        log_error 'Usage: matrix hardline dispatch <project> "<line>" | reject <project> "<line>" "<reason>" | status [project] | resume <event_id> | queue'; return 1 ;;
     esac
+}
+
+# --- Adapter template helpers ------------------------------------------------
+_adapter_model_templates() {
+    local target="$1"
+    python3 - "$MATRIX_DIR/adapters/$target/adapter.yaml" <<'PY'
+import sys, os
+
+def parse_scalar_list(raw):
+    v = raw.split("#", 1)[0].strip()
+    if v.startswith("[") and v.endswith("]"):
+        v = v[1:-1]
+    if not v:
+        return []
+    return [item.strip().strip('"').strip("'") for item in v.split(",") if item.strip()]
+
+adapter_yaml = sys.argv[1]
+if not os.path.isfile(adapter_yaml):
+    sys.exit(0)
+with open(adapter_yaml, encoding="utf-8") as fh:
+    for raw in fh:
+        stripped = raw.split("#", 1)[0].strip()
+        if stripped.startswith("model_templates:"):
+            v = stripped.split(":", 1)[1].strip()
+            if v.startswith("["):
+                print(" ".join(parse_scalar_list(v)))
+            break
+PY
+}
+
+_persist_adapter_template() {
+    local target="$1" template="$2"
+    local state_file="$STATE_DIR/adapter-templates.json"
+    mkdir -p "$STATE_DIR"
+    if [[ -f "$state_file" ]]; then
+        local tmp; tmp="$(mktemp)"
+        jq --arg t "$target" --arg n "$template" '.[$t] = $n' "$state_file" > "$tmp" && mv "$tmp" "$state_file"
+    else
+        echo "{\"$target\": \"$template\"}" > "$state_file"
+    fi
+}
+
+_read_persisted_adapter_template() {
+    local target="$1"
+    local state_file="$STATE_DIR/adapter-templates.json"
+    [[ -f "$state_file" ]] || return 1
+    jq -r --arg t "$target" '.[$t] // empty' "$state_file" 2>/dev/null
 }
 
 # --- Trainman build ---------------------------------------------------------
 build_target() {
-    local target=""
-    for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}";; esac; done
-    [[ -z "$target" ]] && { log_error "Usage: matrix build --target=<cli>"; return 1; }
+    local target="" template="" arg
+    for arg in "$@"; do
+        case "$arg" in
+            --target=*) target="${arg#*=}" ;;
+            --template=*) template="${arg#*=}" ;;
+        esac
+    done
+    [[ -z "$target" ]] && { log_error "Usage: matrix build --target=<cli> [--template=<name>]"; return 1; }
     local builder="$MATRIX_DIR/adapters/$target/build.sh"
-    if [[ -x "$builder" ]]; then
-        log_info "Trainman: building artifacts for '$target'..."
-        MATRIX_ROOT="$MATRIX_DIR" "$builder"
-        link_append "build" "$target" "artifacts generated"
+    [[ -x "$builder" ]] || { log_warning "Trainman: no adapter builder at $builder (not implemented yet for '$target')."; return 1; }
+
+    if [[ -n "$template" ]]; then
+        local valid_templates found=0 t
+        valid_templates="$(_adapter_model_templates "$target")"
+        for t in $valid_templates; do
+            [[ "$t" == "$template" ]] && { found=1; break; }
+        done
+        if [[ $found -eq 0 ]]; then
+            log_error "Invalid template '$template' for target '$target'. Valid: ${valid_templates// /, }"
+            return 1
+        fi
+        _persist_adapter_template "$target" "$template"
     else
-        log_warning "Trainman: no adapter builder at $builder (not implemented yet for '$target')."
-        return 1
+        template="$(_read_persisted_adapter_template "$target" 2>/dev/null || true)"
+        if [[ -z "$template" ]]; then
+            template="gratis"
+            _persist_adapter_template "$target" "$template"
+        fi
     fi
+
+    log_info "Trainman: building artifacts for '$target' (template=$template)..."
+    MATRIX_ROOT="$MATRIX_DIR" MATRIX_ADAPTER_TEMPLATE="$template" "$builder" ${template:+--template="$template"}
+    link_append "build" "$target" "artifacts generated (template=$template)"
 }
 
 # --- Trainman harden (reconcile permissions.deny with secret-deny config) ----
@@ -1288,6 +1444,8 @@ Link ledger & fleet:
 
 Hardline:
   hardline dispatch <project> "<line>"  Validate, queue, and acquire the project's dispatch lane
+  hardline reject <project> "<line>" "<reason>"
+                                         Persist a pre-queue rejection as acked-refused-generic
   hardline status [project]             Show open events, optionally scoped to one project
   hardline resume <event_id>             Trigger recovery (Layer 3 implementation pending)
   hardline queue                         Print the raw persisted queue
@@ -1304,7 +1462,7 @@ Enforcement & adapters:
   phase close '<json>'    Run the validate_phase_close gate and persist the verdict
                           (PASS or BLOCK) to the Link ledger; exits non-zero on BLOCK
   hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close,
-                          post_run_audit, the_source, validate_layer2)
+                          post_run_audit, the_source, validate_layer2, session_start_bootstrap)
   build --target=<cli>    Trainman: generate native artifacts for a CLI (devin)
   install --target=<cli>  Trainman: deploy generated artifacts into the CLI's discovery path
   harden --target=<cli>   Reconcile permissions.deny with secret-deny config (dry-run;
@@ -1335,7 +1493,7 @@ main() {
                 work)       work_project "${2:-}" ;;
                 unwork)     unwork_project "${2:-}" ;;
                 workspace)  show_workspace ;;
-                bindings)   show_bindings ;;
+                bindings)   shift; show_bindings "$@" ;;
                 status)     shift; show_status "$@" ;;
                 checkpoint) write_checkpoint "${2:-}" ;;
                 activity)   shift; show_activity "$@" ;;
