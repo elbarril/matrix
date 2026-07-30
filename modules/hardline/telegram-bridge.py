@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Long-poll Telegram messages into the Hardline inbox without exposing bot secrets.
 
-Completion notification tracking is in memory only, so a bridge restart cannot notify
-for requests it accepted before that restart.
+Completion notification tracking is persisted to disk (same atomic write-then-replace
+pattern as the offset file), so a bridge restart can still notify for requests accepted
+before that restart. The only loss window left is the few milliseconds between accepting
+a message (append_inbox) and persisting its tracking entry (save_tracked) — if the
+process dies exactly there, that one event completes and is visible in queue.jsonl /
+the status webapp, but Telegram never learns which chat to notify.
 """
 
 import argparse
@@ -21,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 INBOX_PATH = ROOT / "modules" / "hardline" / "inbox.log"
 OFFSET_PATH = ROOT / "brain" / "state" / "hardline" / "telegram-offset"
+TRACKED_PATH = ROOT / "brain" / "state" / "hardline" / "telegram-tracked.json"
 QUEUE_PATH = ROOT / "brain" / "state" / "hardline" / "queue.jsonl"
 TOKEN_ENV = "MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN"
 CHAT_ENV = "MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID"
@@ -92,6 +97,23 @@ def save_offset(offset):
     temporary.replace(OFFSET_PATH)
 
 
+def load_tracked():
+    try:
+        return json.loads(TRACKED_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"[telegram-bridge] invalid tracked state; starting empty: {error}", file=sys.stderr)
+        return {}
+
+
+def save_tracked(tracked):
+    TRACKED_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = TRACKED_PATH.with_suffix(".tmp")
+    temporary.write_text(json.dumps(tracked), encoding="utf-8")
+    temporary.replace(TRACKED_PATH)
+
+
 def append_inbox(line):
     INBOX_PATH.parent.mkdir(parents=True, exist_ok=True)
     with INBOX_PATH.open("a", encoding="utf-8") as inbox:
@@ -118,12 +140,20 @@ def notification_text(event):
     task = str(event.get("raw_line", ""))[:100]
     state = event.get("state")
     if state == "acked-success":
-        return f"✅ {project}: done — {task}"
+        return f"✅ {project}: listo — {task}"
     if state == "acked-needs-human":
-        return f"⚠️ {project}: needs your decision — {task}"
+        reason = event.get("outcome_note") or "el agente indicó que no puede continuar sin una decisión humana"
+        return f"⚠️ {project}: necesita tu decisión — {task}\nMotivo: {reason}"
+    if state == "acked-refused-generic":
+        reason = event.get("reject_reason") or "rechazado antes de ejecutarse por una validación temprana"
+        return f"🚫 {project}: rechazado antes de ejecutarse — {task}\nMotivo: {reason}"
+    if state == "acked-failed":
+        return f"❌ {project}: terminó con error — {task}\nMotivo: se detectó lenguaje de fallo explícito en la salida del agente"
+    if state == "acked-crashed":
+        return f"💥 {project}: el proceso se interrumpió — {task}\nMotivo: sin salida utilizable o el proceso terminó de forma anómala (código de salida inesperado o posible kill)"
     if state == "orphaned":
-        return f"⏱️ {project}: timed out (orphaned) — {task}"
-    return f"❌ {project}: failed/crashed — {task}"
+        return f"⏱️ {project}: se agotó el tiempo — {task}\nMotivo: no terminó dentro del límite de tiempo configurado"
+    return f"❔ {project}: estado desconocido \"{state}\" — revisar 'matrix hardline queue' — {task}"
 
 
 def send_message(token, chat_id, text):
@@ -141,12 +171,16 @@ def send_message(token, chat_id, text):
 
 def notify_terminal_events(token, tracked):
     completed = terminal_events()
+    changed = False
     for key, chat_id in list(tracked.items()):
         event = completed.get(key)
         if event is None:
             continue
         send_message(token, chat_id, notification_text(event))
         del tracked[key]
+        changed = True
+    if changed:
+        save_tracked(tracked)
 
 
 def get_updates(token, offset):
@@ -194,7 +228,7 @@ def main():
         return 1
     allowed_chat_id = os.environ.get(CHAT_ENV, "").strip() or None
     offset = load_offset()
-    tracked = {}
+    tracked = load_tracked()
 
     while True:
         try:
@@ -219,6 +253,7 @@ def main():
                     append_inbox(line)
                     project, raw_line = line.split("|", 1)
                     tracked[dedupe_key(project, raw_line)] = chat_id
+                    save_tracked(tracked)
                 offset = update_id + 1
                 save_offset(offset)
             notify_terminal_events(token, tracked)

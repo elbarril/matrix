@@ -26,15 +26,10 @@ tail -n0 -F "$INBOX" | while IFS= read -r line; do
     line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     [[ -z "$line" ]] && continue
     event_id="hardline-monitor-$(date +%s)-$$-$RANDOM"
-    # Minimal validation: reject lines that look like they carry secrets.
-    if echo "$line" | grep -qiE '\b(token|password|secret|api[_-]?key)([[:space:]]+[[:alnum:]_.-]+){0,2}[[:space:]]*[:=][[:space:]]*[^[:space:]]+'; then
-        echo "[hardline] SKIP (possible secret in event): redacted"
-        "$MATRIX" link hardline:skip-secret hardline --ref="$event_id" \
-            "event_id=$event_id marker=[REDACTED]" >/dev/null || true
-        continue
-    fi
 
     # Parse project|line. Project names are constrained to [A-Za-z0-9._-]+.
+    # No project is addressable yet at this point, so there is no dedupe_key a
+    # bridge could match — this rejection stays Link-only (see design §6.a).
     if [[ "$line" != *"|"* ]]; then
         echo "[hardline] REJECT malformed (missing '|' delimiter): $line"
         "$MATRIX" link hardline:rejected hardline --ref="$event_id" \
@@ -49,6 +44,8 @@ tail -n0 -F "$INBOX" | while IFS= read -r line; do
         echo "[hardline] REJECT malformed (empty project or line): $line"
         "$MATRIX" link hardline:rejected hardline --ref="$event_id" \
             "event_id=$event_id reason=empty-field" >/dev/null || true
+        "$MATRIX" hardline reject "$project" "$raw_line" \
+            "el proyecto o la tarea llegaron vacíos tras separar por '|'; evento descartado sin ejecutar" >/dev/null || true
         continue
     fi
 
@@ -56,6 +53,21 @@ tail -n0 -F "$INBOX" | while IFS= read -r line; do
         echo "[hardline] REJECT malformed (invalid project '$project'): $line"
         "$MATRIX" link hardline:rejected hardline --ref="$event_id" \
             "event_id=$event_id reason=invalid-project project=$project" >/dev/null || true
+        "$MATRIX" hardline reject "$project" "$raw_line" \
+            "el proyecto '$project' no cumple el formato permitido (letras, números, punto, guion, guion bajo); evento descartado sin ejecutar" >/dev/null || true
+        continue
+    fi
+
+    # Minimal validation: reject lines that look like they carry secrets. Only
+    # checked on raw_line (the task text) — project's charset above already
+    # rules out anything secret-shaped there. Project is known now, so this
+    # rejection can also reach the queue for the bridge to notify on.
+    if echo "$raw_line" | grep -qiE '\b(token|password|secret|api[_-]?key)([[:space:]]+[[:alnum:]_.-]+){0,2}[[:space:]]*[:=][[:space:]]*[^[:space:]]+'; then
+        echo "[hardline] SKIP (possible secret in event): redacted"
+        "$MATRIX" link hardline:skip-secret hardline --ref="$event_id" \
+            "event_id=$event_id marker=[REDACTED]" >/dev/null || true
+        "$MATRIX" hardline reject "$project" "$raw_line" \
+            "contenido con forma de secreto detectado antes de despachar; evento descartado sin ejecutar" >/dev/null || true
         continue
     fi
 

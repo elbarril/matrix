@@ -33,16 +33,24 @@ BRIDGE_LOG="$STATE_DIR/telegram-bridge.log"
 MONITOR_CMD="$MODULE_DIR/hardline-monitor.sh"
 BRIDGE_CMD="$MODULE_DIR/telegram-bridge.py"
 
+WEBAPP_PIDFILE="$STATE_DIR/webapp.pid"
+WEBAPP_LOG="$STATE_DIR/webapp.log"
+WEBAPP_CMD="$MODULE_DIR/status-webapp.py"
+
 mkdir -p "$STATE_DIR"
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") {start|stop|status|restart}
+Usage: $(basename "$0") {start|stop|status|restart|webapp-start|webapp-stop|webapp-status}
 
-  start   Start the monitor (always) and the Telegram bridge (if secrets file exists).
-  stop    Stop both processes gracefully, clean up stale PID files.
-  status  Report whether each process is currently running.
-  restart Stop, then start.
+  start         Start the monitor (always) and the Telegram bridge (if secrets file exists).
+  stop          Stop both processes gracefully, clean up stale PID files.
+  status        Report whether each process is currently running (monitor, bridge, webapp).
+  status --json Machine-readable status of monitor and bridge.
+  restart       Stop, then start.
+  webapp-start  Start the read-only status webapp.
+  webapp-stop   Stop the status webapp.
+  webapp-status Show whether the status webapp is running.
 EOF
     exit 1
 }
@@ -211,6 +219,52 @@ _start_bridge() {
     return 0
 }
 
+# Start the read-only webapp. Unlike _start_monitor/_start_bridge, returning 0
+# when the webapp is already running is intentional: the primary consumer is an
+# idempotent alias, and "already running" means the desired state is satisfied.
+_start_webapp() {
+    if _pid_alive "$(_read_pid "$WEBAPP_PIDFILE")" "status-webapp.py"; then
+        _log "webapp: already running (PID $(_read_pid "$WEBAPP_PIDFILE"))."
+        return 0
+    fi
+
+    if _pgrep_any "status-webapp.py"; then
+        _log "webapp: detected an existing status-webapp.py process (no PID file). Refusing to start."
+        return 1
+    fi
+
+    rm -f "$WEBAPP_PIDFILE"
+    : > "$WEBAPP_LOG"
+
+    MATRIX_ROOT="$ROOT" nohup setsid python3 "$WEBAPP_CMD" > "$WEBAPP_LOG" 2>&1 &
+    local pid=$!
+    disown "$pid" 2>/dev/null || true
+
+    sleep 0.3
+    if ! _pid_alive "$pid" "status-webapp.py"; then
+        _log "webapp: failed to start (see $WEBAPP_LOG — check for 'Address already in use')."
+        rm -f "$WEBAPP_PIDFILE"
+        return 1
+    fi
+
+    echo "$pid" > "$WEBAPP_PIDFILE"
+    _log "webapp: started PID $pid on http://127.0.0.1:${MATRIX_HARDLINE_WEBAPP_PORT:-8765}/ (log: $WEBAPP_LOG)."
+    return 0
+}
+
+cmd_webapp_start() { _start_webapp; }
+cmd_webapp_stop()  { _stop_one "webapp" "$WEBAPP_PIDFILE"; }
+cmd_webapp_status() {
+    local pid; pid="$(_read_pid "$WEBAPP_PIDFILE")"
+    if _pid_alive "$pid" "status-webapp.py"; then
+        echo "webapp:  running (PID $pid, log $WEBAPP_LOG)"
+    elif [[ -n "$pid" ]]; then
+        echo "webapp:  stopped (stale PID $pid in $WEBAPP_PIDFILE)"
+    else
+        echo "webapp:  stopped"
+    fi
+}
+
 cmd_start() {
     # Refuse to start if either process is already running. Use restart to recover
     # from a partial or stale state, or stop to clean up first.
@@ -251,9 +305,23 @@ cmd_stop() {
 }
 
 cmd_status() {
+    local json=""
+    [[ "${1:-}" == "--json" ]] && json=1
     local monitor_pid bridge_pid
     monitor_pid="$(_read_pid "$MONITOR_PIDFILE")"
     bridge_pid="$(_read_pid "$BRIDGE_PIDFILE")"
+
+    if [[ -n "$json" ]]; then
+        local m_run=false b_run=false
+        _pid_alive "$monitor_pid" "hardline-monitor.sh" && m_run=true
+        _pid_alive "$bridge_pid" "telegram-bridge.py" && b_run=true
+        jq -n \
+            --argjson m_run "$m_run" --arg m_pid "$monitor_pid" --arg m_log "$MONITOR_LOG" \
+            --argjson b_run "$b_run" --arg b_pid "$bridge_pid" --arg b_log "$BRIDGE_LOG" \
+            '{monitor:{running:$m_run,pid:($m_pid|select(length>0)),log:$m_log},
+              bridge:{running:$b_run,pid:($b_pid|select(length>0)),log:$b_log}}'
+        return
+    fi
 
     if _pid_alive "$monitor_pid" "hardline-monitor.sh"; then
         echo "monitor: running (PID $monitor_pid, log $MONITOR_LOG)"
@@ -270,6 +338,16 @@ cmd_status() {
     else
         echo "bridge:  stopped"
     fi
+
+    local webapp_pid
+    webapp_pid="$(_read_pid "$WEBAPP_PIDFILE")"
+    if _pid_alive "$webapp_pid" "status-webapp.py"; then
+        echo "webapp:  running (PID $webapp_pid, log $WEBAPP_LOG)"
+    elif [[ -n "$webapp_pid" ]]; then
+        echo "webapp:  stopped (stale PID $webapp_pid in $WEBAPP_PIDFILE)"
+    else
+        echo "webapp:  stopped"
+    fi
 }
 
 cmd_restart() {
@@ -278,12 +356,15 @@ cmd_restart() {
 }
 
 main() {
-    [[ $# -eq 1 ]] || usage
+    [[ $# -ge 1 ]] || usage
     case "$1" in
         start) cmd_start ;;
         stop) cmd_stop ;;
-        status) cmd_status ;;
+        status) shift; cmd_status "$@" ;;
         restart) cmd_restart ;;
+        webapp-start) _start_webapp ;;
+        webapp-stop) cmd_webapp_stop ;;
+        webapp-status) cmd_webapp_status ;;
         *) usage ;;
     esac
 }
