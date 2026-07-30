@@ -77,4 +77,18 @@ clean_broken_matrix_links "$AGENTS_DIR"
 deploy "$GEN/skills" "$SKILLS_DIR" "SKILL.md"
 deploy "$GEN/agents" "$AGENTS_DIR" "AGENT.md"
 
+# Wire the Seraph audit + session-start-bootstrap lifecycle hooks into Devin's
+# global config (~/.config/devin/config.json). Without this step, AGENTS.md
+# §6 step 0 (Matrix workspace mode forces Neo activation) has no deterministic
+# delivery path — it would fall back to the same skill-description matching
+# the doctrine exists to not depend on. Idempotent: install-hooks.sh merges
+# into hooks.* without touching unrelated config keys, and backs up the
+# previous config.json before writing.
+if [[ -x "$ROOT/adapters/devin/install-hooks.sh" ]]; then
+    say "wiring Seraph lifecycle hooks into $DEVIN_HOME/config.json..."
+    "$ROOT/adapters/devin/install-hooks.sh"
+else
+    say "WARNING: $ROOT/adapters/devin/install-hooks.sh not found or not executable; skipping hook wiring."
+fi
+
 say "done. Neo and specialists installed to $DEVIN_HOME"

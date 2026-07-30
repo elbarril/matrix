@@ -35,6 +35,12 @@ else:
     cfg = {}
 
 command = f'env MATRIX_ROOT={matrix_root} python3 {hook_script}'
+notify_script = f'{matrix_root}/adapters/devin/hooks/session_end_notify.py'
+notify_command = f'env MATRIX_ROOT={matrix_root} python3 {notify_script}'
+stop_notify_script = f'{matrix_root}/adapters/devin/hooks/stop_notify.py'
+stop_notify_command = f'env MATRIX_ROOT={matrix_root} python3 {stop_notify_script}'
+prompt_timestamp_script = f'{matrix_root}/adapters/devin/hooks/user_prompt_submit_timestamp.py'
+prompt_timestamp_command = f'env MATRIX_ROOT={matrix_root} python3 {prompt_timestamp_script}'
 
 # Merge Matrix lifecycle hooks without touching unrelated config keys.
 # PostToolUse omits matcher to audit every tool call (empty/omitted matcher
@@ -43,17 +49,40 @@ hooks = cfg.setdefault("hooks", {})
 
 for event in ("SessionStart", "UserPromptSubmit", "PostCompaction", "SessionEnd"):
     timeout = 30 if event == "SessionEnd" else 10
-    hooks[event] = [
-        {
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": command,
-                    "timeout": timeout,
-                }
-            ]
-        }
-    ]
+    if event == "SessionEnd":
+        hooks[event] = [
+            {
+                "hooks": [
+                    {"type": "command", "command": command, "timeout": 30},
+                    {"type": "command", "command": notify_command, "timeout": 15},
+                ]
+            }
+        ]
+    elif event == "UserPromptSubmit":
+        hooks[event] = [
+            {
+                "hooks": [
+                    {"type": "command", "command": command, "timeout": timeout},
+                    {"type": "command", "command": prompt_timestamp_command, "timeout": 5},
+                ]
+            }
+        ]
+    else:
+        hooks[event] = [
+            {
+                "hooks": [
+                    {"type": "command", "command": command, "timeout": timeout}
+                ]
+            }
+        ]
+
+hooks["Stop"] = [
+    {
+        "hooks": [
+            {"type": "command", "command": stop_notify_command, "timeout": 10}
+        ]
+    }
+]
 
 hooks["PostToolUse"] = [
     {

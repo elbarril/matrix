@@ -26,6 +26,10 @@ DEVIN_BIN="${DEVIN_BIN:-devin}"
 TIMEOUT_SECONDS="${MATRIX_HARDLINE_TIMEOUT_SECONDS:-300}"
 MODEL="${MATRIX_HARDLINE_MODEL:-}"
 
+# Mark this session as Hardline-dispatched so the SessionEnd hook knows the
+# Hardline path already ack'd it and does not send a duplicate Telegram message.
+export MATRIX_HARDLINE_DISPATCH=1
+
 EVENT_DIR="$ROOT/brain/state/hardline/events"
 mkdir -p "$EVENT_DIR"
 
