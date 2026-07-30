@@ -1,5 +1,9 @@
 experiment:
-  activation_inject: false
+  # 2026-07-28: enabled, scoped to Matrix workspace mode only (see
+  # adapters/devin/hooks/session_audit.py's _is_workspace_mode()). Bound
+  # external projects are unaffected — they already get the equivalent
+  # block in their own AGENTS.local.md via `bin/matrix select`.
+  activation_inject: true
 
 secret_deny:
   static:

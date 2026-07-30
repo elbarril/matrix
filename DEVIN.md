@@ -117,6 +117,52 @@ This lets Niobe call `run_subagent` and `read_subagent` directly on her crew wit
 
 See [`AGENTS.md`](AGENTS.md) §12. In short: read the contract, know the registry, resolve context, read recent checkpoints + lessons, respect boundaries, never log secrets, checkpoint progress, verify reality before "done".
 
+## Matrix workspace mode auto-bootstrap (AGENTS.md §6 step 0)
+
+AGENTS.md §6 step 0 says becoming Neo in Matrix workspace mode must not depend
+on topic-matching heuristics alone. **This reuses existing infrastructure —
+`adapters/devin/hooks/session_audit.py` and its "Etapa G/H3" activation-inject
+experiment — rather than a new hook.** (A first pass at this added a brand-new
+project-level `.devin/config.json` + a second SessionStart script; that was
+reverted the same session once this existing, more complete mechanism was
+found. Lesson: check `adapters/<target>/` for an existing lever before adding
+a new one — see `brain/data/lessons.md`.)
+
+- `session_audit.py` is already wired into `~/.config/devin/config.json`'s
+  `hooks.SessionStart` / `UserPromptSubmit` / `PostToolUse` / `PostCompaction` /
+  `SessionEnd` by `adapters/devin/install-hooks.sh`, which `adapters/devin/install.sh`
+  now calls automatically as its last step — so `bin/matrix install --target=devin`
+  sets this up on any machine, not just this one.
+- The experiment flag `experiment.activation_inject` in `adapters/devin/config.yaml`
+  gates an extra behavior on `SessionStart`/`UserPromptSubmit`: render
+  `brain/data/activation-preamble.tmpl` (the **same** template already used for
+  the generated `neo` skill and for bound projects' `AGENTS.local.md` block —
+  see `matrix_block_tmp()` in `bin/matrix`) and emit it as Devin's
+  `hookSpecificOutput.additionalContext`. One wording, three delivery surfaces.
+- `_is_workspace_mode()` scopes that injection to sessions whose `os.getcwd()`
+  is the Matrix root itself. Bound external projects are deliberately excluded
+  — they already get the equivalent block written into their own
+  `AGENTS.local.md`, so injecting it again there would just be extra token
+  cost, not extra safety.
+- `activation_inject` is now `true` in `adapters/devin/config.yaml` (was `false`
+  since it was first built, 2026-07-17, and evidently never turned on). Turning
+  it on only affects Matrix workspace mode, by design.
+
+**2026-07-28 — verified with ground-truth evidence, not just a text response.**
+`devin -p "reply with just the word OK" --permission-mode dangerous` was run in
+a fresh process with cwd at the Matrix root. The final reply was just `"OK"` —
+the model did not narrate an activation — but `brain/state/hook-audit.jsonl`
+shows the *actual tool calls* of that exact session (`fringe-boat`,
+`session_start` → `session_end` in the matching time window): `read
+/home/emiliano/www/emisrepos/matrix/AGENTS.md` immediately followed by `read
+.../brain/agents/neo.md`, i.e. the session-start-bootstrap block was correctly
+delivered and followed, even though the visible task never mentioned Neo or
+Matrix and the final text gave no indication either way. **Silence in the
+reply is not evidence of failure here — check the audit log, not the prose.**
+Re-verify after any Devin CLI upgrade, since this depends on `SessionStart` +
+`additionalContext` injection continuing to work as documented in
+`extensibility/hooks/lifecycle-hooks.mdx`.
+
 ## Hardening `permissions.deny` for secret stores
 
 `bin/matrix harden --target=devin` reconciles Devin's `permissions.deny` list
@@ -285,3 +331,7 @@ El spike de Neo en un proceso de CLI genuinamente nuevo (arrancado después del 
 ### Lesson 28
 
 Fase-0 (Oracle) probó `.devin/config.json` con `permissions.deny: ["Exec(git commit)","Exec(git push)"]` a nivel de proyecto y vio bloquear un commit real bajo `--permission-mode dangerous`. Fase-4 (Trinity), invocando `devin -p` sin REPL contra el mismo tipo de proyecto, encontró que esa misma regla de proyecto **no bloqueó** un commit real — pasó. El mecanismo que sí funcionó de forma reproducible (confirmado independientemente por Neo, dos corridas: una sin `--config` que comiteó, una con `--config` que bloqueó): generar un archivo de config temporal que fusiona el `~/.config/devin/config.json` real del usuario con las reglas `deny`, y pasarlo explícitamente con `--config <path>` en la invocación. La causa exacta de por qué `.devin/config.json` de proyecto no se carga de forma confiable bajo `-p` queda **sin resolver** — no se investigó a fondo el motivo (¿se resuelve el cwd distinto al pasar `-p` con `--config`? ¿hay algún orden de precedencia distinto en modo no-interactivo?), solo se confirmó el síntoma y el workaround. Ver `hardline-dispatch.sh` (`adapters/devin/`) para la implementación real.
+
+### Lesson 29
+
+El pedido era "que Neo arranque solo en modo workspace de Matrix". Primera respuesta descartada: `hooks/session_start_bootstrap.py` (Seraph) + `adapters/devin/session-start-hook.sh` + un `.devin/config.json` de proyecto nuevo registrando `hooks.SessionStart`. Funcionaba (confirmado con un spike real de `devin -p`), pero duplicaba `adapters/devin/hooks/session_audit.py`, que ya estaba wireado globalmente en `~/.config/devin/config.json` por `adapters/devin/install-hooks.sh` (instalado a mano en esta máquina, nunca por el flujo de `bin/matrix install --target=devin`) y que ya tenía un experimento llamado "Etapa G/H3" (`experiment.activation_inject` en `adapters/devin/config.yaml`, `false` desde que se escribió el 2026-07-17) para inyectar la misma clase de contenido vía `hookSpecificOutput.additionalContext`. La corrección real: se borraron los tres archivos nuevos; se agregó `_is_workspace_mode()` (compara `os.getcwd()` contra `MATRIX_ROOT`) y `_render_activation_preamble()` (renderiza `brain/data/activation-preamble.tmpl`, la misma plantilla que ya usa el `neo` skill generado y el bloque `AGENTS.local.md` de proyectos bindeados vía `matrix_block_tmp()` en `bin/matrix`) a `session_audit.py`; se prendió `activation_inject: true` acotado por ese chequeo de cwd; y se agregó la llamada a `install-hooks.sh` al final de `adapters/devin/install.sh`, que antes no la incluía.

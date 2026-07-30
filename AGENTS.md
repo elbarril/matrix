@@ -141,6 +141,7 @@ model_policy: <cheap|reasoning|auto>   # The Construct uses this
 
 ## 6. Activation pattern (every agent)
 
+0. **Matrix workspace mode is not optional to enter.** If the session's working directory resolves to the Matrix root itself (no external project bound), becoming Neo is the mandatory first action of the session — before judging whether the visible request looks Matrix-related, and regardless of whether the user explicitly invoked Neo. The whole harness exists to modify itself here; there is no other codebase in scope. This is delivered the same way bound external projects already get it — a rendering of the single `brain/data/activation-preamble.tmpl` source — so it does not depend on topic-matching heuristics alone; the current adapter's own doc at the repo root names the exact delivery mechanism it uses for this repo vs. for a bound project.
 1. **Load configuration** — `_brain`-aware: `_brain/config.yaml` first, fallback `brain/config.yaml`.
 2. **Resolve root & mode** — if cwd is the Matrix root, enter **Matrix workspace mode** (skip project context; route system work). Otherwise read the active project.
 3. **Review state** — last 3 checkpoints + `brain/data/lessons.md` (+ scoped lessons if a project is bound).
@@ -251,7 +252,7 @@ Enforcement & adapters:
   phase close '<json>'    Run the validate_phase_close gate and persist the verdict
                           (PASS or BLOCK) to the Link ledger; exits non-zero on BLOCK
   hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close,
-                          post_run_audit, the_source)
+                          post_run_audit, the_source, session_start_bootstrap)
   build --target=<cli>    Trainman: generate native artifacts for a CLI
   install --target=<cli>  Trainman: deploy generated artifacts into the CLI's discovery path
   harden --target=<cli>   Reconcile permissions.deny with secret-deny config (dry-run;

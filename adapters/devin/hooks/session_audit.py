@@ -130,15 +130,33 @@ def _activation_inject_enabled():
     return bool(cfg.get("experiment", {}).get("activation_inject", False))
 
 
-def _load_activation_block(root):
-    """Extract the <activation> block from neo.md as plain text."""
-    path = os.path.join(root, "brain", "agents", "neo.md")
-    if not os.path.isfile(path):
+def _is_workspace_mode(root):
+    """True when this session's cwd is the Matrix root itself (AGENTS.md §6
+    step 0: "Matrix workspace mode", no external project bound). Devin runs
+    hook commands as a child process of the session, so os.getcwd() here is
+    the session's own cwd, not this script's location — confirmed live
+    (2026-07-28) by a temporary debug spike that logged os.getcwd() during a
+    real `devin -p` run started with cwd at the Matrix root.
+    """
+    cwd = os.path.abspath(os.getcwd())
+    root = os.path.abspath(root)
+    return cwd == root or cwd.startswith(root + os.sep)
+
+
+def _render_activation_preamble(root):
+    """Render brain/data/activation-preamble.tmpl — the single source of truth
+    also used by the generated neo SKILL.md and by AGENTS.local.md's bound-project
+    block (see bin/matrix matrix_block_tmp()). Reusing it here means workspace-mode
+    injection, the Neo skill, and bound-project binding all carry one wording."""
+    tmpl_path = os.path.join(root, "brain", "data", "activation-preamble.tmpl")
+    if not os.path.isfile(tmpl_path):
         return ""
-    with open(path, encoding="utf-8") as fh:
+    with open(tmpl_path, encoding="utf-8") as fh:
         text = fh.read()
-    m = re.search(r"<activation>(.*?)</activation>", text, re.DOTALL)
-    return m.group(1).strip() if m else ""
+    contract_path = os.path.join(root, "AGENTS.md")
+    neo_path = os.path.join(root, "brain", "agents", "neo.md")
+    text = text.replace("{{CONTRACT_PATH}}", contract_path).replace("{{NEO_AGENT_PATH}}", neo_path)
+    return text.strip()
 
 
 SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
@@ -415,17 +433,22 @@ def main():
     if event == "session_end":
         _run_session_close(session_id)
 
-    # Etapa G / H3 experiment: optionally inject the neo.md <activation>
-    # block into SessionStart / UserPromptSubmit via hookSpecificOutput.
-    if _activation_inject_enabled() and event in ("session_start", "user_prompt_submit"):
-        block = _load_activation_block(ROOT)
-        if block:
+    # Etapa G / H3: inject the activation-preamble.tmpl wording into
+    # SessionStart / UserPromptSubmit via hookSpecificOutput, but ONLY in
+    # Matrix workspace mode (AGENTS.md §6 step 0). Bound external projects
+    # already get the equivalent, proven-working block written into their own
+    # AGENTS.local.md by `bin/matrix select` (see matrix_block_tmp() in
+    # bin/matrix) — injecting it again here for every project on the machine
+    # would be redundant token cost, not extra safety, so this stays scoped.
+    if _activation_inject_enabled() and _is_workspace_mode(ROOT) and event in ("session_start", "user_prompt_submit"):
+        preamble = _render_activation_preamble(ROOT)
+        if preamble:
             print(
                 json.dumps(
                     {
                         "hookSpecificOutput": {
                             "hookEventName": event_name,
-                            "additionalContext": block,
+                            "additionalContext": preamble,
                         }
                     },
                     ensure_ascii=False,
