@@ -154,8 +154,7 @@ work <name>               Warm a project into the active set (bookmark; does not
                            create the _brain symlink and does not unbind anything)
 unwork <name>             Remove a project from the warm set; if it was bound,
                            unbind it first
-workspace                 Show the warm set, marking which entries are [bound]
-bindings                  List every registered project, verifying in real time
+bindings [--warm-only]    List every registered project, verifying in real time
                            whether its _brain symlink + AGENTS.local.md block
                            actually exist on disk right now
 status [--all]            Show primary/default, bound count+names, warm count,
@@ -225,7 +224,7 @@ Ahora podés abrir Devin CLI dentro de `sitio-web/` y dentro de `api-backend/` (
 # Or just warm several projects as bookmarks, without binding them
 ./bin/matrix work myproject
 ./bin/matrix work otherproject
-./bin/matrix workspace
+./bin/matrix bindings --warm-only
 
 # Generate native artifacts and deploy them into Devin's global discovery path
 ./bin/matrix build   --target=devin
@@ -237,7 +236,7 @@ Ahora podés abrir Devin CLI dentro de `sitio-web/` y dentro de `api-backend/` (
 
 - **Un solo proyecto, uso normal:** `matrix select <proyecto>` una vez; después simplemente abrís Devin CLI dentro de esa carpeta cuando quieras trabajar — Neo se activa solo. No hace falta re-seleccionar nada en cada sesión.
 - **Cambiar de foco sin perder el anterior:** `matrix select <otro-proyecto>` no rompe el binding del proyecto anterior — solo cambia cuál es el `primary`/default. Si querés desactivar explícitamente uno, usá `matrix deselect <nombre>`.
-- **Ver qué está pasando:** `matrix status` (resumen general), `matrix bindings` (verificación real en disco de cuáles proyectos tienen Neo activo ahora), `matrix workspace` (lista de bookmarks/warm), `matrix list` (todos los proyectos conocidos).
+- **Ver qué está pasando:** `matrix status` (resumen general), `matrix bindings` (verificación real en disco de cuáles proyectos tienen Neo activo ahora; `--warm-only` para la lista de bookmarks/warm), `matrix list` (todos los proyectos conocidos).
 - **Dejar una nota para la próxima sesión:** `matrix checkpoint "lo que hice y lo que falta"`. Neo también lo hace automáticamente en hitos importantes.
 - **Trabajar en el propio Matrix (no en un proyecto):** parate en la raíz de este repo y hablale a Neo directamente — entra en "Matrix workspace mode" (sin proyecto bindeado, trabajando sobre el sistema mismo).
 

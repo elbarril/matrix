@@ -1,8 +1,11 @@
 experiment:
-  # 2026-07-28: enabled, scoped to Matrix workspace mode only (see
-  # adapters/devin/hooks/session_audit.py's _is_workspace_mode()). Bound
-  # external projects are unaffected — they already get the equivalent
-  # block in their own AGENTS.local.md via `bin/matrix select`.
+  # 2026-07-28: enabled. Extended by B1-Option 1 (post-audit backlog, see
+  # brain/output/architecture/matrix-system-health-audit.md): reinjection now
+  # fires in Matrix workspace mode AND for a real bound external project (see
+  # adapters/devin/hooks/session_audit.py's _activation_reinject_scope()),
+  # not workspace-only — the one-shot AGENTS.local.md block written by
+  # `bin/matrix select` is not enough on its own once the session's context
+  # window moves past it.
   activation_inject: true
 
 secret_deny:

@@ -20,6 +20,7 @@ Input (argv[1] or stdin):
 import datetime
 import json
 import os
+import subprocess
 
 from _common import emit, read_input, resolve_root
 
@@ -78,6 +79,31 @@ def _record_attempt(attempt_path, session_id):
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def _run_validate_routing_signal(root, session_id):
+    """Best-effort routing-signal validation for the orphan before it is closed."""
+    try:
+        bin_matrix = os.path.join(root, "bin", "matrix")
+        env = {**os.environ, "MATRIX_ROOT": root}
+        proc = subprocess.run(
+            [bin_matrix, "hooks", "validate_routing_signal", json.dumps({"session_id": session_id})],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            stdin=subprocess.DEVNULL,
+        )
+        result = {}
+        if proc.stdout:
+            try:
+                result = json.loads(proc.stdout)
+            except ValueError:
+                pass
+        return result
+    except Exception as e:
+        print(f"[detect_orphan_session] validate_routing_signal failed: {e}", file=sys.stderr)
+        return None
+
+
 def main():
     data = read_input()
     root = resolve_root()
@@ -134,12 +160,15 @@ def main():
         candidates.append((last_ts, sid))
 
     orphan_session_id = None
+    validate_report = None
     if candidates:
         # Promote the stalest orphan first; leave others unmarked so a future
         # session_start can pick them up without redundant attempts.
         candidates.sort(key=lambda x: x[0])
         orphan_session_id = candidates[0][1]
         _record_attempt(attempt_path, orphan_session_id)
+        # Validate routing signal for the orphan before the async close runs.
+        validate_report = _run_validate_routing_signal(root, orphan_session_id)
 
     emit(
         {
@@ -148,6 +177,7 @@ def main():
             "orphan_session_id": orphan_session_id,
             "project_active": project_active,
             "candidates_found": len(candidates),
+            "validate_routing_signal": validate_report,
         }
     )
 

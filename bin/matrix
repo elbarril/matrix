@@ -118,7 +118,6 @@ init_state() {
 # Matrix Workspace State — the SET of warm projects (multi-project)
 active_projects: []
 last_updated: null
-system_status: "initialized"
 EOF
 }
 
@@ -675,13 +674,18 @@ show_workspace() {
 
 # --- Status -----------------------------------------------------------------
 show_bindings() {
-    local json=false arg
+    local json=false warm_only=false arg
     for arg in "$@"; do
         case "$arg" in
             --json) json=true ;;
+            --warm-only) warm_only=true ;;
             *) log_error "Unknown flag '$arg'"; return 1 ;;
         esac
     done
+    if $warm_only; then
+        show_workspace
+        return
+    fi
     local projects; projects="$(jq -r '.projects[] | "\(.name)\t\(.path)\t\(.type)"' "$REGISTRY_FILE" 2>/dev/null)"
     [[ -z "$projects" ]] && { if $json; then echo '[]'; else echo "  (none registered)"; fi; return; }
     if $json; then
@@ -853,6 +857,21 @@ run_hook() {
     local hook="$HOOKS_DIR/$name.py"
     [[ -f "$hook" ]] || { log_error "Hook '$name' not found at $hook"; return 1; }
     MATRIX_ROOT="$MATRIX_DIR" python3 "$hook" "$@"
+}
+
+# Gate: Layer-2 CLI-neutrality must pass before any Trainman build/install.
+require_layer2_clean() {
+    local out rc=0
+    out="$(run_hook validate_layer2 2>&1)" || rc=$?
+    local ok
+    ok="$(printf '%s' "$out" | jq -r '.ok // false' 2>/dev/null || echo false)"
+    if [[ "$ok" != "true" ]]; then
+        log_error "Layer-2 CLI-neutrality gate BLOCKED. Fix the following violations before build/install:"
+        printf '%s\n' "$out" | jq -r '(.errors // [])[]' 2>/dev/null | while IFS= read -r err; do
+            [[ -n "$err" ]] && log_error "  - $err"
+        done
+        return 1
+    fi
 }
 
 # --- Phase close (Seraph verdict → Link ledger) -----------------------------
@@ -1230,6 +1249,7 @@ build_target() {
         esac
     done
     [[ -z "$target" ]] && { log_error "Usage: matrix build --target=<cli> [--template=<name>]"; return 1; }
+    require_layer2_clean || return 1
     local builder="$MATRIX_DIR/adapters/$target/build.sh"
     [[ -x "$builder" ]] || { log_warning "Trainman: no adapter builder at $builder (not implemented yet for '$target')."; return 1; }
 
@@ -1278,6 +1298,7 @@ install_target() {
     local target=""
     for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}";; esac; done
     [[ -z "$target" ]] && { log_error "Usage: matrix install --target=<cli>"; return 1; }
+    require_layer2_clean || return 1
     local installer="$MATRIX_DIR/adapters/$target/install.sh"
     if [[ -x "$installer" ]]; then
         log_info "Trainman: installing artifacts for '$target' into the discovery path..."
@@ -1383,7 +1404,7 @@ link_cmd() {
 }
 
 ship_cmd() {
-    local subcmd="${1:-}" name="${2:-}"
+    local subcmd="${1:-}"
     case "$subcmd" in
         list)
             local ship_dir
@@ -1397,15 +1418,8 @@ ship_cmd() {
                 echo "  $ship_name — captain: $captain | crew: $crew"
             done
             ;;
-        validate)
-            if [[ "$name" == "--all" || -z "$name" ]]; then
-                run_hook validate_ship '{"ship":"*"}'
-            else
-                run_hook validate_ship "{\"ship\":\"$name\"}"
-            fi
-            ;;
         *)
-            log_error "Usage: matrix ship list | matrix ship validate [<name>|--all]"
+            log_error "Usage: matrix ship list"
             return 1
             ;;
     esac
@@ -1423,12 +1437,12 @@ Projects:
   remove <name>           Remove an unbound, non-warm project from the registry
   select <name> [--target=<cli>]    Set primary active project + create adapter binding
   deselect [name] [--target=<cli>] Remove an adapter binding (defaults to primary/stored target)
-  bindings                Show bound status for all registered projects
+  bindings [--warm-only]  Show bound status for all registered projects (--warm-only for warm set)
+  scope                   Print "<mode>\t<project>\t<detail>" for cwd (resolve_scope; used by adapters)
 
 Multi-project (warm set):
   work <name>             Warm a project into the active set
   unwork <name>           Remove a project from the active set
-  workspace               Show the warm project set
 
 State & telemetry:
   status [--all]          Show current Matrix status (checkpoints/Link scoped to the
@@ -1440,7 +1454,6 @@ State & telemetry:
 Link ledger & fleet:
   link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event and echo the ref
   ship list                                         List discovered federated ships
-  ship validate [<name>|--all]                      Validate a ship manifest (or all ships)
 
 Hardline:
   hardline dispatch <project> "<line>"  Validate, queue, and acquire the project's dispatch lane
@@ -1492,8 +1505,8 @@ main() {
                 deselect)   shift; deselect_project "$@" ;;
                 work)       work_project "${2:-}" ;;
                 unwork)     unwork_project "${2:-}" ;;
-                workspace)  show_workspace ;;
                 bindings)   shift; show_bindings "$@" ;;
+                scope)      resolve_scope ;;
                 status)     shift; show_status "$@" ;;
                 checkpoint) write_checkpoint "${2:-}" ;;
                 activity)   shift; show_activity "$@" ;;

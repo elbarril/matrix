@@ -583,7 +583,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <div class="grid">
   <div class="card">
     <h3><span class="tag tag-infra">HOOKS</span> Seraph</h3>
-    <p>Enforcement portable: 7 hooks en Python con contrato JSON in/out. Detectan bypass y validan compliance. Ver <a href="#enforcement">&sect;7</a> para la lista canonica.</p>
+    <p>Enforcement portable: 11 hooks en Python con contrato JSON in/out. Detectan bypass y validan compliance. Ver <a href="#enforcement">&sect;7</a> para la lista canonica.</p>
   </div>
   <div class="card">
     <h3><span class="tag tag-infra">LEDGER</span> Link</h3>
@@ -629,7 +629,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <tr><td><code>matrix add &lt;name&gt; [path] [--replace]</code></td><td>Registra un proyecto (sin path usa el dir actual; <code>--replace</code> actualiza uno existente)</td></tr>
     <tr><td><code>matrix select &lt;name&gt;</code></td><td>Setea el proyecto primario activo + crea symlink <code>_brain</code></td></tr>
     <tr><td><code>matrix deselect [name]</code></td><td>Quita el binding del proyecto nombrado (o del primario si no se da nombre); otros proyectos bound quedan intactos</td></tr>
-    <tr><td><code>matrix bindings</code></td><td>Lista los proyectos bound, verificando el estado real de su symlink <code>_brain</code> y bloque <code>AGENTS.local.md</code></td></tr>
+    <tr><td><code>matrix bindings [--warm-only]</code></td><td>Lista los proyectos bound, verificando el estado real de su symlink <code>_brain</code> y bloque <code>AGENTS.local.md</code>. <code>--warm-only</code> muestra solo el set caliente</td></tr>
   </table>
 </details>
 
@@ -639,7 +639,6 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <tr><th>Comando</th><th>Que hace</th></tr>
     <tr><td><code>matrix work &lt;name&gt;</code></td><td>Agrega un proyecto al set caliente</td></tr>
     <tr><td><code>matrix unwork &lt;name&gt;</code></td><td>Saca un proyecto del set caliente</td></tr>
-    <tr><td><code>matrix workspace</code></td><td>Muestra el set caliente actual</td></tr>
   </table>
 </details>
 
@@ -660,7 +659,6 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <tr><th>Comando</th><th>Que hace</th></tr>
     <tr><td><code>matrix link &lt;event&gt; &lt;subject&gt; [--ref=&lt;id&gt;] [detail...]</code></td><td>Append-only: escribe un evento namespaced en el ledger Link e imprime el <code>ref</code> para propagarlo</td></tr>
     <tr><td><code>matrix ship list</code></td><td>Lista las naves federadas descubiertas</td></tr>
-    <tr><td><code>matrix ship validate [&lt;nombre&gt;|--all]</code></td><td>Valida el manifest de una nave (o todas)</td></tr>
   </table>
 </details>
 
@@ -706,7 +704,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 # 4. (Opcional) Calentar multiples proyectos
 ./bin/matrix work mi-proyecto
 ./bin/matrix work otro-proyecto
-./bin/matrix workspace
+./bin/matrix bindings --warm-only
 
 # 5. Generar artefactos nativos y desplegarlos globalmente (Devin)
 ./bin/matrix build   --target=devin
@@ -729,7 +727,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <p>Hooks portables en <code>hooks/</code>, Python/bash con contrato JSON in/out. Se corren via <code>bin/matrix hooks &lt;nombre&gt;</code>.</p>
 
 <details>
-  <summary>Tabla de hooks (7 hooks)</summary>
+  <summary>Tabla de hooks (11 hooks)</summary>
   <table>
     <tr><th>Hook</th><th>Que hace</th><th>Cuando</th></tr>
     <tr>

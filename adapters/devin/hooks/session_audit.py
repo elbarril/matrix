@@ -5,6 +5,7 @@ Reads a Devin lifecycle-event JSON from stdin, extracts only metadata, runs
 pre_activation_check on session_start, and forwards a generic envelope to the
 Layer 1 portable hook hooks/audit_event.py via bin/matrix.
 """
+import datetime
 import json
 import os
 import re
@@ -37,6 +38,13 @@ SESSION_ID_KEYS = ("session_id", "sessionId", "session")
 # 2026-07-17 — "read", not "read_file"; "write" added for the same reason:
 # knowing WHICH files Neo reads/writes is structural metadata, not content.
 STRUCTURAL_TOOLS = {"read", "edit", "multi_edit", "write"}
+
+# B2: run validate_routing_signal every N post_tool_use events for a session.
+ROUTING_SIGNAL_INTERVAL = 20
+
+# B3: nudge after this many mutating operations without a phase_close.
+MUTANT_WORK_THRESHOLD = 16
+MUTANT_WORK_TOOLS = {"write", "edit", "multi_edit", "run_command", "run-command", "exec"}
 
 
 def _load_context(root):
@@ -141,6 +149,45 @@ def _is_workspace_mode(root):
     cwd = os.path.abspath(os.getcwd())
     root = os.path.abspath(root)
     return cwd == root or cwd.startswith(root + os.sep)
+
+
+def _activation_reinject_scope():
+    """Return True when this session's cwd is either Matrix workspace mode or a
+    real bound project (valid `_brain` symlink to this root + AGENTS.local.md
+    managed block) — the two cases where per-turn activation reinjection should
+    fire (B1-Option 1, matrix-system-health-audit.md).
+
+    Reuses `bin/matrix scope`, a thin wrapper around resolve_scope() — the
+    single existing "where am I?" resolver (innermost-root-wins walk from cwd)
+    already used by show_status/checkpoints/ledger. This intentionally calls
+    into bash instead of re-implementing the walk-up + `_brain`/AGENTS.local.md
+    validity check in Python: that logic already has one bash owner
+    (resolve_scope/path_is_bound in bin/matrix) and a documented no-duplicate
+    rule (see resolve_bound_target()'s docstring in hooks/_common.py) — adding
+    a second, divergence-prone copy here would violate it. Falls back to
+    workspace-only behavior (the old, narrower condition) if the subprocess
+    call fails for any reason, so a broken `bin/matrix` never widens injection
+    beyond what was already proven safe.
+    """
+    try:
+        proc = subprocess.run(
+            [BIN_MATRIX, "scope"],
+            env={**os.environ, "MATRIX_ROOT": ROOT},
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+        line = (proc.stdout or "").splitlines()[0] if proc.stdout else ""
+        mode = line.split("\t", 1)[0].strip()
+        # "bound-unregistered" is still a real, working binding (valid _brain +
+        # managed AGENTS.local.md) — see resolve_scope()'s own comment in
+        # bin/matrix; only "broken" and "none" (and any unexpected output)
+        # must NOT reinject.
+        return mode in ("workspace", "bound", "bound-unregistered")
+    except Exception as e:
+        print(f"[session_audit] scope resolution failed: {e}", file=sys.stderr)
+        return _is_workspace_mode(ROOT)
 
 
 def _render_activation_preamble(root):
@@ -416,6 +463,154 @@ def _run_session_close_async(session_id):
         )
 
 
+def _run_validate_routing_signal(session_id):
+    """Best-effort routing signal validation; never blocks the session."""
+    try:
+        env = {**os.environ, "MATRIX_ROOT": ROOT}
+        proc = subprocess.run(
+            [BIN_MATRIX, "hooks", "validate_routing_signal", json.dumps({"session_id": session_id})],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            stdin=subprocess.DEVNULL,
+        )
+        result = {}
+        if proc.stdout:
+            try:
+                result = json.loads(proc.stdout)
+            except ValueError:
+                pass
+        return result
+    except Exception as e:
+        print(f"[session_audit] validate_routing_signal failed: {e}", file=sys.stderr)
+        return None
+
+
+def _post_tool_use_count(root, session_id):
+    """Count post_tool_use audit entries for this session."""
+    path = os.path.join(root, "brain", "state", "hook-audit.jsonl")
+    if not os.path.isfile(path):
+        return 0
+    count = 0
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if entry.get("session_id") == session_id and entry.get("event") == "post_tool_use":
+                count += 1
+    return count
+
+
+def _parse_iso_ts(ts):
+    if not ts:
+        return None
+    ts = ts.strip()
+    if ts.endswith("Z"):
+        ts = ts[:-1] + "+00:00"
+    try:
+        return datetime.datetime.fromisoformat(ts)
+    except ValueError:
+        return None
+
+
+def _mutating_since_phase_close(root, session_id):
+    """Return (count, last_phase_close_ts_str) of mutating work since the last
+    phase_close (or session_start) for this session.
+    """
+    path = os.path.join(root, "brain", "state", "hook-audit.jsonl")
+    if not os.path.isfile(path):
+        return 0, None
+
+    last_phase_close_ts = None
+    earliest_session_start_ts = None
+    entries = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if entry.get("session_id") != session_id:
+                continue
+            entries.append(entry)
+            ev = entry.get("event")
+            if ev in ("phase_close", "phase_close_blocked"):
+                last_phase_close_ts = entry.get("timestamp")
+            if ev == "session_start":
+                ts = _parse_iso_ts(entry.get("timestamp"))
+                if ts and (earliest_session_start_ts is None or ts < earliest_session_start_ts):
+                    earliest_session_start_ts = ts
+
+    cutoff = _parse_iso_ts(last_phase_close_ts) if last_phase_close_ts else earliest_session_start_ts
+    count = 0
+    for entry in entries:
+        if entry.get("event") != "post_tool_use":
+            continue
+        if entry.get("tool_name") not in MUTANT_WORK_TOOLS:
+            continue
+        ts = _parse_iso_ts(entry.get("timestamp"))
+        if cutoff and ts and ts <= cutoff:
+            continue
+        count += 1
+    return count, last_phase_close_ts
+
+
+def _nudge_marker_path(root, session_id):
+    return os.path.join(root, "brain", "state", "sessions", f"{session_id}-phase-close-nudge.json")
+
+
+def _already_nudged_for_window(root, session_id, phase_close_ts):
+    """A nudge was already sent for the current phase_close window."""
+    path = _nudge_marker_path(root, session_id)
+    if not os.path.isfile(path):
+        return False
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data.get("phase_close_ts") == phase_close_ts
+    except Exception:
+        return False
+
+
+def _record_nudge(root, session_id, phase_close_ts, count):
+    path = _nudge_marker_path(root, session_id)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data = {
+        "nudged_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "phase_close_ts": phase_close_ts,
+        "mutating_count": count,
+    }
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def _b3_nudge_text(root, session_id):
+    """Return a non-blocking phase_close nudge if the threshold is crossed."""
+    count, last_phase_close_ts = _mutating_since_phase_close(root, session_id)
+    if count < MUTANT_WORK_THRESHOLD:
+        return None
+    if _already_nudged_for_window(root, session_id, last_phase_close_ts):
+        return None
+    _record_nudge(root, session_id, last_phase_close_ts, count)
+    return (
+        f"Reminder: this session has performed {count} mutating operation(s) "
+        f"since the last phase_close. Consider running `matrix phase close` "
+        "to checkpoint progress before continuing."
+    )
+
+
 def main():
     raw = ""
     if not sys.stdin.isatty():
@@ -487,30 +682,45 @@ def main():
 
     _call_audit_event(envelope)
 
+    # B2: periodic routing-signal validation every N post_tool_use events.
+    if event == "post_tool_use" and session_id:
+        if _post_tool_use_count(ROOT, session_id) % ROUTING_SIGNAL_INTERVAL == 0:
+            _run_validate_routing_signal(session_id)
+
     if event == "session_end":
         _run_session_close(session_id)
 
-    # Etapa G / H3: inject the activation-preamble.tmpl wording into
-    # SessionStart / UserPromptSubmit via hookSpecificOutput, but ONLY in
-    # Matrix workspace mode (AGENTS.md §6 step 0). Bound external projects
-    # already get the equivalent, proven-working block written into their own
-    # AGENTS.local.md by `bin/matrix select` (see matrix_block_tmp() in
-    # bin/matrix) — injecting it again here for every project on the machine
-    # would be redundant token cost, not extra safety, so this stays scoped.
-    if _activation_inject_enabled() and _is_workspace_mode(ROOT) and event in ("session_start", "user_prompt_submit"):
+    # Build hookSpecificOutput.additionalContext. B1 (activation reinjection) and
+    # B3 (phase_close nudge) are independent mechanisms but share this channel.
+    # When both fire in the same turn their texts are concatenated with a blank
+    # line; neither suppresses the other. This keeps B3 usable even if the
+    # activation_inject experiment is later disabled.
+    contexts = []
+
+    # B1: reinject activation preamble on session_start / user_prompt_submit.
+    if _activation_inject_enabled() and _activation_reinject_scope() and event in ("session_start", "user_prompt_submit"):
         preamble = _render_activation_preamble(ROOT)
         if preamble:
-            print(
-                json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": event_name,
-                            "additionalContext": preamble,
-                        }
-                    },
-                    ensure_ascii=False,
-                )
+            contexts.append(preamble)
+
+    # B3: nudge when mutating work since the last phase_close exceeds threshold.
+    if event == "user_prompt_submit" and session_id:
+        nudge = _b3_nudge_text(ROOT, session_id)
+        if nudge:
+            contexts.append(nudge)
+
+    if contexts:
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": event_name,
+                        "additionalContext": "\n\n".join(contexts),
+                    }
+                },
+                ensure_ascii=False,
             )
+        )
 
     # Never block the user's Devin session; this is ground-truth logging only.
     sys.exit(0)

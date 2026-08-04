@@ -203,18 +203,37 @@ def _prior_trigger_count(path):
     return count
 
 
+def _session_in_history(path, session_id):
+    """Return True if this session already has a trigger record."""
+    if not os.path.isfile(path):
+        return False
+    for record in _read_jsonl(path):
+        if record.get("session_id") == session_id and record.get("triggered"):
+            return True
+    return False
+
+
 def _record_trigger(path, session_id, triggered):
-    """Append a trigger record if this session produced the signal."""
+    """Append a trigger record if this session produced the signal.
+
+    Dedupes by session_id so periodic/orphan/session_close runs do not
+    write duplicate history lines for the same session.
+    """
     if not triggered:
         return
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if _session_in_history(path, session_id):
+        return
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "session_id": session_id,
         "triggered": True,
     }
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 def validate(data):

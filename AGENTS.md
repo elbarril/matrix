@@ -210,55 +210,7 @@ A subsystem is a **ship**: its own master, roster, and `AGENTS.md` under `brain/
 
 ## 11. CLI commands (`bin/matrix`)
 
-```text
-Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
-
-Usage: matrix <command> [args]
-
-Projects:
-  list                    List all registered projects
-  add <name> [path] [--replace]  Register a project (path optional → current dir; --replace updates existing)
-  remove <name>           Remove an unbound, non-warm project from the registry
-  select <name>           Set primary active project + create _brain symlink
-  deselect [name]         Remove binding for a project (defaults to primary)
-  bindings                Show bound status for all registered projects
-
-Multi-project (warm set):
-  work <name>             Warm a project into the active set
-  unwork <name>           Remove a project from the active set
-  workspace               Show the warm project set
-
-State & telemetry:
-  status [--all]          Show current Matrix status (checkpoints/Link scoped to the
-                          resolved project by default; --all for the unfiltered view)
-  checkpoint "<note>"     Write a timestamped checkpoint (+ Link entry)
-  activity [n] [--all] [--project=<name>]  Show last n Link ledger events, scoped to
-                          the resolved project by default (default n=20)
-
-Link ledger & fleet:
-  link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event and echo the ref
-  ship list                                         List discovered federated ships
-  ship validate [<name>|--all]                      Validate a ship manifest (or all ships)
-
-Retrospectivas (adapter-specific, see the current adapter's own reference doc at the repo root):
-  session-find <cwd> [YYYY-MM-DD]  Busca sesiones pasadas (consulta read-only)
-  session-dump <id> [--from HH:MM] [--to HH:MM] [--full]  Reconstruye una sesión pasada (read-only)
-  session-cost [cwd] [YYYY-MM-DD]  Muestra duración, ACU y crédito por sesión (read-only)
-  session-subagents <id>  Muestra duración de invocaciones de subagentes (read-only)
-  session-report [cwd] [YYYY-MM-DD] [--out PATH] [--limit N]  Genera reporte HTML estático
-  session close '[<json>]'  Run the session_close hook and persist a session:close entry to the Link ledger
-
-Enforcement & adapters:
-  phase close '<json>'    Run the validate_phase_close gate and persist the verdict
-                          (PASS or BLOCK) to the Link ledger; exits non-zero on BLOCK
-  hooks <name> [json]     Run a Seraph hook (pre_activation_check, validate_phase_close,
-                          post_run_audit, the_source, session_start_bootstrap)
-  build --target=<cli>    Trainman: generate native artifacts for a CLI
-  install --target=<cli>  Trainman: deploy generated artifacts into the CLI's discovery path
-  harden --target=<cli>   Reconcile permissions.deny with secret-deny config (dry-run;
-                          use --apply to write, --revert to undo Matrix-managed entries)
-  help                    Show this help
-```
+The full, always-current command list lives in the code, not here — run `bin/matrix help` (or `bin/matrix` with no args) for the live list of subcommands and their usage. This section used to carry a second, hand-maintained copy of that same text; it drifted out of sync with the real dispatcher more than once (confirmed drift: this copy was missing hooks/subcommands that `show_help()` already had). Keeping a single source of truth here follows the same indirection pattern `brain/data/activation-preamble.tmpl` already uses correctly — a pointer, not a copy.
 
 ---
 

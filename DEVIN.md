@@ -139,14 +139,23 @@ a new one — see `brain/data/lessons.md`.)
   the generated `neo` skill and for bound projects' `AGENTS.local.md` block —
   see `matrix_block_tmp()` in `bin/matrix`) and emit it as Devin's
   `hookSpecificOutput.additionalContext`. One wording, three delivery surfaces.
-- `_is_workspace_mode()` scopes that injection to sessions whose `os.getcwd()`
-  is the Matrix root itself. Bound external projects are deliberately excluded
-  — they already get the equivalent block written into their own
-  `AGENTS.local.md`, so injecting it again there would just be extra token
-  cost, not extra safety.
+- `_activation_reinject_scope()` (added under B1-Option 1, post-audit backlog —
+  see `brain/output/architecture/matrix-system-health-audit.md`) scopes that
+  injection to sessions whose cwd resolves to Matrix workspace mode **or**
+  a real bound external project (valid `_brain` symlink + managed
+  `AGENTS.local.md` block), via `bin/matrix scope` — a thin wrapper around
+  the existing `resolve_scope()` "where am I?" resolver, reused instead of
+  re-implemented to avoid a second, divergence-prone copy of that logic in
+  Python. Bound projects were originally excluded on the theory that the
+  one-shot block written into their `AGENTS.local.md` by `bin/matrix select`
+  was enough; the audit measured the real symptom that assumption caused
+  (no delegation / no checkpoint discipline outside the Matrix root once a
+  session's context window pushed that one-shot block out), so reinjection
+  now also fires there, every `session_start` / `user_prompt_submit`, the
+  same way it already did for workspace mode.
 - `activation_inject` is now `true` in `adapters/devin/config.yaml` (was `false`
-  since it was first built, 2026-07-17, and evidently never turned on). Turning
-  it on only affects Matrix workspace mode, by design.
+  since it was first built, 2026-07-17, and evidently never turned on). It now
+  affects both Matrix workspace mode and bound external projects, by design.
 
 **2026-07-28 — verified with ground-truth evidence, not just a text response.**
 `devin -p "reply with just the word OK" --permission-mode dangerous` was run in
@@ -278,7 +287,7 @@ Resolution for the Devin adapter: a specialist that needs to ask the user stops 
 
 The Trainman resolves each agent's `model_policy` tier (`cheap`/`reasoning`/`auto`) through the adapter's `model_policy` map and writes the result as `model: <name>` in the generated `SKILL.md`/`AGENT.md` frontmatter (see `extensibility/skills` and `subagents` in the Devin CLI docs — both support a `model` override field). Re-run `bin/matrix build --target=devin && bin/matrix install --target=devin` after changing `adapters/devin/adapter.yaml`'s `model_policy` map for the change to take effect globally.
 
-## Lessons — adapter-specific detail
+## Lessons — detalle de adapter
 
 `brain/data/lessons.md` keeps the universal operable rule for each lesson below; this section carries the Devin/Claude-Code-specific narrative and citations that were split out of it during the `validate_layer2` remediation, cross-referenced by lesson number. No rule content was lost in the split — only the platform-specific evidence moved here.
 
@@ -420,3 +429,15 @@ sqlite3 sessions.db "DELETE FROM sessions WHERE id IS NULL;"
 Verificación E2E post-fix: `integrity_check` ok; `SELECT COUNT(*) FROM sessions WHERE id IS NULL` = 0; 0 filas con `typeof()` incorrecto en ninguna columna NOT NULL; lectura completa de las 644 filas restantes sin excepción; `session_query.py find` corrió limpio contra la base viva.
 
 *Nota operativa nueva (corrige/matiza la limitación de arriba):* este fix fue un `DELETE`/`UPDATE` **in-place** sobre el mismo archivo/inode que los procesos de Devin CLI ya tenían abierto (confirmado con `fuser sessions.db` antes y después: mismos 2 PIDs) — a diferencia del swap de archivo (`mv`) de la reparación original, un DML in-place en modo WAL sí es visible para procesos ya abiertos sin necesidad de reiniciarlos. La limitación de "hace falta reiniciar" aplica al **swap de archivo**, no a una corrección puntual de filas sobre el archivo ya vigente — para fixes chirúrgicos post-repair, preferí DML in-place por esta razón.
+
+### Lesson 37
+
+En Devin CLI, el archivo de estado local del proyecto es `.devin` (directorio `.devin/` en la raíz del proyecto). En `saintlukes`, el `.gitignore` del proyecto solo tenía `_brain`, `AGENTS.local.md` y `.devin`; faltaba `matrix-output/`, por lo que un artefacto de research escrito ahí corría riesgo real de ser trackeado en el repo del cliente.
+
+### Lesson 42
+
+El hook de auditoría de sesión que implementa los mecanismos de detección de sesiones huérfanas es `adapters/devin/hooks/session_audit.py`, wireado globalmente en `~/.config/devin/config.json` por `adapters/devin/install-hooks.sh`.
+
+### Saint Luke's
+
+La regla dura del usuario de `brain/data/lessons/saintlukes.md` surgió de una sesión con Devin CLI en la que el usuario compartía el working tree del proyecto `saintlukes` con ediciones manuales propias; dos cambios reales del usuario (`referrals/css/specifics.css` y el token `--t-tc--buttons--font--family` en `library__theme.css`) fueron revertidos por error al asumir que eran drift de un subagente.
