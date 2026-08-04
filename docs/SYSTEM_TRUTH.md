@@ -32,6 +32,7 @@
 - `validate_layer2`
 - `validate_lessons`
 - `validate_phase_close`
+- `validate_routing_signal`
 - `validate_ship`
 
 ## Layers
