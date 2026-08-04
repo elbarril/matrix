@@ -12,7 +12,7 @@ Usage:
 
 import os
 
-from _common import emit, read_input, resolve_root
+from _common import emit, gitignore_drift, read_input, resolve_root
 
 try:
     from validate_ship import validate as validate_ship
@@ -20,6 +20,14 @@ except Exception:
     validate_ship = None
 
 ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith", "keymaker"]
+
+# Infrastructure agents that deliberately live as installable subagent files in
+# brain/agents/ but are NOT subject to roster discipline (AGENTS.md §3,
+# "Supporting cast" — retire-one-to-add-one applies only to ROSTER above).
+# docs/SYSTEM_TRUTH.md lists these alongside the roster with their own description.
+# Add a name here ONLY if AGENTS.md §3 already documents it as supporting-cast
+# infrastructure — never to silently permit an undocumented new file.
+SUPPORTING_AGENTS = ["lock"]
 
 
 def main():
@@ -48,7 +56,18 @@ def main():
     # Roster intact
     agents_dir = os.path.join(root, "brain", "agents")
     missing = [a for a in ROSTER if not os.path.isfile(os.path.join(agents_dir, a + ".md"))]
-    check("roster_intact", not missing, "missing agents: " + ", ".join(missing) if missing else "")
+    unexpected = []
+    if os.path.isdir(agents_dir):
+        unexpected = sorted(
+            f for f in os.listdir(agents_dir)
+            if f.endswith(".md") and f[:-3] not in ROSTER + SUPPORTING_AGENTS
+        )
+    roster_detail_parts = []
+    if missing:
+        roster_detail_parts.append("missing agents: " + ", ".join(missing))
+    if unexpected:
+        roster_detail_parts.append("unexpected agent files: " + ", ".join(unexpected))
+    check("roster_intact", not missing and not unexpected, "; ".join(roster_detail_parts))
 
     # State directory
     state = os.path.join(root, "brain", "state")
@@ -61,6 +80,12 @@ def main():
         if not v.get("ok"):
             errors.extend(v.get("errors", []))
 
+    # Gitignore drift — informational only, warn-only. The result lives in its own
+    # field and never feeds into the global `ok` of the hook.
+    drift = None
+    if data.get("project"):
+        drift = gitignore_drift(data["project"], root=root)
+
     result = {
         "hook": "pre_activation_check",
         "ok": not errors,
@@ -69,6 +94,7 @@ def main():
         "root": root,
         "checks": checks,
         "errors": errors,
+        "gitignore_drift": drift,
     }
     emit(result)
 

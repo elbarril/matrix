@@ -335,3 +335,88 @@ Fase-0 (Oracle) probó `.devin/config.json` con `permissions.deny: ["Exec(git co
 ### Lesson 29
 
 El pedido era "que Neo arranque solo en modo workspace de Matrix". Primera respuesta descartada: `hooks/session_start_bootstrap.py` (Seraph) + `adapters/devin/session-start-hook.sh` + un `.devin/config.json` de proyecto nuevo registrando `hooks.SessionStart`. Funcionaba (confirmado con un spike real de `devin -p`), pero duplicaba `adapters/devin/hooks/session_audit.py`, que ya estaba wireado globalmente en `~/.config/devin/config.json` por `adapters/devin/install-hooks.sh` (instalado a mano en esta máquina, nunca por el flujo de `bin/matrix install --target=devin`) y que ya tenía un experimento llamado "Etapa G/H3" (`experiment.activation_inject` en `adapters/devin/config.yaml`, `false` desde que se escribió el 2026-07-17) para inyectar la misma clase de contenido vía `hookSpecificOutput.additionalContext`. La corrección real: se borraron los tres archivos nuevos; se agregó `_is_workspace_mode()` (compara `os.getcwd()` contra `MATRIX_ROOT`) y `_render_activation_preamble()` (renderiza `brain/data/activation-preamble.tmpl`, la misma plantilla que ya usa el `neo` skill generado y el bloque `AGENTS.local.md` de proyectos bindeados vía `matrix_block_tmp()` en `bin/matrix`) a `session_audit.py`; se prendió `activation_inject: true` acotado por ese chequeo de cwd; y se agregó la llamada a `install-hooks.sh` al final de `adapters/devin/install.sh`, que antes no la incluía.
+
+### Lesson 34
+
+El hook de ciclo de vida mencionado en la lección 34 es `Stop`; el CLI concreto al que aplica es **Devin CLI**. El detalle del bug y la batería de inyección de errores quedan en `brain/data/lessons.md` lección 34.
+
+### Lesson 38
+
+Tercer incidente confirmado de `~/.local/share/devin/cli/sessions.db` (el store SQLite local que respalda `/resume`, `-r`/`--resume`, `-c`/`--continue` y el picker de `/ls`) corrupto con `database disk image is malformed`. Dos antecedentes: uno con reparación registrada en el ledger de Matrix (`2026-07-20T12:10:52-03:00`, proyecto `generalmotors`: "recreada desde .dump sanitizado, 487 sesiones recuperadas, integrity_check ok" — sin detalle de metodología); otro sin lección escrita, encontrado solo porque el propio `prompt_history` recuperado de esta corrida conservaba la pregunta textual del usuario en una sesión previa ("quise usar /resume pero tiro este error... como se arregla?").
+
+**Diagnóstico:** `PRAGMA integrity_check` marcó `btreeInitPage() returns error code 11` en dos árboles — `message_nodes` (rootpage de esa corrida, ~169k filas, transcripciones completas de mensajes) y `rendered_commits` (~44k filas, cache HTML de la vista de replay) — pero ninguno en `sessions`, `prompt_history`, `app_state` ni `tool_call_state`. La corrupción es parcial y despareja, no total.
+
+**Vía que falló:** `sqlite3 <db> ".recover"` (la vía moderna que la propia documentación de SQLite recomienda para bases corruptas) devolvió directamente `sql error: no such table: sqlite_dbpage` — el binario `sqlite3` de este sistema (3.45.1, paquete de la distro) no está compilado con esa virtual table. Sin esa vía, la única alternativa viable es `.dump`.
+
+**Vía que funcionó (procedimiento completo, reproducible):**
+
+```bash
+DEVIN_DIR="$HOME/.local/share/devin/cli"
+
+# 1. Volcado tolerante a corrupción — exit 0 y stderr vacío NO implican volcado completo/válido
+sqlite3 "$DEVIN_DIR/sessions.db" ".dump" > /tmp/dump.sql 2> /tmp/dump.err
+
+# 2. LA TRAMPA: si sqlite3 detectó errores al recorrer una tabla, cierra el dump con
+#    "ROLLBACK; -- due to errors" en vez de "COMMIT;". Todo el .dump vive en una sola
+#    transacción BEGIN...COMMIT — reimportarlo tal cual da una base VACÍA, sin ningún
+#    error visible (exit 0, stderr vacío). Verificar SIEMPRE la última línea:
+tail -1 /tmp/dump.sql   # "ROLLBACK; -- due to errors" => hay que sanear antes de importar
+
+# 3. Saneo mínimo: solo la última línea, no tocar nada más
+sed '$s/^ROLLBACK; -- due to errors$/COMMIT;/' /tmp/dump.sql > /tmp/dump_sanitized.sql
+
+# 4. Reconstrucción en un archivo nuevo (no pisar el original todavía)
+sqlite3 /tmp/scratch.db < /tmp/dump_sanitized.sql
+
+# 5. Verificación — debe devolver "ok"
+sqlite3 /tmp/scratch.db "PRAGMA integrity_check;"
+
+# 6. Swap con backup fechado (mismo criterio que el incidente de generalmotors),
+#    incluyendo el -wal/-shm viejo para que la base nueva arranque sin arrastrar
+#    un WAL de una generación de esquema distinta:
+TS=$(date +%Y%m%d_%H%M%S)
+mv "$DEVIN_DIR/sessions.db" "$DEVIN_DIR/sessions.db.corrupt.$TS"
+mv "$DEVIN_DIR/sessions.db-wal" "$DEVIN_DIR/sessions.db.corrupt.$TS-wal" 2>/dev/null
+mv "$DEVIN_DIR/sessions.db-shm" "$DEVIN_DIR/sessions.db.corrupt.$TS-shm" 2>/dev/null
+mv /tmp/scratch.db "$DEVIN_DIR/sessions.db"
+chmod 644 "$DEVIN_DIR/sessions.db"
+```
+
+Resultado real de esta corrida: 644 `sessions`, 1822 `prompt_history`, **169.323 `message_nodes`** (antes ilegible, ni siquiera `SELECT count(*)` corría), 44.327/44.445 `rendered_commits` (~99,7%; el resto son filas de cache de replay, no contenido fuente), `app_state`/`tool_call_state` intactos. Los únicos 3 puntos que `.dump` marcó explícitamente como perdidos aparecen como comentarios `/****** CORRUPTION ERROR *******/` inline en el dump, justo antes de la fila/tabla afectada — grepear ese literal ancla de línea (`^/\*\*\*\*\*\* CORRUPTION ERROR`) da un conteo exacto de filas irrecuperables, sin necesidad de adivinar.
+
+**Verificación E2E real (no solo `integrity_check`):** `adapters/devin/session_query.py find <cwd_substring>` y `session_query.py dump <session_id>` corridos contra la base reparada reconstruyeron correctamente tanto el listado de sesiones de un proyecto real como la transcripción completa de una sesión histórica real (una de `saintlukes`, ~1200 líneas de conversación). Esto prueba que `message_nodes` recuperado es legible por el mismo tipo de consulta relacional que usaría la función real de resume — no solo que pasa un chequeo estructural de bajo nivel.
+
+**Limitación operativa (no tiene workaround conocido):** un proceso de Devin CLI que ya tenía `sessions.db` abierto (por descriptor de archivo, no por path) sigue leyendo/escribiendo esa misma inode después del swap — un `mv` en el mismo path no lo afecta hasta que ese proceso vuelva a abrir el archivo. Consecuencia directa: la sesión que hace la reparación en vivo (y cualquier otro proceso de Devin CLI corriendo en simultáneo — REPL, integraciones ACP, etc.) nunca se ve a sí misma reparada; hace falta cerrarla y abrir una nueva para que `/resume`/`-r`/`-c` reflejen el historial recuperado. Confirmado en esta corrida: `session_query.py dump` sobre la sesión que ejecutó la propia reparación no encontró mensajes (esperado — esa sesión nunca estuvo en el `.dump` porque su contenido más reciente todavía no había pasado por un checkpoint de WAL al momento del volcado).
+
+**Causa raíz de la corrupción en sí: no confirmada, queda abierta.** En el momento del hallazgo había 2 procesos de Devin CLI activos (`devin --permission-mode bypass` y `devin acp`), ambos corriendo el mismo binario/versión (descarta desincronización de esquema entre versiones distintas como causa en este caso puntual). `sessions.db` vive en ext4 local, no en red/FUSE, con >250 GB libres (descarta filesystem de red y disco lleno). Hipótesis más plausible y no verificada: escritura concurrente WAL desde 2+ procesos de Devin CLI sobre el mismo `sessions.db`, posiblemente agravada por un cierre abrupto (kill -9, crash) de alguno de ellos en algún momento entre incidentes. Recomendado reportar con `/bug` la próxima vez que se reproduzca, adjuntando PIDs, versiones y `ps aux` de los procesos de Devin CLI activos en ese momento — hoy no hay evidencia suficiente para que Cognition lo triangule.
+
+**Corrección same-day (2026-07-30, ~40 min después del repair de arriba):** el usuario reportó un síntoma nuevo de `/resume` en una sesión nueva (`bead-maiasaura`, proyecto `saintlukes`): `Invalid column type Null at index: 0, name: id` — el texto exacto que produce el `Display` de `rusqlite::Error::InvalidColumnType` cuando el binario de Devin CLI lee la columna `id` de una fila de `sessions` y da NULL. Esto prueba que el diagnóstico original de esta lección ("ninguna corrupción en `sessions`") era incompleto: `PRAGMA integrity_check` y el conteo de comentarios `CORRUPTION ERROR` solo cubren lo que la herramienta *reconoce* haber tocado, no fila por fila.
+
+*Por qué puede pasar en `sessions.id` y no en `prompt_history.id`/`rendered_commits.id`:* `sessions.id` es `TEXT PRIMARY KEY` **sin** `NOT NULL` explícito — un `PRIMARY KEY` no-`INTEGER` en SQLite no bloquea NULL (solo un alias de rowid `INTEGER PRIMARY KEY` lo hace, autoasignando en vez de aceptar NULL). `prompt_history.id`/`rendered_commits.id` sí son `INTEGER PRIMARY KEY` — por eso 0 filas NULL ahí, ni antes ni después.
+
+*Auditoría real que encontró el alcance completo (no solo el síntoma reportado):*
+```bash
+DEVIN_DIR="$HOME/.local/share/devin/cli"
+OLD="$DEVIN_DIR/sessions.db.corrupt.20260730_121318"   # el backup pre-repair de ESE MISMO día, no lo borres nunca en el mismo día del repair
+
+# 1. Filas con columnas de tipo incorrecto (no solo NULL en id — cualquier columna NOT NULL con typeof() distinto del declarado)
+sqlite3 "$DEVIN_DIR/sessions.db" "SELECT rowid,id,typeof(id),typeof(last_activity_at),typeof(created_at) FROM sessions WHERE typeof(id)!='text' OR typeof(last_activity_at)!='integer' OR typeof(created_at)!='integer';"
+
+# 2. Diff completo de claves entre el backup pre-repair y la base reparada (la auditoría que realmente importa)
+sqlite3 "file:$OLD?mode=ro" -readonly "SELECT id FROM sessions WHERE id IS NOT NULL;" | LC_ALL=C sort > /tmp/old_ids.txt
+sqlite3 "file:$DEVIN_DIR/sessions.db?mode=ro" -readonly "SELECT id FROM sessions WHERE id IS NOT NULL;" | LC_ALL=C sort > /tmp/new_ids.txt
+LC_ALL=C comm -23 /tmp/old_ids.txt /tmp/new_ids.txt   # ids perdidos por el repair, no solo corruptos en origen
+```
+
+Resultado de esta auditoría: 1 fila fantasma (`id` NULL) + **6 filas de `sessions` perdidas por completo** (`catnip-tarp`, `confusion-occupation`, `healthy-roundworm`, `plain-hellebore`, `somber-speaker`, `tungsten-pleasure`) que el `.dump` secuencial original nunca marcó con `CORRUPTION ERROR` ni hizo fallar `integrity_check` — desaparecieron en silencio. Confirmado irrecuperables: ni una búsqueda indexada directa por `id` contra `$OLD` (`WHERE id='catnip-tarp'`, etc., forzando el uso del índice en vez de un scan secuencial) ni sus `message_nodes`/`prompt_history` en la base reparada (0 filas huérfanas) las trajeron de vuelta. Pérdida real, no solo de metadata de listado.
+
+*La trampa de la fila fantasma — no asumas que un valor sospechoso es la fila real con la columna corrida:* la fila con `id` NULL tenía en la posición de `working_directory` el string `elastic-numeric`, que **sí** es un `id` real de otra sesión — parecía una fila real con las columnas desalineadas por la corrupción. Cruzarlo contra una búsqueda indexada directa (`WHERE id='elastic-numeric'`) en `$OLD` mostró que esa sesión ya estaba sana y completa en su propia fila (rowid distinto) — el string en la fila fantasma era ruido de página corrupta que por casualidad coincidía con un id real ya existente en otro lado, no la misma fila corrida. Regla operable: antes de "reparar" una fila sospechosa reconstruyendo valores, buscá cada valor sospechoso por índice directo en el backup corrupto — si aparece sano en una fila propia, la fila sospechosa es ruido y el fix es borrarla, no fusionarla.
+
+*Fix aplicado (mínimo, verificado):*
+```bash
+cp -p sessions.db "sessions.db.before-nullid-fix.$(date +%Y%m%d_%H%M%S)"
+sqlite3 sessions.db "DELETE FROM sessions WHERE id IS NULL;"
+```
+Verificación E2E post-fix: `integrity_check` ok; `SELECT COUNT(*) FROM sessions WHERE id IS NULL` = 0; 0 filas con `typeof()` incorrecto en ninguna columna NOT NULL; lectura completa de las 644 filas restantes sin excepción; `session_query.py find` corrió limpio contra la base viva.
+
+*Nota operativa nueva (corrige/matiza la limitación de arriba):* este fix fue un `DELETE`/`UPDATE` **in-place** sobre el mismo archivo/inode que los procesos de Devin CLI ya tenían abierto (confirmado con `fuser sessions.db` antes y después: mismos 2 PIDs) — a diferencia del swap de archivo (`mv`) de la reparación original, un DML in-place en modo WAL sí es visible para procesos ya abiertos sin necesidad de reiniciarlos. La limitación de "hace falta reiniciar" aplica al **swap de archivo**, no a una corrección puntual de filas sobre el archivo ya vigente — para fixes chirúrgicos post-repair, preferí DML in-place por esta razón.

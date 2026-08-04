@@ -1247,7 +1247,7 @@ build_target() {
     else
         template="$(_read_persisted_adapter_template "$target" 2>/dev/null || true)"
         if [[ -z "$template" ]]; then
-            template="gratis"
+            template="equilibrado"
             _persist_adapter_template "$target" "$template"
         fi
     fi

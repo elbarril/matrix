@@ -163,6 +163,82 @@ def _run_the_source_check(root):
     }
 
 
+def _run_validate_layer2_check(root):
+    """Invoke validate_layer2 check and return its JSON result defensively."""
+    bin_matrix = os.path.join(root, "bin", "matrix")
+    env = {**os.environ, "MATRIX_ROOT": root}
+    proc = subprocess.run(
+        [bin_matrix, "hooks", "validate_layer2", json.dumps({"check": True})],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        stdin=subprocess.DEVNULL,
+    )
+    if proc.stdout:
+        try:
+            return json.loads(proc.stdout)
+        except ValueError:
+            pass
+    return {
+        "hook": "validate_layer2",
+        "ok": False,
+        "stdout": proc.stdout,
+        "stderr": proc.stderr,
+    }
+
+
+def _run_validate_lessons_check(root):
+    """Invoke validate_lessons check and return its JSON result defensively."""
+    bin_matrix = os.path.join(root, "bin", "matrix")
+    env = {**os.environ, "MATRIX_ROOT": root}
+    proc = subprocess.run(
+        [bin_matrix, "hooks", "validate_lessons", json.dumps({"check": True})],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        stdin=subprocess.DEVNULL,
+    )
+    if proc.stdout:
+        try:
+            return json.loads(proc.stdout)
+        except ValueError:
+            pass
+    return {
+        "hook": "validate_lessons",
+        "ok": False,
+        "stdout": proc.stdout,
+        "stderr": proc.stderr,
+    }
+
+
+def _run_validate_routing_signal_check(root, session_id):
+    """Invoke validate_routing_signal check and return its JSON result defensively."""
+    bin_matrix = os.path.join(root, "bin", "matrix")
+    env = {**os.environ, "MATRIX_ROOT": root}
+    payload = {"session_id": session_id} if session_id else {}
+    proc = subprocess.run(
+        [bin_matrix, "hooks", "validate_routing_signal", json.dumps(payload)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        stdin=subprocess.DEVNULL,
+    )
+    if proc.stdout:
+        try:
+            return json.loads(proc.stdout)
+        except ValueError:
+            pass
+    return {
+        "hook": "validate_routing_signal",
+        "ok": False,
+        "stdout": proc.stdout,
+        "stderr": proc.stderr,
+    }
+
+
 def main():
     data = read_input()
     root = resolve_root()
@@ -183,6 +259,9 @@ def main():
 
     post_report = _run_post_run_audit(root, steps, required)
     the_source_report = _run_the_source_check(root)
+    validate_layer2_report = _run_validate_layer2_check(root)
+    validate_lessons_report = _run_validate_lessons_check(root)
+    validate_routing_signal_report = _run_validate_routing_signal_check(root, session_id)
 
     result = {
         "hook": "session_close",
@@ -193,6 +272,9 @@ def main():
         "entries_examined": len(filtered),
         "validation": post_report,
         "the_source_check": the_source_report,
+        "validate_layer2_check": validate_layer2_report,
+        "validate_lessons_check": validate_lessons_report,
+        "validate_routing_signal_check": validate_routing_signal_report,
     }
     emit(result)
 

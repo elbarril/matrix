@@ -318,6 +318,35 @@ def _run_pre_activation_check():
         return False
 
 
+def _run_detect_orphan_session(project_active):
+    """Best-effort orphan detection: returns an orphan session_id or None."""
+    try:
+        env = {**os.environ, "MATRIX_ROOT": ROOT}
+        proc = subprocess.run(
+            [
+                BIN_MATRIX,
+                "hooks",
+                "detect_orphan_session",
+                json.dumps({"project_active": project_active}),
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+        result = {}
+        if proc.stdout:
+            try:
+                result = json.loads(proc.stdout)
+            except ValueError:
+                pass
+        return result.get("orphan_session_id")
+    except Exception as e:
+        print(f"[session_audit] detect_orphan_session failed: {e}", file=sys.stderr)
+        return None
+
+
 def _call_audit_event(envelope):
     try:
         env = {**os.environ, "MATRIX_ROOT": ROOT}
@@ -362,6 +391,31 @@ def _run_session_close(session_id):
         print(f"[session_audit] session close invocation failed: {e}", file=sys.stderr)
 
 
+def _run_session_close_async(session_id):
+    """Fire-and-forget close for an orphan session; never blocks the current session.
+
+    The session_close chain can run several subprocesses with long timeouts, so
+    orphan recovery is intentionally asynchronous. The detect_orphan_session hook
+    writes a synchronous deduplication marker before we get here, preventing
+    redundant closes during crash-loop bursts.
+    """
+    try:
+        close_payload = {"session_id": session_id} if session_id else {}
+        env = {**os.environ, "MATRIX_ROOT": ROOT}
+        subprocess.Popen(
+            [BIN_MATRIX, "session", "close", json.dumps(close_payload)],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        print(
+            f"[session_audit] async orphan session close failed: {e}",
+            file=sys.stderr,
+        )
+
+
 def main():
     raw = ""
     if not sys.stdin.isatty():
@@ -394,6 +448,9 @@ def main():
     pre_ok = None
     if event == "session_start":
         pre_ok = _run_pre_activation_check()
+        orphan_session_id = _run_detect_orphan_session(project_active)
+        if orphan_session_id:
+            _run_session_close_async(orphan_session_id)
 
     envelope = {
         "event": event,

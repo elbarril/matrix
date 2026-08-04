@@ -59,8 +59,9 @@ binding:
     - "matrix-output/"
 
 # Model templates: 4 cost/quality presets selectable at build time via
-# `bin/matrix build --target=devin --template=<name>`. The default is `gratis`
-# when no `--template` is supplied and no persisted choice exists.
+# `bin/matrix build --target=devin --template=<name>`. The default is
+# `equilibrado` when no `--template` is supplied and no persisted choice
+# exists (changed from `gratis` on 2026-08-03, per user preference).
 # NOTE: model identifiers (`swe-1-6-fast`, `opus`) MUST be re-verified against
 # the real Devin CLI model picker (`/model` without arguments) the next time
 # anyone touches them — same "needs verification" convention as `swe-1-7-medium`

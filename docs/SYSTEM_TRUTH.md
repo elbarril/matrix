@@ -24,11 +24,13 @@
 ## Enforcement hooks (Seraph, live)
 
 - `audit_event`
+- `detect_orphan_session`
 - `post_run_audit`
 - `pre_activation_check`
 - `session_close`
 - `the_source`
 - `validate_layer2`
+- `validate_lessons`
 - `validate_phase_close`
 - `validate_ship`
 

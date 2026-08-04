@@ -120,6 +120,13 @@
       "path": "/home/emiliano/www/emisrepos/claude-master-documentation",
       "type": "local",
       "added": "2026-07-27T09:43:31-03:00"
+    },
+    {
+      "name": "www",
+      "path": "/home/emiliano/www",
+      "type": "local",
+      "added": "2026-07-30T16:51:45-03:00",
+      "bound_target": "devin"
     }
   ],
   "created": "2026-05-19T18:31:00-03:00",
