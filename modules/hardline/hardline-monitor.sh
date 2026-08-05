@@ -17,7 +17,7 @@ mkdir -p "$MODULE_DIR"
 echo "[hardline] monitoring $INBOX (Ctrl-C to stop). Zero tokens while idle."
 
 # Inbox line format: <project>|<line>
-#   <project>  registered, bound project name (letters, numbers, dot, underscore, hyphen)
+#   <project>  registered, bound project name (letters, numbers, dot, underscore, hyphen), or "matrix" for the workspace root
 #   <line>     the unattended prompt/task; must not contain a newline
 # Example: mck|Update the README with a one-line note about hardline events.
 

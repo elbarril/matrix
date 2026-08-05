@@ -31,7 +31,7 @@ modules/hardline/hardline-monitor.sh
 A non-Telegram bridge may append the exact monitor format directly:
 
 ```bash
-# <project> must be registered and bound.
+# <project> must be registered and bound, except "matrix" (the workspace root).
 echo 'mck|Update the README with a one-line note about Hardline events' >> modules/hardline/inbox.log
 ```
 
@@ -89,7 +89,7 @@ The bridge is a small Python 3 script using only the standard library, matching 
    mck Update the README with a one-line note about Hardline events
    ```
 
-   The bridge splits on the first whitespace, checks that `<project>` matches `[A-Za-z0-9._-]+`, and appends `mck|Update the README with a one-line note about Hardline events` to `inbox.log`. Multiline, non-text, missing-task, and invalid-project messages are ignored. The project must already be registered and bound.
+   The bridge splits on the first whitespace, checks that `<project>` matches `[A-Za-z0-9._-]+`, and appends `mck|Update the README with a one-line note about Hardline events` to `inbox.log`. Multiline, non-text, missing-task, and invalid-project messages are ignored. The project must already be registered and bound; "matrix" (the workspace root) is the exception.
 
 The bridge retains only Telegram's non-secret resume cursor in `brain/state/hardline/telegram-offset`. It advances the cursor after every received update, including ignored updates, so a restart does not replay them. Delete that cursor only if you intentionally want Telegram's still-pending updates reconsidered. Telegram's `getUpdates` cannot operate while the bot has an active webhook; this deployment intentionally uses long polling and no webhook.
 

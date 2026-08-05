@@ -21,6 +21,7 @@ brain/output/*
 # Sensitive / per-machine config
 brain/config.yaml
 .context.yaml
+.devin/
 
 # Generated adapter artifacts (Trainman build output)
 adapters/*/generated/

@@ -47,6 +47,15 @@ HOOKS_DIR="$MATRIX_DIR/hooks"
 # The subject under which Matrix's own work is recorded (Matrix workspace mode).
 MATRIX_WORKSPACE_PROJECT="matrix"
 
+# is_workspace_target: does this dispatch/lookup target name refer to the
+# Matrix workspace itself (the special, always-available, never-bound
+# pseudo-project), as opposed to a real registered project? Single source
+# of truth for that one question — mirrors the sentinel resolve_scope()
+# already uses for the cwd-based version of the same question.
+is_workspace_target() {
+    [[ "$1" == "$MATRIX_WORKSPACE_PROJECT" ]]
+}
+
 to_abs_path() {
     local p="${1:-}"
     p="${p/#\~/$HOME}"
@@ -1039,10 +1048,17 @@ hardline_dispatch() {
         hardline_reject "$project" "$raw_line" "Invalid project '$project' (allowed: letters, numbers, dot, underscore, hyphen)"; return 1; }
     [[ "$raw_line" != *$'\n'* && "$raw_line" != *$'\r'* ]] || {
         hardline_reject "$project" "$raw_line" "Hardline events must be a single line"; return 1; }
-    get_project_path "$project" >/dev/null 2>&1 || {
-        hardline_reject "$project" "$raw_line" "Project '$project' not found"; return 1; }
-    is_bound "$project" || {
-        hardline_reject "$project" "$raw_line" "Project '$project' is not bound"; return 1; }
+
+    local project_path
+    if is_workspace_target "$project"; then
+        project_path="$MATRIX_DIR"
+    else
+        get_project_path "$project" >/dev/null 2>&1 || {
+            hardline_reject "$project" "$raw_line" "Project '$project' not found"; return 1; }
+        is_bound "$project" || {
+            hardline_reject "$project" "$raw_line" "Project '$project' is not bound"; return 1; }
+        project_path="$(get_project_path "$project")"
+    fi
 
     local event_id dedupe_key now event_json queue_fd existing tmp max_depth open_count
     event_id="hardline-$(epoch36 "$(date +%s)")-$$-$RANDOM"
@@ -1116,8 +1132,7 @@ hardline_dispatch() {
 
     printf '[hardline] %s ready project=%s event=%s layer3=invoking\n' "$(date +%s.%N)" "$project" "$event_id"
 
-    local project_path adapter_json adapter_out adapter_err ack_kind session_id timeout_happened ack_state now2
-    project_path="$(get_project_path "$project")"
+    local adapter_json adapter_out adapter_err ack_kind session_id timeout_happened ack_state now2
     adapter_out="$(mktemp "$HARDLINE_DIR/adapter.out.XXXXXX")"
     adapter_err="$HARDLINE_DIR/events/$event_id.adapter.err"
     mkdir -p "$HARDLINE_DIR/events"

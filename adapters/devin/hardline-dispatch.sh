@@ -175,7 +175,9 @@ ensure_d5
 runtime_config="$(build_runtime_config)"
 trap 'rm -f "$runtime_config"' EXIT
 
-HARDLINE_PROMPT="[Hardline/AFK] You are running unattended against the bound project at $PROJECT_PATH. You may read and edit files, run shell commands, and search the codebase. You must NOT proactively commit or push. If a task explicitly asks you to commit or push, you must attempt the requested command and report the exact Devin permission refusal; you cannot complete the commit/push. You must NOT ask the user. If you need a human decision and cannot proceed without one, output exactly 'HARDLINE_NEEDS_HUMAN: <brief reason>' as your final text and stop. Task: $RAW_LINE"
+project_kind="bound project"
+[[ "$PROJECT_PATH" == "$ROOT" ]] && project_kind="Matrix workspace root"
+HARDLINE_PROMPT="[Hardline/AFK] You are running unattended against the $project_kind at $PROJECT_PATH. You may read and edit files, run shell commands, and search the codebase. You must NOT proactively commit or push. If a task explicitly asks you to commit or push, you must attempt the requested command and report the exact Devin permission refusal; you cannot complete the commit/push. You must NOT ask the user. If you need a human decision and cannot proceed without one, output exactly 'HARDLINE_NEEDS_HUMAN: <brief reason>' as your final text and stop. Task: $RAW_LINE"
 
 DEVIN_ARGS=(-p "$HARDLINE_PROMPT" --permission-mode dangerous --config "$runtime_config")
 [[ -n "$MODEL" ]] && DEVIN_ARGS+=(--model "$MODEL")
