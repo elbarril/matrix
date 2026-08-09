@@ -44,10 +44,28 @@ render:
 artifacts:
   generated_agents_dir: "adapters/devin/generated/.agents/agents"
   installed_agents_dir: "~/.config/devin/agents"
+  installed_skills_dir: "~/.config/devin/skills"
 
 harden:
   config_path: "~/.config/devin/config.json"
   schema: "permissions_deny_v1"
+
+install_integrity:
+  # Reuses artifacts.installed_agents_dir and harden.config_path — do not
+  # duplicate those paths here.
+  config_path: "~/.config/devin/config.json"        # = harden.config_path today; keep both keys, do not assume identical in future adapters
+  required_hooks:
+    # event -> substring that MUST appear in at least one hooks[event][*].hooks[*].command
+    SessionStart:      "session_audit.py"
+    UserPromptSubmit:  "session_audit.py"
+    PostCompaction:    "session_audit.py"
+    SessionEnd:        "session_audit.py"
+    PostToolUse:       "session_audit.py"
+    Stop:              "stop_notify.py"
+  mcp_config_path: "~/.config/devin/mcp_config.json"   # confirmed: key path is mcpServers.<name>
+  required_mcp_servers: ["chrome-browser", "context7"]
+  installed_agent_path_template: "{installed_agents_dir}/{agent}/AGENT.md"
+  installed_skill_path_template: "{installed_skills_dir}/{skill}/SKILL.md"
 
 binding:
   file: "AGENTS.local.md"

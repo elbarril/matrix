@@ -32,7 +32,6 @@ import _hardline_notify_common as common_notify  # noqa: E402
 ROOT = common.resolve_root()
 BIN_MATRIX = os.path.join(ROOT, "bin", "matrix")
 HARDLINE_CTL = os.path.join(ROOT, "modules", "hardline", "hardline-ctl.sh")
-SECRETS_PATH = os.path.expanduser("~/.config/devin/hardline/telegram.env")
 
 TOKEN_ENV = "MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN"
 CHAT_ENV = "MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID"
@@ -97,9 +96,10 @@ def main():
     if _recently_notified_by_stop(root, project_dir):
         sys.exit(0)
 
-    if not os.path.isfile(SECRETS_PATH):
+    secrets_path = common_notify.SECRETS_PATH_DEFAULT
+    if not os.path.isfile(secrets_path):
         sys.exit(0)
-    secrets = common_notify.read_secrets_file(SECRETS_PATH)
+    secrets = common_notify.read_secrets_file(secrets_path)
     token = secrets.get(TOKEN_ENV)
     chat_id = secrets.get(CHAT_ENV)
     if not token or not chat_id:

@@ -14,13 +14,22 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
+# Resolve the Matrix root the same way session_audit.py does, so the default
+# secrets path is repo-relative rather than hardcoded to ~/.config/devin.
+_candidate = os.path.dirname(os.path.abspath(__file__))
+for _ in range(3):
+    _candidate = os.path.dirname(_candidate)
+sys.path.insert(0, os.path.join(_candidate, "hooks"))
+import _common as common  # noqa: E402
+
 TOKEN_ENV = "MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN"
 CHAT_ENV = "MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID"
-SECRETS_PATH_DEFAULT = os.path.expanduser("~/.config/devin/hardline/telegram.env")
+SECRETS_PATH_DEFAULT = os.path.join(common.resolve_root(), "brain", "state", "hardline", "telegram.env")
 
 
 def ppid_of(pid):

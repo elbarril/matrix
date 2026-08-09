@@ -68,7 +68,7 @@ The bridge is a small Python 3 script using only the standard library, matching 
 
    It writes PID files and logs to `brain/state/hardline/` and runs each process as a detached background service, so it survives the terminal that launched it. Check status with `modules/hardline/hardline-ctl.sh status` and stop with `modules/hardline/hardline-ctl.sh stop`. `restart` is also available.
 
-   The control script expects the secrets file at `~/.config/devin/hardline/telegram.env`. If that file is missing, the script still starts the monitor (which has no Telegram dependency) but refuses to start the bridge and prints the exact path and format to create.
+   The control script expects the secrets file at `brain/state/hardline/telegram.env` (resolved from `$MATRIX_ROOT`, with the repo root as fallback). If that file is missing, the script still starts the monitor (which has no Telegram dependency) but refuses to start the bridge and prints the exact path and format to create.
 
    If you prefer to start the two processes manually (for example, in two tmux panes to watch their logs directly), you can still run them separately:
 
@@ -163,7 +163,7 @@ It fires only when all four of these gates are true; otherwise it no-ops silentl
 1. The session was **not** started by the Hardline dispatcher (`MATRIX_HARDLINE_DISPATCH` is absent and `/proc` ancestry does not contain `hardline-dispatch.sh`).
 2. `DEVIN_PROJECT_DIR` resolves to a currently bound Matrix project (`_brain` symlink + `bin/matrix bindings --json` longest-prefix match).
 3. The Hardline Telegram bridge is running (`hardline-ctl.sh status --json` reports `bridge.running == true`).
-4. `~/.config/devin/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
+4. `brain/state/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
 
 This hook is intentionally separate from `session_audit.py` so a slow or failing Telegram POST cannot delay the audit trail or `bin/matrix session close`. It never duplicates the Hardline ack path; sessions dispatched through `hardline-dispatch.sh` are excluded by construction.
 
@@ -178,12 +178,12 @@ It fires only when all five of these gates are true; otherwise it no-ops silentl
 1. The session was **not** started by the Hardline dispatcher (`MATRIX_HARDLINE_DISPATCH` is absent and `/proc` ancestry does not contain `hardline-dispatch.sh`).
 2. `DEVIN_PROJECT_DIR` resolves to a currently bound Matrix project (`_brain` symlink + `bin/matrix bindings --json` longest-prefix match).
 3. The Hardline Telegram bridge is running (`hardline-ctl.sh status --json` reports `bridge.running == true`).
-4. `~/.config/devin/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
+4. `brain/state/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
 5. The turn's elapsed time (since the last message you sent) exceeds the configured threshold.
 
 ### Threshold
 
-The default threshold is **1800 seconds (30 minutes)**. Only turns longer than this trigger a message. You can override it by adding this key to the existing `~/.config/devin/hardline/telegram.env` secrets file (no new file):
+The default threshold is **1800 seconds (30 minutes)**. Only turns longer than this trigger a message. You can override it by adding this key to the existing `brain/state/hardline/telegram.env` secrets file (no new file):
 
 ```bash
 MATRIX_HARDLINE_STOP_NOTIFY_THRESHOLD_SECONDS=900

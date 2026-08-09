@@ -12,12 +12,17 @@ Usage:
 
 import os
 
-from _common import emit, gitignore_drift, read_input, resolve_root
+from _common import emit, gitignore_drift, read_input, resolve_bound_target, resolve_root
 
 try:
     from validate_ship import validate as validate_ship
 except Exception:
     validate_ship = None
+
+try:
+    from install_integrity_check import check_install_integrity
+except Exception:
+    check_install_integrity = None
 
 ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith"]
 
@@ -79,6 +84,15 @@ def main():
         checks.extend(v.get("checks", []))
         if not v.get("ok"):
             errors.extend(v.get("errors", []))
+
+    # Install integrity (delegated, generic — opt-in per adapter.yaml)
+    if check_install_integrity:
+        target = data.get("target") or resolve_bound_target(data.get("project")) or "devin"
+        ii = check_install_integrity(target, root)
+        if ii.get("applicable"):
+            checks.extend(ii.get("checks", []))
+            if not ii.get("ok"):
+                errors.extend(ii.get("errors", []))
 
     # Gitignore drift — informational only, warn-only. The result lives in its own
     # field and never feeds into the global `ok` of the hook.

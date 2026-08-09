@@ -23,7 +23,7 @@ set -uo pipefail
 ROOT="${MATRIX_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODULE_DIR="$ROOT/modules/hardline"
 STATE_DIR="$ROOT/brain/state/hardline"
-SECRETS_FILE="${HOME}/.config/devin/hardline/telegram.env"
+SECRETS_FILE="${MATRIX_ROOT:-$ROOT}/brain/state/hardline/telegram.env"
 
 MONITOR_PIDFILE="$STATE_DIR/monitor.pid"
 BRIDGE_PIDFILE="$STATE_DIR/telegram-bridge.pid"
