@@ -19,7 +19,7 @@ try:
 except Exception:
     validate_ship = None
 
-ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith", "keymaker"]
+ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith"]
 
 # Infrastructure agents that deliberately live as installable subagent files in
 # brain/agents/ but are NOT subject to roster discipline (AGENTS.md §3,

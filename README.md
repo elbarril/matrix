@@ -42,7 +42,8 @@ No hay un solo "modelo" haciendo todo. Matrix reparte el trabajo entre roles con
 | **The Architect** | El diseñador. Revisa el plan de Morpheus y decide cómo encaja técnicamente antes de que se escriba una sola línea de código. |
 | **Trinity** | El que construye. Implementa el código real, el que efectivamente cambia archivos. |
 | **Agent Smith** | El evaluador. Prueba lo que construyó Trinity, busca fallas reales (no en la teoría, corriendo comandos de verdad), y bloquea el cierre si algo no anda. Además arregla él mismo las fallas de bajo riesgo que encontró — prosa/docs, o un cambio acotado a un archivo — pero solo después de congelar el comando que falla y su salida cruda, y volviendo a correr ese mismo comando para probarlo. Lo estructural (estado del sistema, lógica de un gate, el contrato) sigue volviendo a Trinity. |
-| **The Keymaker** | Git/operaciones. Solo entra en juego si el pedido es explícitamente sobre ramas, merges, o control de versiones. |
+
+No hay un especialista aparte para git/operaciones: si el pedido es explícitamente sobre ramas, merges, o control de versiones, lo maneja **Neo** directamente, con las mismas reglas de siempre (nunca autónomo, confirma la rama antes, pide confirmación explícita para operaciones destructivas).
 
 Un pedido de "arreglame un bug" pasa por Smith (encuentra la causa) y ahí se bifurca: si el arreglo es chico y ya existe un comando que lo prueba, Smith mismo lo arregla y lo re-verifica con ese mismo comando (si el cambio toca comportamiento aunque sea acotado, el Architect revisa el diff antes de cerrar); si el arreglo toca algo estructural, vuelve a la cadena Smith (diagnostica) → Trinity (arregla) → Smith (verifica). Un pedido de "quiero una funcionalidad nueva" típicamente pasa por Morpheus (plan) → Architect (revisión) → Trinity (construye) → Smith (gate final). **Vos nunca hablás con ellos directamente** — es Neo quien los invoca como sub-agentes y te cuenta el resultado.
 
@@ -89,7 +90,7 @@ The golden rule: **Layer 2 never names a CLI.** Agents speak in capabilities (`r
 
 ## The roster
 
-One master, five core specialists, one opt-in sixth. Names map to function.
+One master, five core specialists. Names map to function.
 
 - **Neo** — *master*. The single voice. Routes, holds context, carries the sacred foundation, bridges every CLI.
 - **The Oracle** — *researcher*. Gathers, compares, cites, foresees. "What is true / what exists."
@@ -97,7 +98,8 @@ One master, five core specialists, one opt-in sixth. Names map to function.
 - **The Architect** — *architect*. Designs structure, names trade-offs, reviews plans before build. "How it fits."
 - **Trinity** — *builder*. Implements and ships real, working code.
 - **Agent Smith** — *evaluator, with scoped remediation*. Tests, critiques, finds the flaw, blocks weak work; fixes the inert/localized defects it reported itself, under pre-registered failing→passing evidence.
-- **The Keymaker** — *git/ops, opt-in*. Branches, paths, access, version control.
+
+There is no dedicated git/ops specialist: Neo handles explicitly-requested branches, paths, access, and version control directly.
 
 **Routing seam:** Morpheus answers *what/when*; the Architect answers *how it fits* and reviews the plan before Trinity builds; Smith gates the result before "done", and fixes the Tier-1/Tier-2 defects it reported itself (Tier 2 needs an Architect diff review before close). Trinity is still the only agent that builds to a brief.
 
@@ -129,7 +131,7 @@ matrix/
 ├── adapters/                  # Trainman — Layer 3 (devin/ only, for now)
 ├── brain/                     # Layer 2 — the intelligence core
 │   ├── config.yaml            # GITIGNORED: per-machine (user, language, timezone)
-│   ├── agents/                # neo, oracle, morpheus, architect, trinity, smith, keymaker
+│   ├── agents/                # neo, oracle, morpheus, architect, trinity, smith
 │   ├── data/                  # lessons.md, code-quality-review-lens.md, capability-map.md
 │   ├── subsystems/            # the fleet (federated ships)
 │   ├── state/                 # GITIGNORED: workspace.yaml, activity.log, checkpoints.jsonl, ...

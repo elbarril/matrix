@@ -320,6 +320,7 @@
   .tag-specialist { background: #1a3a4a; color: var(--accent2); }
   .tag-infra { background: #3a2a1a; color: var(--yellow); }
   .tag-opt { background: #2a1a2a; color: #cc88ff; }
+  .tag-note { background: #1a1a1a; color: #999; }
 
   /* ── Tables ── */
   table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
@@ -556,8 +557,8 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <p>Testea, critica, bloquea trabajo debil. Root-cause de bugs. Dueno del reality gate: nada esta &laquo;listo&raquo; sin un check E2E. Para trabajo visual, usa la capacidad <code>browser</code> (screenshot real, no descripcion). Desde el cambio de rol, tambien arregla las fallas de bajo riesgo que el mismo reporto: primero congela el comando que falla y su salida cruda, despues aplica el fix minimo, despues vuelve a correr el mismo comando. Lo estructural (estado del sistema, logica de gates, el contrato) sigue yendo a Trinity.</p>
   </div>
   <div class="card">
-    <h3><span class="tag tag-opt">OPT-IN</span> The Keymaker</h3>
-    <p>Git / Ops. Ramas, commits, merge, acceso. Solo se activa cuando el trabajo git es explicito. Nunca autonomo.</p>
+    <h3><span class="tag tag-note">NOTA</span> Git / Ops</h3>
+    <p>No hay especialista dedicado. Ramas, commits, merge, acceso los maneja Neo directamente cuando el pedido es explicito. Nunca autonomo.</p>
   </div>
 </div>
 
@@ -926,7 +927,7 @@ modules/hardline/telegram-bridge.py
 ├── brain/                           # Layer 2 &mdash; core de inteligencia
 │   ├── config.yaml                  # GITIGNORED: configuracion del usuario
 │   ├── agents/                      # neo, oracle, morpheus, architect,
-│   │                                # trinity, smith, keymaker, lock
+│   │                                # trinity, smith, lock
 │   ├── data/                        # lessons.md, capability-map.md,
 │   │   ├── lessons/                 # lessons scoped por proyecto
 │   │   └── code-quality-review-lens.md

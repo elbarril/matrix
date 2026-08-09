@@ -7,7 +7,6 @@
 | Agent | Description |
 |---|---|
 | **architect** | Architect specialist. Designs system structure, interfaces, data flows, trade-offs. Reviews Morpheus's plan before build. Answers "how it fits". |
-| **keymaker** | Git / Ops specialist (opt-in 6th). Branches, paths, access, version control. Loaded only when git/ops work is explicitly requested. |
 | **lock** | Commander Lock — the unattended/cockpit guardrail. Validates autonomous-run prompts, enforces hard filesystem rules, fails loud. NOT part of default routing. |
 | **morpheus** | Planner specialist. Turns ambiguity into ordered scope. Answers "what / when". Route here for planning, roadmaps, and breaking a goal into executable steps. |
 | **neo** | Master agent — the single voice. Routes to specialists, holds context, carries the sacred foundation. The user always talks to Neo first. |

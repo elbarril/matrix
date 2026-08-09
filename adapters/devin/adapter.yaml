@@ -58,7 +58,7 @@ binding:
     - "_brain"
     - "matrix-output/"
 
-# Model templates: 4 cost/quality presets selectable at build time via
+# Model templates: 5 cost/quality presets selectable at build time via
 # `bin/matrix build --target=devin --template=<name>`. The default is
 # `equilibrado` when no `--template` is supplied and no persisted choice
 # exists (changed from `gratis` on 2026-08-03, per user preference).
@@ -66,7 +66,7 @@ binding:
 # the real Devin CLI model picker (`/model` without arguments) the next time
 # anyone touches them — same "needs verification" convention as `swe-1-7-medium`
 # below.
-model_templates: [gratis, barato, equilibrado, caro]
+model_templates: [gratis, barato, equilibrado, caro, veloz]
 
 model_template_gratis:
   cheap: swe-1-7-medium
@@ -88,6 +88,19 @@ model_template_caro:
   reasoning: opus
   auto: adaptive
 
+# `veloz`: lower cost / lower latency than `equilibrado` for the `reasoning`
+# tier (Architect, Morpheus, Oracle, Smith) while keeping `cheap` on the
+# free SWE tier. `gemini-3.5-flash` is a candidate model ID pulled from
+# Google's own published API model ID table in
+# devin-master-documentation/docs/25-google-gemini-models.md (2026-07-17
+# snapshot); it is NOT yet confirmed against this installation's live Devin
+# CLI `/model` picker and MUST be re-verified with `/model` before being
+# treated as load-bearing.
+model_template_veloz:
+  cheap: swe-1-7-medium
+  reasoning: gemini-3.5-flash
+  auto: adaptive
+
 model_policy:
   # Re-derived 2026-07-17 from devin-master-documentation's model pages
   # (docs/22-devin-cli-models-overview.md, docs/26-cognition-swe-models.md),
@@ -104,6 +117,6 @@ model_policy:
   # Verified 85.2% vs 88.6%, per docs/23-anthropic-claude-models.md) for lower
   # latency and ~60% lower per-token cost ($2-3/$10-15 vs $5/$25) — user chose
   # speed/cost over max quality for all 4 reasoning-tier specialists.
-  cheap: swe-1-7-medium       # mechanical/plumbing work (Keymaker, Lock, Logos Sparks): gratis hoy en beta; free-preview end date not confirmed, recheck periodically
+  cheap: swe-1-7-medium       # mechanical/plumbing work (Lock, Logos Sparks): gratis hoy en beta; free-preview end date not confirmed, recheck periodically
   reasoning: sonnet           # planning/architecture/research/evaluation (Architect, Morpheus, Oracle, Smith): floating alias for the latest Claude Sonnet family version; Anthropic frames it as "broadly comparable to Opus" at a fraction of the latency/cost ($2/$10 intro through 2026-08-31, then $3/$15; vs Opus $5/$25), 1M context
   auto: adaptive              # mixed workloads (Neo, Trinity): Cognition's per-task router; intro pricing expired 2026-07-07, post-intro rate depends on the user's billing plan

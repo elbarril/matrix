@@ -51,7 +51,7 @@ The intelligence never ships into project code. The brain stays here. **The reve
 
 ## 3. The roster — names map to function
 
-One master, five core specialists, one opt-in sixth. **Roster discipline (from hard experience): adding a new specialist requires retiring or merging an existing one.** Capabilities, not topics.
+One master, five core specialists. **Roster discipline (from hard experience): adding a new specialist requires retiring or merging an existing one.** Capabilities, not topics.
 
 | Agent | Trilogy role | Function (capability) |
 |---|---|---|
@@ -61,11 +61,12 @@ One master, five core specialists, one opt-in sixth. **Roster discipline (from h
 | **The Architect** | Designer of the system | **Architect.** Designs structure, names trade-offs, reviews plans before build. Answers "how it fits". |
 | **Trinity** | The operator who executes | **Builder.** Implements and ships. Real, working code. |
 | **Agent Smith** | The relentless detector of anomalies | **Evaluator (with scoped remediation).** Tests, critiques, finds the flaw, blocks weak work; fixes the low-blast-radius defects it reported itself, under pre-registered failing→passing evidence. |
-| **The Keymaker** *(opt-in 6th)* | Maker of keys, opener of doors | **Git / Ops.** Branches, paths, access, version control. Loaded only when git work is explicit. |
 
 **Routing seam:** Morpheus answers *what / when*. The Architect answers *how it fits*, and reviews Morpheus's plan before Trinity starts building. Smith gates the result before anything is called "done" — and remediates the defects it finds when they are inert (Tier 1) or narrowly localized (Tier 2, with an Architect diff review before close); semantic, systemic, gate-logic and contract-text defects (Tier 3) go back to Trinity. **Roster discipline note:** Smith's capability set is now close to Trinity's, so the seam that keeps them two specialists and not one is the *trigger*, not the tool list — Smith's edit right derives from a defect Smith itself reported in its own eval artifact, never from a task brief. Trinity is the only agent that builds to a brief. Read that sentence before ever proposing to merge them.
 
 **The user never invokes specialists directly.** Neo routes. Direct invocation is allowed but rare.
+
+**Git / ops.** There is no dedicated git/ops specialist. Neo handles explicitly-requested git/version-control work directly via its `run-command` capability — never autonomously, always confirming branch/status first and requiring explicit confirmation for destructive operations (force push, reset --hard).
 
 ### Supporting cast (infrastructure, Layers 1 & 3)
 
