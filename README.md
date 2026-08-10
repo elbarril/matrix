@@ -135,12 +135,12 @@ matrix/
 │   ├── data/                  # lessons.md, code-quality-review-lens.md, capability-map.md
 │   ├── subsystems/            # the fleet (federated ships)
 │   ├── state/                 # GITIGNORED: workspace.yaml, activity.log, checkpoints.jsonl, ...
-│   └── output/                # GITIGNORED: Matrix-workspace-mode scratch (see AGENTS.md §1)
+│   └── output/                # GITIGNORED: per-project artifact subtrees + Matrix-workspace-mode scratch (see AGENTS.md §1)
 ├── docs/SYSTEM_TRUTH.md       # The Source (generated/validated)
 └── clients/                   # GITIGNORED: pulled project repos
 ```
 
-Work artifacts for a **bound project** are written to that project's own `matrix-output/` directory (sibling to its `_brain` symlink) — never inside this repo. See `AGENTS.md` §1. `matrix select` auto-adds `matrix-output/` (plus `AGENTS.local.md` and `_brain`) to that project's `.gitignore`, so it never leaks into the project's own git history.
+Work artifacts for a **bound project** are written to `brain/output/<project>/{architecture,plans,research,eval}/` **in this repo** — never inside the project's own repo. See `AGENTS.md` §1. `matrix select` creates that per-project subtree (if missing) as part of binding, alongside `AGENTS.local.md` and the `_brain` symlink. Because nothing project-specific is written inside the project's own repo anymore, its `.gitignore` no longer needs an entry for that (retired).
 
 ## CLI commands
 

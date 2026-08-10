@@ -11,10 +11,9 @@ _brain
 brain/state/*
 !brain/state/.gitkeep
 
-# Work artifacts produced in Matrix-workspace-mode (working on Matrix itself).
-# Project-bound work artifacts live in the PROJECT's own `matrix-output/`
-# directory (sibling to its `_brain` symlink), never here — see
-# AGENTS.md §1.
+# Work artifacts: Matrix-workspace-mode scratch AND every bound project's own
+# per-project subtree (brain/output/<project>/{architecture,plans,research,eval}/)
+# — see AGENTS.md §1. Never written into the project's own repo anymore.
 brain/output/*
 !brain/output/.gitkeep
 

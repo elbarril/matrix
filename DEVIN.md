@@ -81,15 +81,28 @@ Both are **user-scope**, so they follow Neo/the specialists globally rather than
 
 ## Least-privilege `allowed-tools`
 
-Every specialist's generated `AGENT.md` carries an `allowed-tools:` list, resolved from its `capabilities:` frontmatter through the `allowed_tools:` map in `adapters/devin/adapter.yaml` (categories: `read`, `edit`, `write`, `grep`, `glob`, `exec`, plus `mcp__server__tool` patterns — the actual Devin frontmatter vocabulary, distinct from the tool-call names in the `capabilities:` map above). **Re-measure, don't trust this paragraph:** `sed -n '2,/^---$/p' adapters/devin/generated/.agents/agents/<name>/AGENT.md` shows what the Trainman emitted, and `diff` against `~/.config/devin/agents/<name>/AGENT.md` shows whether `install` propagated it. Last re-verification: **2026-07-27**, after Smith's evaluator-with-remediation role change. The *written* grant is `read, edit, write, grep, glob, exec, mcp__chrome-browser__*` (confirmed on disk, generated == installed, byte-identical) — note `edit` and `write` **both** appear, because the abstract `edit` capability maps to `[edit, write]` here, so granting modification also grants file creation; Matrix accepts that widening and constrains creation in `smith.md`'s `<boundaries>` prose instead of splitting a new capability. **Live spike run same day, result: NOT reproduced in-session (Needs verification).** A `smith`-profile subagent spawned from Neo, mid-session, in the *same* CLI process that ran `install`, reported only `read, grep, find_by_name, exec` available — no `edit`/`write` — and correctly refused to bypass via `exec`. A read-only-profile negative control also had no edit tool, as expected (restriction still holds). This means either (a) subagent profile/tool-grant resolution is snapshotted at CLI process start and does not hot-reload mid-session, or (b) some other caching layer is in play — **neither is confirmed**; no doc in this repo's `devin-master-documentation` copy states the discovery timing either way (checked `09-advanced-cli-features.md`, `07-troubleshooting.md`: no match). Re-run of the same positive/negative control pair from a **freshly started** CLI session (started after today's `bin/matrix install --target=devin`) now confirms Smith's `edit` is **live**: the spawned `smith` subagent reported exactly `read, edit, exec, grep, find_file_by_name` (5 tools, `edit` present), and a read-only-profile negative control again reported no edit tool. This refutes the earlier same-process negative result and confirms hypothesis (a) from lesson #26: subagent tool-grant resolution is snapshotted at CLI process start. That question is now **CLOSED** after a second independent fresh-process `smith` spike reported the identical full tool list, `edit, exec, find_file_by_name, grep, read` (5 tools). `write` is **CONFIRMED ABSENT** for subagents despite being declared in the installed `allowed-tools`: Smith's file-creation reach via the `edit`→`[edit,write]` capability widening does not work live for subagents, and only in-place modification of existing files is available. `glob` is **CONFIRMED PRESENT**, bound under the tool name `find_file_by_name` rather than literally named `glob`; there is no gap. `mcp__chrome-browser__*` is **CONFIRMED ABSENT** for subagents: no `mcp__*`-namespaced tool of any kind reaches a fresh `smith` subagent despite the installed declaration and Smith's `browser` capability, so that capability is non-functional for subagents today. This last point is a real, closed-but-unresolved-by-design gap: Neo/the user must decide whether to keep declaring `browser`/`mcp__chrome-browser__*` for Smith as documentation of an aspiration, or drop it until Devin exposes MCP tools to subagents. Earlier verified-restricted profiles, unchanged by this round: `oracle` (adds `mcp__context7__*`) resolved a library id and queried its docs through context7.
+Every specialist's generated `AGENT.md` carries an `allowed-tools:` list, resolved from its
+`capabilities:` frontmatter through the `allowed_tools:` map in `adapters/devin/adapter.yaml`
+(categories: `read`, `edit`, `write`, `grep`, `glob`, `exec`, plus `mcp__server__tool` patterns).
+Re-measure, don't trust prose: `sed -n '2,/^---$/p' adapters/devin/generated/.agents/agents/<name>/AGENT.md`
+vs. `diff` against the installed copy. Current written grant for a full-capability specialist:
+`read, edit, write, grep, glob, exec, mcp__chrome-browser__*` — `edit`+`write` both appear because
+the abstract `edit` capability maps to both here (Matrix accepts that widening; see `smith.md`
+`<boundaries>` for the narrower intent).
 
-Despite `write` being confirmed absent and `edit` confirmed unable to create new files (verified by a failed `edit`-with-empty-`old_string` attempt against a nonexistent path, which errors at the tool's own pre-flight existence check), a `smith` session was observed to successfully create a new eval artifact file. **Needs verification for the exact tool call:** the outcome (new file created, content present) is directly confirmed on disk; the most likely mechanism is `exec` with shell output redirection (`cat > file <<EOF` or equivalent), which remains available to every profile that has the `exec`/`run-command` capability regardless of `write`/`edit` grants.
+Grant-resolution timing (subagent tool-grant snapshotting at CLI process start vs. hot-reload;
+audit-log session-id attribution for inner subagents) is now **resolved for the timing question**
+(snapshot-at-start, confirmed) but still has an open item on audit attribution — see
+`brain/output/research/devin-tool-grant-resolution-timing.md` for the spikes and current status.
 
-### Inner-subagent audit observability
+**Known fixes to this mapping (detail moved out, one-line pointer each):**
+- `pre_exec_guard.py` token-match false-positive fix → `brain/output/eval/pre-exec-guard-false-positive-fix.md`.
+- Logos-Sparks `run-command` capability removal + exec allowlist for subagents (`permissions.allow` /
+  `PreToolUse` guard) → `brain/output/eval/devin-subagent-exec-hardening.md`.
 
-**2026-07-27 — measured TRUE, with a parent-session attribution caveat.** Neo dispatched a fresh `smith`-profile subagent in a genuinely new CLI process (started after today's `bin/matrix install --target=devin`) and it performed a real `edit` tool call against the scratch file `brain/state/scratch/m2-probe.txt` (gitignored, already deleted after the probe), changing the text from `scratch-M2-probe-baseline` to `scratch-M2-probe-edited-by-smith`. The call was captured in `brain/state/hook-audit.jsonl` (the file grew from 11794 to 11804 lines during the probe); the relevant appended line is verbatim: `{"timestamp": "2026-07-27T15:23:01.602822-03:00", "event": "post_tool_use", "pre_activation_check_ok": null, "session_id": "pointy-goldfish", "project_active": "claude-master-documentation", "tool_name": "edit", "tool_paths": ["/home/emiliano/www/emisrepos/matrix/brain/state/scratch/m2-probe.txt"]}`. M2 ("do inner-subagent tool calls reach the audit log") is therefore **confirmed TRUE**: the audit log records the correct `tool_name` and `tool_paths`. The caveat is that the recorded `session_id` (`pointy-goldfish`) is the **parent** Neo session's id, not a distinct id for the `smith` subagent that actually made the call. Today's audit log therefore cannot distinguish "Neo called `edit` directly" from "Neo's `smith` subagent called `edit`". This is the same category of attribution gap flagged at `brain/agents/neo.md:99` and in the earlier Claude-adapter feasibility checkpoint, now backed by a concrete measurement rather than a documentational concern.
-
-Neo's `SKILL.md` is the one exception — deliberately left with no `allowed-tools`. Neo needs `run_subagent` and `ask_user_question`, and neither is a nameable `allowed-tools` entry (see below), so restricting Neo's list to the nameable categories risks silently dropping tools that were never in scope to restrict in the first place. The blast radius of an unrestricted Neo is also lower in practice: it runs in the foreground, user-approved, not as an unattended subagent.
+Neo's `SKILL.md` is deliberately left without `allowed-tools` (needs `run_subagent`/`ask_user_question`,
+neither is a nameable `allowed-tools` entry). The blast radius of an unrestricted Neo is also lower
+in practice: it runs in the foreground, user-approved, not as an unattended subagent.
 
 ## Subagents can never ask the user directly
 
@@ -139,6 +152,14 @@ a new one — see `brain/data/lessons.md`.)
   the generated `neo` skill and for bound projects' `AGENTS.local.md` block —
   see `matrix_block_tmp()` in `bin/matrix`) and emit it as Devin's
   `hookSpecificOutput.additionalContext`. One wording, three delivery surfaces.
+- This file (`DEVIN.md`) is the doc that `{{ADAPTER_DOC_PATH}}` resolves to in
+  `brain/data/activation-preamble.tmpl`, via `binding.doc_path: "DEVIN.md"` in
+  `adapters/devin/adapter.yaml`. The three surfaces that render that template —
+  `bin/matrix matrix_block_tmp()`, `adapters/_build.py` (the generated `neo`
+  SKILL.md), and `session_audit.py`'s `_render_activation_preamble()` — all
+  resolve the placeholder to an absolute path to this file, never a literal
+  `"DEVIN.md"` baked into Layer 1/3 code. A future non-devin adapter only needs
+  its own `binding.doc_path`; no code in `bin/matrix`/`_build.py`/hooks changes.
 - `_activation_reinject_scope()` (added under B1-Option 1, post-audit backlog —
   see `brain/output/architecture/matrix-system-health-audit.md`) scopes that
   injection to sessions whose cwd resolves to Matrix workspace mode **or**
@@ -193,54 +214,10 @@ mitigation against incidental reads, not a sandbox.
 
 ## Headless / non-interactive execution (`devin -p`)
 
-Verified live against the installed binary (v3000.2.17) during Hardline/AFK Fase-0 research
-(Oracle, this session — every claim below was run, not inferred from docs). This closes the
-gap flagged by lesson-style D-f in `brain/output/plans/hardline-afk.md`: a real headless
-primitive exists; it was simply never written down here.
-
-- **The primitive:** `devin -p "<prompt>" [--permission-mode dangerous] [-r <session_id>]`.
-  `-p`/`--print` runs a single turn non-interactively and exits — no REPL, no operator needed.
-  Confirmed with a real end-to-end unattended run: `devin --permission-mode dangerous -p
-  "create a file ... via shell"` actually created the file, zero human in the loop.
-- **Exit code is not a success signal.** `devin -p` returns exit `0` whenever it completes a
-  turn and prints a final response — including when the requested action was *refused* by
-  permissions. Any wrapper must parse the printed text for refusal language (e.g. "rejected by
-  the current permission mode") vs. success language; `$?` alone cannot distinguish them.
-- **Unapproved tool calls auto-deny, they do not hang.** In default (`auto`) permission mode,
-  a tool call requiring approval with no operator attached is auto-denied and the agent reports
-  the refusal in its final text, then exits 0. Same "auto-deny, don't hang" behavior is
-  documented for background subagents (`subagents.mdx`) — confirmed here to also hold at the
-  top-level `-p` invocation, not just in-session.
-- **`permissions.deny` survives `--permission-mode dangerous` when it is actually loaded.**
-  A user-level config containing `permissions.deny` was tested to block a real commit attempt
-  even under full `dangerous` mode. However, live Fase-4 verification found that a project-level
-  `.devin/config.json` is **not reliably picked up by `devin -p`** in this installed version. The
-  Fase-4 adapter therefore still writes the deny rules into the bound project's
-  `.devin/config.json` (the design's requested location) and additionally passes a merged copy
-  via `--config` so the rules are active at runtime. This is the real, working D5 guardrail.
-- **Sessions are real and resumable.** Every `-p` run creates a listable session, resumable
-  non-interactively via `devin -r <session_id> -p "<follow-up>"`. The `devin -p` invocation
-  itself does not print a session id; immediately after the run, `devin list --format json`
-  scoped to the project directory returns a JSON array of session objects. The `id` (or
-  `short_id`) with the greatest `last_activity_at` timestamp is the session just created, and
-  that is what the Fase-4 adapter captures and returns to Layer 1 for orphan recovery.
-- **Docs-vs-live divergence:** the local docs bundle
-  (`_versions/3000.2.17/share/devin/docs/reference/permissions.mdx` and
-  `essential-commands.mdx`) names permission modes `normal`/`accept-edits`/`bypass`/`autonomous`.
-  The live `--help` of that *same installed version* names them `auto`/`accept-edits`/`smart`/
-  `dangerous`, and documents a `smart` mode and a `--agent-config` flag not present in the local
-  bundle at all. **Treat live `devin --help` as ground truth for exact flag/value spelling**,
-  even against a version-pinned local docs bundle — the concepts match, the exact names don't
-  always.
-- **Not yet spike-tested:** `--sandbox` (OS-level isolation via bubblewrap/seccomp/Seatbelt,
-  documented in `sandbox.mdx`) and `devin cloud drs` / `/handoff` (cloud/detached execution).
-  Both are real documented primitives but weren't exercised live in this research pass — worth
-  a follow-up spike before relying on either.
-- **Unrelated to any of the above:** the phantom headless subcommand string historically referenced
-  in `brain/agents/lock.md:9`, `modules/hardline/README.md:31`, and `onboarding.html:836` is not a
-  real Devin CLI command at any version — confirmed against the full `bin/matrix` dispatch
-  table and the CLI's own changelog. It was phantom documentation debt, corrected in Fase 2 to
-  `bin/matrix hardline dispatch <project> "<line>"` (not yet implemented — Fase 3).
+`devin -p "<prompt>" [--permission-mode dangerous] [-r <session_id>]` runs a single turn
+non-interactively and exits — the real headless primitive Hardline/AFK builds on. Exit code 0
+does not mean success (parse the printed text; refusals also exit 0). Full spike findings,
+version-pinned details, and open items: `brain/output/research/devin-headless-execution.md`.
 
 ## Why enforcement is portable, not Devin-coupled
 
@@ -337,10 +314,6 @@ Al re-otorgarle `edit` a Smith (rol de evaluador-con-remediación, 2026-07-27), 
 
 El spike de Neo en un proceso de CLI genuinamente nuevo (arrancado después del `install` de 2026-07-27) confirmó la hipótesis pendiente de la lección 26: el subagente `smith` recién spawneado reportó `read, edit, exec, grep, find_file_by_name` — `edit` estaba vivo — mientras que un profile de control de solo lectura siguió reportando su set restringido de siempre. Una llamada `edit` real del subagente `smith` llegó a `brain/state/hook-audit.jsonl` con `tool_name` y `tool_paths` correctos, pero el `session_id` registrado fue el de la sesión padre Neo (`pointy-goldfish`), no un id propio del subagente. Un segundo spike independiente en un proceso fresco confirmó que `write` y `mcp__chrome-browser__*` están **CONFIRMED ABSENT** para subagentes independientemente de su declaración en `allowed-tools`, mientras que `glob` sí está presente bajo el nombre `find_file_by_name`. El mecanismo más probable para la creación de un artefacto nuevo pese a `write` ausente es `exec` con redirección de shell.
 
-### Lesson 51
-
-Al retirar Keymaker del roster (2026-08-07), `adapters/devin/install.sh`'s `deploy()` regeneró e instaló correctamente los 10 artefactos vigentes en `~/.config/devin/agents/` y `~/.config/devin/skills/`, pero la carpeta `agents/keymaker/` (instalada en una corrida anterior) siguió existiendo intacta — `deploy()` itera sobre lo generado y sobreescribe/crea, nunca compara contra lo ya instalado para borrar lo que ya no tiene fuente; se borró a mano (`rm -rf`). Separado, se encontró un árbol de instalación completo `.agents/` (formato "thin pointer" viejo, con fecha 2026-06-15, distinto del formato actual con contenido inline) — deuda de una convención de wiring anterior a `skills/`+`agents/`, sin relación con el cambio de roster puntual; también se borró completo. Candidato real a mecanizar, no implementado esta sesión: que `install.sh` compare el directorio instalado contra el generado y pode las carpetas de specialists que ya no están en `brain/agents/*.md`, igual que ya hace `clean_broken_matrix_links` con symlinks rotos.
-
 ### Lesson 28
 
 Fase-0 (Oracle) probó `.devin/config.json` con `permissions.deny: ["Exec(git commit)","Exec(git push)"]` a nivel de proyecto y vio bloquear un commit real bajo `--permission-mode dangerous`. Fase-4 (Trinity), invocando `devin -p` sin REPL contra el mismo tipo de proyecto, encontró que esa misma regla de proyecto **no bloqueó** un commit real — pasó. El mecanismo que sí funcionó de forma reproducible (confirmado independientemente por Neo, dos corridas: una sin `--config` que comiteó, una con `--config` que bloqueó): generar un archivo de config temporal que fusiona el `~/.config/devin/config.json` real del usuario con las reglas `deny`, y pasarlo explícitamente con `--config <path>` en la invocación. La causa exacta de por qué `.devin/config.json` de proyecto no se carga de forma confiable bajo `-p` queda **sin resolver** — no se investigó a fondo el motivo (¿se resuelve el cwd distinto al pasar `-p` con `--config`? ¿hay algún orden de precedencia distinto en modo no-interactivo?), solo se confirmó el síntoma y el workaround. Ver `hardline-dispatch.sh` (`adapters/devin/`) para la implementación real.
@@ -353,94 +326,27 @@ El pedido era "que Neo arranque solo en modo workspace de Matrix". Primera respu
 
 El hook de ciclo de vida mencionado en la lección 34 es `Stop`; el CLI concreto al que aplica es **Devin CLI**. El detalle del bug y la batería de inyección de errores quedan en `brain/data/lessons.md` lección 34.
 
-### Lesson 38
-
-Tercer incidente confirmado de `~/.local/share/devin/cli/sessions.db` (el store SQLite local que respalda `/resume`, `-r`/`--resume`, `-c`/`--continue` y el picker de `/ls`) corrupto con `database disk image is malformed`. Dos antecedentes: uno con reparación registrada en el ledger de Matrix (`2026-07-20T12:10:52-03:00`, proyecto `generalmotors`: "recreada desde .dump sanitizado, 487 sesiones recuperadas, integrity_check ok" — sin detalle de metodología); otro sin lección escrita, encontrado solo porque el propio `prompt_history` recuperado de esta corrida conservaba la pregunta textual del usuario en una sesión previa ("quise usar /resume pero tiro este error... como se arregla?").
-
-**Diagnóstico:** `PRAGMA integrity_check` marcó `btreeInitPage() returns error code 11` en dos árboles — `message_nodes` (rootpage de esa corrida, ~169k filas, transcripciones completas de mensajes) y `rendered_commits` (~44k filas, cache HTML de la vista de replay) — pero ninguno en `sessions`, `prompt_history`, `app_state` ni `tool_call_state`. La corrupción es parcial y despareja, no total.
-
-**Vía que falló:** `sqlite3 <db> ".recover"` (la vía moderna que la propia documentación de SQLite recomienda para bases corruptas) devolvió directamente `sql error: no such table: sqlite_dbpage` — el binario `sqlite3` de este sistema (3.45.1, paquete de la distro) no está compilado con esa virtual table. Sin esa vía, la única alternativa viable es `.dump`.
-
-**Vía que funcionó (procedimiento completo, reproducible):**
-
-```bash
-DEVIN_DIR="$HOME/.local/share/devin/cli"
-
-# 1. Volcado tolerante a corrupción — exit 0 y stderr vacío NO implican volcado completo/válido
-sqlite3 "$DEVIN_DIR/sessions.db" ".dump" > /tmp/dump.sql 2> /tmp/dump.err
-
-# 2. LA TRAMPA: si sqlite3 detectó errores al recorrer una tabla, cierra el dump con
-#    "ROLLBACK; -- due to errors" en vez de "COMMIT;". Todo el .dump vive en una sola
-#    transacción BEGIN...COMMIT — reimportarlo tal cual da una base VACÍA, sin ningún
-#    error visible (exit 0, stderr vacío). Verificar SIEMPRE la última línea:
-tail -1 /tmp/dump.sql   # "ROLLBACK; -- due to errors" => hay que sanear antes de importar
-
-# 3. Saneo mínimo: solo la última línea, no tocar nada más
-sed '$s/^ROLLBACK; -- due to errors$/COMMIT;/' /tmp/dump.sql > /tmp/dump_sanitized.sql
-
-# 4. Reconstrucción en un archivo nuevo (no pisar el original todavía)
-sqlite3 /tmp/scratch.db < /tmp/dump_sanitized.sql
-
-# 5. Verificación — debe devolver "ok"
-sqlite3 /tmp/scratch.db "PRAGMA integrity_check;"
-
-# 6. Swap con backup fechado (mismo criterio que el incidente de generalmotors),
-#    incluyendo el -wal/-shm viejo para que la base nueva arranque sin arrastrar
-#    un WAL de una generación de esquema distinta:
-TS=$(date +%Y%m%d_%H%M%S)
-mv "$DEVIN_DIR/sessions.db" "$DEVIN_DIR/sessions.db.corrupt.$TS"
-mv "$DEVIN_DIR/sessions.db-wal" "$DEVIN_DIR/sessions.db.corrupt.$TS-wal" 2>/dev/null
-mv "$DEVIN_DIR/sessions.db-shm" "$DEVIN_DIR/sessions.db.corrupt.$TS-shm" 2>/dev/null
-mv /tmp/scratch.db "$DEVIN_DIR/sessions.db"
-chmod 644 "$DEVIN_DIR/sessions.db"
-```
-
-Resultado real de esta corrida: 644 `sessions`, 1822 `prompt_history`, **169.323 `message_nodes`** (antes ilegible, ni siquiera `SELECT count(*)` corría), 44.327/44.445 `rendered_commits` (~99,7%; el resto son filas de cache de replay, no contenido fuente), `app_state`/`tool_call_state` intactos. Los únicos 3 puntos que `.dump` marcó explícitamente como perdidos aparecen como comentarios `/****** CORRUPTION ERROR *******/` inline en el dump, justo antes de la fila/tabla afectada — grepear ese literal ancla de línea (`^/\*\*\*\*\*\* CORRUPTION ERROR`) da un conteo exacto de filas irrecuperables, sin necesidad de adivinar.
-
-**Verificación E2E real (no solo `integrity_check`):** `adapters/devin/session_query.py find <cwd_substring>` y `session_query.py dump <session_id>` corridos contra la base reparada reconstruyeron correctamente tanto el listado de sesiones de un proyecto real como la transcripción completa de una sesión histórica real (una de `saintlukes`, ~1200 líneas de conversación). Esto prueba que `message_nodes` recuperado es legible por el mismo tipo de consulta relacional que usaría la función real de resume — no solo que pasa un chequeo estructural de bajo nivel.
-
-**Limitación operativa (no tiene workaround conocido):** un proceso de Devin CLI que ya tenía `sessions.db` abierto (por descriptor de archivo, no por path) sigue leyendo/escribiendo esa misma inode después del swap — un `mv` en el mismo path no lo afecta hasta que ese proceso vuelva a abrir el archivo. Consecuencia directa: la sesión que hace la reparación en vivo (y cualquier otro proceso de Devin CLI corriendo en simultáneo — REPL, integraciones ACP, etc.) nunca se ve a sí misma reparada; hace falta cerrarla y abrir una nueva para que `/resume`/`-r`/`-c` reflejen el historial recuperado. Confirmado en esta corrida: `session_query.py dump` sobre la sesión que ejecutó la propia reparación no encontró mensajes (esperado — esa sesión nunca estuvo en el `.dump` porque su contenido más reciente todavía no había pasado por un checkpoint de WAL al momento del volcado).
-
-**Causa raíz de la corrupción en sí: no confirmada, queda abierta.** En el momento del hallazgo había 2 procesos de Devin CLI activos (`devin --permission-mode bypass` y `devin acp`), ambos corriendo el mismo binario/versión (descarta desincronización de esquema entre versiones distintas como causa en este caso puntual). `sessions.db` vive en ext4 local, no en red/FUSE, con >250 GB libres (descarta filesystem de red y disco lleno). Hipótesis más plausible y no verificada: escritura concurrente WAL desde 2+ procesos de Devin CLI sobre el mismo `sessions.db`, posiblemente agravada por un cierre abrupto (kill -9, crash) de alguno de ellos en algún momento entre incidentes. Recomendado reportar con `/bug` la próxima vez que se reproduzca, adjuntando PIDs, versiones y `ps aux` de los procesos de Devin CLI activos en ese momento — hoy no hay evidencia suficiente para que Cognition lo triangule.
-
-**Corrección same-day (2026-07-30, ~40 min después del repair de arriba):** el usuario reportó un síntoma nuevo de `/resume` en una sesión nueva (`bead-maiasaura`, proyecto `saintlukes`): `Invalid column type Null at index: 0, name: id` — el texto exacto que produce el `Display` de `rusqlite::Error::InvalidColumnType` cuando el binario de Devin CLI lee la columna `id` de una fila de `sessions` y da NULL. Esto prueba que el diagnóstico original de esta lección ("ninguna corrupción en `sessions`") era incompleto: `PRAGMA integrity_check` y el conteo de comentarios `CORRUPTION ERROR` solo cubren lo que la herramienta *reconoce* haber tocado, no fila por fila.
-
-*Por qué puede pasar en `sessions.id` y no en `prompt_history.id`/`rendered_commits.id`:* `sessions.id` es `TEXT PRIMARY KEY` **sin** `NOT NULL` explícito — un `PRIMARY KEY` no-`INTEGER` en SQLite no bloquea NULL (solo un alias de rowid `INTEGER PRIMARY KEY` lo hace, autoasignando en vez de aceptar NULL). `prompt_history.id`/`rendered_commits.id` sí son `INTEGER PRIMARY KEY` — por eso 0 filas NULL ahí, ni antes ni después.
-
-*Auditoría real que encontró el alcance completo (no solo el síntoma reportado):*
-```bash
-DEVIN_DIR="$HOME/.local/share/devin/cli"
-OLD="$DEVIN_DIR/sessions.db.corrupt.20260730_121318"   # el backup pre-repair de ESE MISMO día, no lo borres nunca en el mismo día del repair
-
-# 1. Filas con columnas de tipo incorrecto (no solo NULL en id — cualquier columna NOT NULL con typeof() distinto del declarado)
-sqlite3 "$DEVIN_DIR/sessions.db" "SELECT rowid,id,typeof(id),typeof(last_activity_at),typeof(created_at) FROM sessions WHERE typeof(id)!='text' OR typeof(last_activity_at)!='integer' OR typeof(created_at)!='integer';"
-
-# 2. Diff completo de claves entre el backup pre-repair y la base reparada (la auditoría que realmente importa)
-sqlite3 "file:$OLD?mode=ro" -readonly "SELECT id FROM sessions WHERE id IS NOT NULL;" | LC_ALL=C sort > /tmp/old_ids.txt
-sqlite3 "file:$DEVIN_DIR/sessions.db?mode=ro" -readonly "SELECT id FROM sessions WHERE id IS NOT NULL;" | LC_ALL=C sort > /tmp/new_ids.txt
-LC_ALL=C comm -23 /tmp/old_ids.txt /tmp/new_ids.txt   # ids perdidos por el repair, no solo corruptos en origen
-```
-
-Resultado de esta auditoría: 1 fila fantasma (`id` NULL) + **6 filas de `sessions` perdidas por completo** (`catnip-tarp`, `confusion-occupation`, `healthy-roundworm`, `plain-hellebore`, `somber-speaker`, `tungsten-pleasure`) que el `.dump` secuencial original nunca marcó con `CORRUPTION ERROR` ni hizo fallar `integrity_check` — desaparecieron en silencio. Confirmado irrecuperables: ni una búsqueda indexada directa por `id` contra `$OLD` (`WHERE id='catnip-tarp'`, etc., forzando el uso del índice en vez de un scan secuencial) ni sus `message_nodes`/`prompt_history` en la base reparada (0 filas huérfanas) las trajeron de vuelta. Pérdida real, no solo de metadata de listado.
-
-*La trampa de la fila fantasma — no asumas que un valor sospechoso es la fila real con la columna corrida:* la fila con `id` NULL tenía en la posición de `working_directory` el string `elastic-numeric`, que **sí** es un `id` real de otra sesión — parecía una fila real con las columnas desalineadas por la corrupción. Cruzarlo contra una búsqueda indexada directa (`WHERE id='elastic-numeric'`) en `$OLD` mostró que esa sesión ya estaba sana y completa en su propia fila (rowid distinto) — el string en la fila fantasma era ruido de página corrupta que por casualidad coincidía con un id real ya existente en otro lado, no la misma fila corrida. Regla operable: antes de "reparar" una fila sospechosa reconstruyendo valores, buscá cada valor sospechoso por índice directo en el backup corrupto — si aparece sano en una fila propia, la fila sospechosa es ruido y el fix es borrarla, no fusionarla.
-
-*Fix aplicado (mínimo, verificado):*
-```bash
-cp -p sessions.db "sessions.db.before-nullid-fix.$(date +%Y%m%d_%H%M%S)"
-sqlite3 sessions.db "DELETE FROM sessions WHERE id IS NULL;"
-```
-Verificación E2E post-fix: `integrity_check` ok; `SELECT COUNT(*) FROM sessions WHERE id IS NULL` = 0; 0 filas con `typeof()` incorrecto en ninguna columna NOT NULL; lectura completa de las 644 filas restantes sin excepción; `session_query.py find` corrió limpio contra la base viva.
-
-*Nota operativa nueva (corrige/matiza la limitación de arriba):* este fix fue un `DELETE`/`UPDATE` **in-place** sobre el mismo archivo/inode que los procesos de Devin CLI ya tenían abierto (confirmado con `fuser sessions.db` antes y después: mismos 2 PIDs) — a diferencia del swap de archivo (`mv`) de la reparación original, un DML in-place en modo WAL sí es visible para procesos ya abiertos sin necesidad de reiniciarlos. La limitación de "hace falta reiniciar" aplica al **swap de archivo**, no a una corrección puntual de filas sobre el archivo ya vigente — para fixes chirúrgicos post-repair, preferí DML in-place por esta razón.
-
 ### Lesson 37
 
 En Devin CLI, el archivo de estado local del proyecto es `.devin` (directorio `.devin/` en la raíz del proyecto). En `saintlukes`, el `.gitignore` del proyecto solo tenía `_brain`, `AGENTS.local.md` y `.devin`; faltaba `matrix-output/`, por lo que un artefacto de research escrito ahí corría riesgo real de ser trackeado en el repo del cliente.
 
+**Nota post-`workspace-mode-refinements` (no reescribe el incidente, lo contextualiza):** el mecanismo que este incidente motivó ya no aplica de la misma forma. Desde la sesión que retiró `matrix-output/` (ver `AGENTS.md` §1), los artefactos de research/plan/architecture/eval de un proyecto bindeado ya no se escriben en ningún directorio dentro del propio repo del cliente — van a `brain/output/<project>/<sub>/` en este repo. Por eso `matrix select` ya no agrega `matrix-output/` al `.gitignore` del proyecto: no hace falta, porque nada se vuelve a escribir ahí. El riesgo real de `saintlukes` (un artefacto trackeado en el repo de un cliente) sigue siendo un incidente real que pasó; lo que cambió es la superficie que lo hacía posible, no el hecho de que haya ocurrido.
+
+### Lesson 38
+
+`sessions.db` (SQLite local del CLI) tuvo 2 incidentes de corrupción confirmados. Regla
+operable: `sqlite3 ... ".dump"` puede cerrar en `ROLLBACK` en vez de `COMMIT` sin error
+visible (exit 0, stderr vacío) — siempre revisar la última línea del dump antes de
+reimportar. Diagnóstico completo (procedimiento de reparación, auditoría de filas
+perdidas, causa raíz sin confirmar): `brain/output/research/devin-sessions-db-corruption-incidents.md`.
+
 ### Lesson 42
 
 El hook de auditoría de sesión que implementa los mecanismos de detección de sesiones huérfanas es `adapters/devin/hooks/session_audit.py`, wireado globalmente en `~/.config/devin/config.json` por `adapters/devin/install-hooks.sh`.
+
+### Lesson 51
+
+Al retirar Keymaker del roster (2026-08-07), `adapters/devin/install.sh`'s `deploy()` regeneró e instaló correctamente los 10 artefactos vigentes en `~/.config/devin/agents/` y `~/.config/devin/skills/`, pero la carpeta `agents/keymaker/` (instalada en una corrida anterior) siguió existiendo intacta — `deploy()` itera sobre lo generado y sobreescribe/crea, nunca compara contra lo ya instalado para borrar lo que ya no tiene fuente; se borró a mano (`rm -rf`). Separado, se encontró un árbol de instalación completo `.agents/` (formato "thin pointer" viejo, con fecha 2026-06-15, distinto del formato actual con contenido inline) — deuda de una convención de wiring anterior a `skills/`+`agents/`, sin relación con el cambio de roster puntual; también se borró completo. Candidato real a mecanizar, no implementado esta sesión: que `install.sh` compare el directorio instalado contra el generado y pode las carpetas de specialists que ya no están en `brain/agents/*.md`, igual que ya hace `clean_broken_matrix_links` con symlinks rotos.
 
 ### Saint Luke's
 

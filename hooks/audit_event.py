@@ -13,7 +13,7 @@ from _common import emit, read_input, resolve_root
 
 ALLOWED = {
     "event", "timestamp", "session_id", "project_active", "pre_activation_check_ok",
-    "tool_name", "tool_paths", "subagent_profile",
+    "tool_name", "tool_paths", "subagent_profile", "tool_command",
     # nunca agregar `tool_response` ni claves que contengan contenido de archivo a
     # esta lista -- ver eval de Smith, ronda 4 de discovery-mediation.
     "invoked_artifact", "invoked_origin",

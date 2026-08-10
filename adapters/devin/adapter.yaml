@@ -50,6 +50,18 @@ harden:
   config_path: "~/.config/devin/config.json"
   schema: "permissions_deny_v1"
 
+# Declarative Exec allowlist merged by install-hooks.sh into
+# ~/.config/devin/config.json permissions.allow. Prefix-only match per
+# Devin CLI docs: `Exec(bin/matrix)` covers every `bin/matrix ...` invocation.
+# Keep this list minimal and Matrix-specific; do NOT add a wildcard `Exec(*)`.
+permissions_allow:
+  - "Exec(bin/matrix)"
+  - "Exec(grep)"
+  - "Exec(git)"
+  - "Exec(find)"
+  - "Exec(ls)"
+  - "Exec(cat)"
+
 install_integrity:
   # Reuses artifacts.installed_agents_dir and harden.config_path — do not
   # duplicate those paths here.
@@ -61,6 +73,7 @@ install_integrity:
     PostCompaction:    "session_audit.py"
     SessionEnd:        "session_audit.py"
     PostToolUse:       "session_audit.py"
+    PreToolUse:        "pre_tool_use_guard.py"
     Stop:              "stop_notify.py"
   mcp_config_path: "~/.config/devin/mcp_config.json"   # confirmed: key path is mcpServers.<name>
   required_mcp_servers: ["chrome-browser", "context7"]
@@ -71,10 +84,11 @@ binding:
   file: "AGENTS.local.md"
   begin_marker: "<!-- MATRIX:BEGIN"
   end_marker: "<!-- MATRIX:END -->"
+  doc_path: "DEVIN.md"          # root-relative path to this adapter's own reference doc,
+                                 # resolved into {{ADAPTER_DOC_PATH}} by matrix_block_tmp()/_build.py/session_audit.py
   gitignore_entries:
     - "AGENTS.local.md"
     - "_brain"
-    - "matrix-output/"
 
 # Model templates: 5 cost/quality presets selectable at build time via
 # `bin/matrix build --target=devin --template=<name>`. The default is

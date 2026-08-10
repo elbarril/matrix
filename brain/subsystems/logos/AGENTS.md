@@ -42,6 +42,7 @@ No claim leaves the Logos to the user (via the core) without:
 
 - The Logos reads the request handed to it via the Link ledger (`research:request`) and writes its result back as `research:result`.
 - Link events are written through `bin/matrix link`; only the captain (Niobe) has `run-command` and therefore the ability to append to the ledger.
+- Source creation by Sparks is always mediated by Niobe through `bin/matrix corpus-ingest --topic <topic> --slug <slug>` (content via stdin). Sparks itself has no `run-command` and never writes a corpus source file directly.
 - It never edits the core's `brain/state/` directly. The ledger is the only shared surface.
 - Neo presents the Logos's graded result to the user; the Logos never speaks to the user directly.
 

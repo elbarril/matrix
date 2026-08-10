@@ -209,10 +209,43 @@ resolve_scope() {
     return 0
 }
 
+# session_focused_project: reads brain/state/sessions/<sid>.json (written by
+# `matrix focus`) and prints the focused project name IFF: the file exists,
+# its session_id matches the current session's sid, and the project it names
+# still exists in .registry.json (read-time check — covers mid-session
+# de-registration, not just write-time). Any other case (no file, stale
+# session_id, de-registered project, unreadable/corrupt JSON) prints nothing.
+# Never propagates an error — same "always usable inside `&&` chains" contract
+# as resolve_scope_project, which is this function's only caller.
+session_focused_project() {
+    local sid; sid="$(current_session_id 2>/dev/null || true)"
+    [[ -n "$sid" ]] || return 0
+    local focus_file="$STATE_DIR/sessions/$sid.json"
+    [[ -f "$focus_file" ]] || return 0
+    local file_sid focused
+    file_sid="$(jq -r '.session_id // empty' "$focus_file" 2>/dev/null || true)"
+    [[ -n "$file_sid" && "$file_sid" == "$sid" ]] || return 0
+    focused="$(jq -r '.focused_project // empty' "$focus_file" 2>/dev/null || true)"
+    [[ -n "$focused" ]] || return 0
+    local existing; existing="$(registry_path "$focused" 2>/dev/null || true)"
+    [[ -n "$existing" && "$existing" != "null" ]] || return 0
+    printf '%s\n' "$focused"
+    return 0
+}
+
 # resolve_scope_project: the *filter subject* for checkpoints/ledger views.
 # Same fallback chain as before the fix — only the workspace case is new.
-# Always returns 0 (callers use it inside `&&` lists under `set -e`).
+# A session-level focus (set via `matrix focus <project>`) takes full
+# priority over the cwd-derived chain below, but only within the same
+# session and only while the focused project remains registered — see
+# session_focused_project(). Always returns 0 (callers use it inside `&&`
+# lists under `set -e`).
 resolve_scope_project() {
+    local focused; focused="$(session_focused_project 2>/dev/null || true)"
+    if [[ -n "$focused" ]]; then
+        printf '%s\n' "$focused"
+        return 0
+    fi
     local line mode project
     IFS=$'\n' read -r line < <(resolve_scope)
     mode="$(printf '%s\n' "$line" | cut -f1)"
@@ -273,6 +306,7 @@ add_project() {
         esac
     done
     [[ -z "$name" ]] && { log_error "Usage: matrix add <name> [path-or-url] [--replace]"; return 1; }
+    is_workspace_target "$name" && { log_error "'$name' is a reserved name (the Matrix workspace itself) — choose another"; return 1; }
     if [[ -z "$path_or_url" ]]; then
         local current_dir; current_dir="$(pwd)"
         log_info "No path provided. Current directory: $current_dir"
@@ -336,6 +370,21 @@ remove_project() {
     log_success "Removed project '$name'"
 }
 
+focus_project() {
+    local name="${1:-}"
+    [[ $# -eq 1 && -n "$name" ]] || { log_error "Usage: matrix focus <name>"; return 1; }
+    local existing; existing="$(registry_path "$name")"
+    [[ -n "$existing" && "$existing" != "null" ]] || { log_error "Project '$name' not found — register it first with 'matrix add'"; return 1; }
+    local sid; sid="$(current_session_id || true)"
+    [[ -n "$sid" ]] || { log_error "No active session marker — can't set a session focus without a session to attach it to"; return 1; }
+    init_state
+    local focus_file="$STATE_DIR/sessions/$sid.json"
+    jq -n -c --arg sid "$sid" --arg proj "$name" --arg ts "$(date -Iseconds)" \
+        '{session_id:$sid, focused_project:$proj, set_at:$ts}' > "$focus_file"
+    link_append "focus" "$name" "session=$sid"
+    log_success "Session focus set to '$name'"
+}
+
 list_projects() {
     log_info "Known projects:"; echo
     init_registry
@@ -393,8 +442,20 @@ adapter_binding() {
     ADB_FILE="$(jq -r '.file // empty' <<<"$json")"
     ADB_BEGIN="$(jq -r '.begin_marker // empty' <<<"$json")"
     ADB_END="$(jq -r '.end_marker // empty' <<<"$json")"
+    ADB_DOC_PATH="$(jq -r '.doc_path // empty' <<<"$json")"
     mapfile -t ADB_GITIGNORE < <(jq -r '.gitignore_entries[]? // empty' <<<"$json")
     [[ -n "$ADB_FILE" && -n "$ADB_BEGIN" && -n "$ADB_END" ]]
+}
+
+adapter_doc_path() {
+    # Resolve the current adapter's own reference doc (binding.doc_path in
+    # adapter.yaml) to an absolute path. Single owner for this lookup so
+    # Python callers (session_audit.py) don't reimplement adapter.yaml
+    # parsing — same "one bash owner" principle as resolve_scope()/scope.
+    local target="${1:-devin}"
+    adapter_binding "$target" || return 1
+    [[ -n "$ADB_DOC_PATH" ]] || return 1
+    printf '%s\n' "$MATRIX_DIR/$ADB_DOC_PATH"
 }
 
 registry_bound_target() {
@@ -442,6 +503,7 @@ matrix_block_tmp() {
     local core; core="$(cat "$tmpl")"
     core="${core//\{\{CONTRACT_PATH\}\}/$MATRIX_DIR/AGENTS.md}"
     core="${core//\{\{NEO_AGENT_PATH\}\}/$BRAIN_DIR/agents/neo.md}"
+    core="${core//\{\{ADAPTER_DOC_PATH\}\}/$MATRIX_DIR/$ADB_DOC_PATH}"
     {
         printf '%s\n' "$ADB_BEGIN (managed by \`bin/matrix select\` — do not hand-edit this block) -->"
         printf '%s\n\n' "This project is bound to the Matrix system (root: $MATRIX_DIR)."
@@ -525,6 +587,25 @@ update_gitignore() {
     return 0
 }
 
+# ensure_project_output_dirs <name>
+# Creates this bound project's own artifact subtree under this repo's
+# brain/output/<name>/{architecture,plans,research,eval}/, if missing.
+# Idempotent — same pattern as update_agents_local()/update_gitignore().
+ensure_project_output_dirs() {
+    local name="$1"
+    [[ -n "$name" ]] || return 1
+    local base="$BRAIN_DIR/output/$name"
+    local sub created=0
+    for sub in architecture plans research eval; do
+        if [[ ! -d "$base/$sub" ]]; then
+            mkdir -p "$base/$sub"
+            created=1
+        fi
+    done
+    [[ $created -eq 1 ]] && log_success "Created brain/output/$name/{architecture,plans,research,eval}/"
+    return 0
+}
+
 select_project() {
     local name="${1:-}" target="devin" arg
     shift || true
@@ -536,6 +617,7 @@ select_project() {
         esac
     done
     [[ -n "$name" ]] || { log_error "Usage: matrix select <name> [--target=<cli>]"; return 1; }
+    is_workspace_target "$name" && { log_error "'$name' is a reserved name (the Matrix workspace itself) — choose another"; return 1; }
     adapter_binding "$target" || { log_warning "Trainman: no adapter binding (not implemented yet for '$target')."; return 1; }
     local p t pp
     p="$(registry_path "$name")"
@@ -562,6 +644,7 @@ select_project() {
     [[ -L "$link" ]] || ln -sf "$BRAIN_DIR" "$link"
     update_agents_local "$pp" "$target"
     update_gitignore "$pp" "$target"
+    ensure_project_output_dirs "$name"
     set_registry_bound_target "$name" "$target"
     update_context "$name" "$pp"
     warm_project_entry "$name" "$pp" "quiet"
@@ -1440,6 +1523,87 @@ ship_cmd() {
     esac
 }
 
+corpus_ingest_cmd() {
+    local topic="" slug=""
+    local arg
+    for arg in "$@"; do
+        case "$arg" in
+            --topic=*) topic="${arg#*=}" ;;
+            --slug=*) slug="${arg#*=}" ;;
+            *) log_error "Unknown flag '$arg'"; return 1 ;;
+        esac
+    done
+
+    [[ -z "$topic" || -z "$slug" ]] && {
+        log_error "Usage: matrix corpus-ingest --topic=<topic> --slug=<slug> (content via stdin)"
+        return 1
+    }
+
+    if [[ ! "$topic" =~ ^[a-z0-9-]+$ ]]; then
+        log_error "Invalid topic '$topic': must match [a-z0-9-]+"
+        return 1
+    fi
+    if [[ ! "$slug" =~ ^[a-z0-9-]+$ ]]; then
+        log_error "Invalid slug '$slug': must match [a-z0-9-]+"
+        return 1
+    fi
+
+    local corpus_root="$MATRIX_DIR/brain/subsystems/logos/corpus"
+    local sources_dir="$corpus_root/$topic/sources"
+    local sources_real target_real
+
+    mkdir -p "$sources_dir" || { log_error "Cannot create $sources_dir"; return 1; }
+
+    sources_real="$(realpath -m "$sources_dir" 2>/dev/null || readlink -f "$sources_dir")"
+    local corpus_real="$(realpath -m "$corpus_root" 2>/dev/null || readlink -f "$corpus_root")"
+    [[ -n "$sources_real" && -n "$corpus_real" ]] || {
+        log_error "Cannot resolve corpus paths"
+        return 1
+    }
+
+    if [[ "$sources_real" != "$corpus_real"/* ]]; then
+        log_error "Destination '$sources_real' is not under '$corpus_real'"
+        return 1
+    fi
+
+    # Create-only: any <nn>-<slug>.md already present blocks re-ingestion.
+    local f
+    for f in "$sources_dir"/[0-9][0-9]-"$slug".md; do
+        [[ -e "$f" ]] && { log_error "Source '$slug' already exists under corpus/$topic/sources"; return 1; }
+    done
+
+    # Pick the next available <nn>.
+    local nn=00
+    while [[ -e "$sources_dir/$nn-$slug.md" ]]; do
+        nn=$(printf '%02d' $((10#$nn + 1)))
+        if [[ "$nn" == "100" ]]; then
+            log_error "No available <nn> slot under corpus/$topic/sources for slug '$slug'"
+            return 1
+        fi
+    done
+
+    local target="$sources_dir/$nn-$slug.md"
+
+    # Atomic write via temp file + rename.
+    local tmp
+    tmp="$(mktemp "$sources_dir/.$(basename "$target").XXXXXX")" || {
+        log_error "corpus-ingest: cannot create temp file in $sources_dir"
+        return 1
+    }
+    if ! cat > "$tmp"; then
+        rm -f "$tmp"
+        log_error "corpus-ingest: failed to read stdin"
+        return 1
+    fi
+    if ! mv "$tmp" "$target"; then
+        rm -f "$tmp"
+        log_error "corpus-ingest: atomic rename failed"
+        return 1
+    fi
+
+    log_success "Ingested corpus/$topic/sources/$nn-$slug.md"
+}
+
 show_help() {
     cat << 'EOF'
 Matrix CLI — Layer 1 orchestrator (CLI-agnostic)
@@ -1454,6 +1618,10 @@ Projects:
   deselect [name] [--target=<cli>] Remove an adapter binding (defaults to primary/stored target)
   bindings [--warm-only]  Show bound status for all registered projects (--warm-only for warm set)
   scope                   Print "<mode>\t<project>\t<detail>" for cwd (resolve_scope; used by adapters)
+  focus <name>            Persist a session-scoped focus (brain/state/sessions/<sid>.json) that
+                          resolve_scope_project() prefers over cwd for this session only;
+                          requires an active session marker, fails closed on an unregistered project
+  adapter-doc-path [<cli>] Print the absolute path to the target adapter's own reference doc (binding.doc_path)
 
 Multi-project (warm set):
   work <name>             Warm a project into the active set
@@ -1469,6 +1637,8 @@ State & telemetry:
 Link ledger & fleet:
   link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event and echo the ref
   ship list                                         List discovered federated ships
+  corpus-ingest --topic=<t> --slug=<s>              Ingest stdin as a new Logos corpus source (sanitized,
+                                                   create-only, atomic write)
 
 Hardline:
   hardline dispatch <project> "<line>"  Validate, queue, and acquire the project's dispatch lane
@@ -1518,15 +1688,18 @@ main() {
                 remove)     shift; remove_project "$@" ;;
                 select)     shift; select_project "$@" ;;
                 deselect)   shift; deselect_project "$@" ;;
+                focus)      focus_project "${2:-}" ;;
                 work)       work_project "${2:-}" ;;
                 unwork)     unwork_project "${2:-}" ;;
                 bindings)   shift; show_bindings "$@" ;;
                 scope)      resolve_scope ;;
+                adapter-doc-path) shift; adapter_doc_path "${1:-devin}" ;;
                 status)     shift; show_status "$@" ;;
                 checkpoint) write_checkpoint "${2:-}" ;;
                 activity)   shift; show_activity "$@" ;;
                 link)       shift; link_cmd "$@" ;;
                 ship)       shift; ship_cmd "${1:-}" "${2:-}" ;;
+                corpus-ingest) shift; corpus_ingest_cmd "$@" ;;
                 hardline)   shift; hardline_cmd "$@" ;;
                 phase)      shift; phase_cmd "$@" ;;
                 session)    shift; session_cmd "$@" ;;

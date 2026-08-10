@@ -40,10 +40,54 @@ from _common import current_session_id, emit, read_input, resolve_root
 REQUIRED_STEPS = ["load_config", "resolve_context", "pre_activation_check"]
 SMITH_ALIASES = {"smith", "agent smith", "agent_smith"}
 EDIT_TOOLS = {"edit", "multi_edit", "write"}
+MUTANT_TOOL_NAMES = {"exec", "run_command", "run-command"}
+ALLOWED_MUTANT_PREFIX = "bin/matrix corpus-ingest"
 
 
 def _is_smith(value):
     return str(value or "").strip().lower() in SMITH_ALIASES
+
+
+def _anomalous_mutant_commands(root, session_id, since):
+    """Return shell commands in this session that are not the allowed corpus-ingest.
+
+    This is a detective check, not a preventive guard. It flags any
+    exec/run_command logged in the audit trail that does not match the
+    single allowed shell operation, so a human/Smith can review it.
+    """
+    anomalies = []
+    if not session_id:
+        return anomalies
+    log_path = os.path.join(root, "brain", "state", "hook-audit.jsonl")
+    if not os.path.isfile(log_path):
+        return anomalies
+    try:
+        fh = open(log_path, encoding="utf-8")
+    except OSError:
+        return anomalies
+    with fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("event") != "post_tool_use" or event.get("session_id") != session_id:
+                continue
+            if event.get("tool_name") not in MUTANT_TOOL_NAMES:
+                continue
+            if since is not None:
+                try:
+                    if _parse_time(event.get("timestamp")) < since:
+                        continue
+                except ValueError:
+                    continue
+            cmd = event.get("tool_command") or ""
+            if cmd and not cmd.startswith(ALLOWED_MUTANT_PREFIX):
+                anomalies.append(cmd)
+    return anomalies
 
 
 def _parse_time(value):
@@ -268,9 +312,15 @@ def main():
     required = [str(s) for s in data.get("required")] if data.get("required") else REQUIRED_STEPS
     missing = [s for s in required if s not in steps]
     bypass = bool(steps) and missing
+    since_raw = data.get("since")
+    try:
+        since = _parse_time(since_raw) if since_raw is not None else None
+    except ValueError:
+        since = None
     smith_ok, smith_block = check_smith_remediation(root, data, session_id)
-    compliant = (not missing) and smith_ok
-    report = {"hook": "post_run_audit", "ok": compliant, "agent": agent, "profile": profile, "session_id": session_id, "timestamp": datetime.datetime.now().astimezone().isoformat(), "steps_seen": steps, "required": required, "missing": missing, "bypass_suspected": bool(bypass), "compliant": compliant, "smith_remediation": smith_block}
+    mutant_anomalies = _anomalous_mutant_commands(root, session_id, since)
+    compliant = (not missing) and smith_ok and not mutant_anomalies
+    report = {"hook": "post_run_audit", "ok": compliant, "agent": agent, "profile": profile, "session_id": session_id, "timestamp": datetime.datetime.now().astimezone().isoformat(), "steps_seen": steps, "required": required, "missing": missing, "bypass_suspected": bool(bypass), "compliant": compliant, "smith_remediation": smith_block, "mutant_command_anomalies": mutant_anomalies}
     state_dir = os.path.join(root, "brain", "state")
     os.makedirs(state_dir, exist_ok=True)
     with open(os.path.join(state_dir, "validation-report.json"), "w", encoding="utf-8") as fh:

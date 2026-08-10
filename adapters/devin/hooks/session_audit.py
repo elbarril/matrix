@@ -190,6 +190,27 @@ def _activation_reinject_scope():
         return _is_workspace_mode(ROOT)
 
 
+def _adapter_doc_path(root):
+    """Resolve the current adapter's own reference doc via `bin/matrix
+    adapter-doc-path` — delegates to bash instead of re-parsing adapter.yaml
+    here, same "one owner" principle as _activation_reinject_scope() delegating
+    to `bin/matrix scope`."""
+    try:
+        proc = subprocess.run(
+            [BIN_MATRIX, "adapter-doc-path", "devin"],
+            env={**os.environ, "MATRIX_ROOT": root},
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+        out = (proc.stdout or "").strip()
+        return out
+    except Exception as e:
+        print(f"[session_audit] adapter doc path resolution failed: {e}", file=sys.stderr)
+        return ""
+
+
 def _render_activation_preamble(root):
     """Render brain/data/activation-preamble.tmpl — the single source of truth
     also used by the generated neo SKILL.md and by AGENTS.local.md's bound-project
@@ -202,7 +223,12 @@ def _render_activation_preamble(root):
         text = fh.read()
     contract_path = os.path.join(root, "AGENTS.md")
     neo_path = os.path.join(root, "brain", "agents", "neo.md")
-    text = text.replace("{{CONTRACT_PATH}}", contract_path).replace("{{NEO_AGENT_PATH}}", neo_path)
+    adapter_doc_path = _adapter_doc_path(root)
+    text = (
+        text.replace("{{CONTRACT_PATH}}", contract_path)
+        .replace("{{NEO_AGENT_PATH}}", neo_path)
+        .replace("{{ADAPTER_DOC_PATH}}", adapter_doc_path)
+    )
     return text.strip()
 
 
@@ -660,6 +686,13 @@ def main():
         tool_response = payload.get("tool_response", {})
         envelope["tool_name"] = tool_name
         envelope["tool_paths"] = _extract_tool_paths(tool_name, tool_input)
+
+        # Log the raw command string for shell-like tools so detective hooks can
+        # audit mutations without replaying tool output.
+        if tool_name in {"exec", "run_command", "run-command"} and isinstance(tool_input, dict):
+            cmd = tool_input.get("command")
+            if isinstance(cmd, str):
+                envelope["tool_command"] = cmd
 
         if tool_name == "run_subagent":
             try:

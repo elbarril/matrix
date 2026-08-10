@@ -54,7 +54,8 @@ def load_yaml_block(adapter_yaml, block_key):
                 break
             if ":" in stripped:
                 k, v = stripped.split(":", 1)
-                block[k.strip()] = parse_scalar_list(v) if v.strip().startswith("[") else v.strip()
+                v = v.strip()
+                block[k.strip()] = parse_scalar_list(v) if v.startswith("[") else v.strip('"').strip("'")
     return block
 
 
@@ -280,7 +281,14 @@ def render_devin(outdir):
             tmpl = os.path.join(brain, "data", "activation-preamble.tmpl")
             with open(tmpl, encoding="utf-8") as fh:
                 core = fh.read()
-            core = core.replace("{{CONTRACT_PATH}}", contract_file).replace("{{NEO_AGENT_PATH}}", agent_file)
+            binding = load_yaml_block(os.path.join(ROOT, "adapters", "devin", "adapter.yaml"), "binding")
+            doc_path = binding.get("doc_path", "")
+            adapter_doc_file = os.path.join(ROOT, doc_path) if doc_path else ""
+            core = (
+                core.replace("{{CONTRACT_PATH}}", contract_file)
+                .replace("{{NEO_AGENT_PATH}}", agent_file)
+                .replace("{{ADAPTER_DOC_PATH}}", adapter_doc_file)
+            )
             body = (
                 f"---\nname: {name}\ndescription: {desc}\n{model_line}---\n\n"
                 f"# {name} — Devin Skill (master)\n\n"
