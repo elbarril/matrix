@@ -9,13 +9,19 @@ Output JSON (Layer-1 contract):
   {"hook": "pre_exec_guard", "ok": true}
   {"hook": "pre_exec_guard", "ok": false, "reason": "blocked rm near protected path: brain/data"}
 
-This is a regex best-effort guard, not a real shell parser. It only covers the
-mutating operations called out in the architecture design: rm, rmdir, mv,
-truncate, sed -i, git rm, and output redirection (> / >>) to a protected path.
+This is a tokenizer-based best-effort guard, not a real shell parser. It only
+covers the mutating operations called out in the architecture design: rm,
+rmdir, mv, truncate, sed -i, git rm, and output redirection (> / >>) to a
+protected path.
+
+Audit contract (see adapters/devin/hooks/pre_tool_use_guard.py): every
+`reason` this module returns is built only from a fixed verb plus the
+relative path of an entry in `protected_paths()` (a public, non-secret
+list). Never build a reason from the raw command string or tool_input --
+the adapter persists `reason` verbatim to the shared audit log.
 """
 
 import os
-import re
 import shlex
 import sys
 
@@ -26,6 +32,11 @@ SHELL_TOOLS = {"exec", "run_command", "run-command"}
 
 # Mutating command names this guard recognizes as a single token (bare verb).
 _MUTATING_VERBS = {"rm", "rmdir", "mv", "truncate"}
+
+# Shell control operators that start a new command segment. A mutating verb
+# only counts when it sits in command position (index 0) of a segment, and
+# its arguments never cross into a different segment.
+_CONTROL_OPS = {";", "&&", "||", "|", "&"}
 
 
 def protected_paths(root):
@@ -84,6 +95,23 @@ def _token_mentions_protected(token, protected, root):
     return None
 
 
+def _segment(tokens):
+    """Split `tokens` into command segments on shell control operators.
+
+    Each control operator (`;`, `&&`, `||`, `|`, `&`) starts a fresh segment.
+    A mutating verb's arguments must never be read from a different segment
+    than the one it appears in — this is what stops a verb mentioned in a
+    prior/unrelated segment (or in prose after it) from absorbing a
+    protected path that actually belongs to a different command."""
+    segments = [[]]
+    for tok in tokens:
+        if tok in _CONTROL_OPS:
+            segments.append([])
+        else:
+            segments[-1].append(tok)
+    return [seg for seg in segments if seg]
+
+
 def _check(command, protected, root):
     tokens = _tokenize(command)
     if tokens is None:
@@ -99,30 +127,37 @@ def _check(command, protected, root):
                 return False, f"blocked {tok} redirection to protected path: {dest}"
 
     # 2. Mutating commands whose ARGUMENTS (real tokens, not substrings of an
-    #    unrelated quoted string) include a protected path.
-    for i, tok in enumerate(tokens):
-        # Bare verbs: rm, rmdir, mv, truncate — exact token match.
-        if tok in _MUTATING_VERBS:
-            for arg in tokens[i + 1 :]:
+    #    unrelated quoted string) include a protected path. A verb only
+    #    counts in command position (index 0) of its own segment, and its
+    #    arguments are read from that same segment only — never from tokens
+    #    that belong to a different command across a control operator.
+    for seg in _segment(tokens):
+        if not seg:
+            continue
+        head = seg[0]
+
+        # Bare verbs: rm, rmdir, mv, truncate — exact token match at index 0.
+        if head in _MUTATING_VERBS:
+            for arg in seg[1:]:
                 mentioned = _token_mentions_protected(arg, protected, root)
                 if mentioned:
                     rel = os.path.relpath(mentioned, root)
-                    return False, f"blocked {tok} near protected path: {rel}"
+                    return False, f"blocked {head} near protected path: {rel}"
         # git rm <path>
-        if tok == "git" and i + 1 < len(tokens) and tokens[i + 1] == "rm":
-            for arg in tokens[i + 2 :]:
+        if head == "git" and len(seg) > 1 and seg[1] == "rm":
+            for arg in seg[2:]:
                 mentioned = _token_mentions_protected(arg, protected, root)
                 if mentioned:
                     rel = os.path.relpath(mentioned, root)
                     return False, f"blocked git rm near protected path: {rel}"
         # sed -i / -i.bak / --in-place <path>
-        if tok == "sed":
+        if head == "sed":
             has_inplace = any(
                 a == "--in-place" or a == "-i" or (a.startswith("-i") and a != "-i")
-                for a in tokens[i + 1 :]
+                for a in seg[1:]
             )
             if has_inplace:
-                for arg in tokens[i + 1 :]:
+                for arg in seg[1:]:
                     mentioned = _token_mentions_protected(arg, protected, root)
                     if mentioned:
                         rel = os.path.relpath(mentioned, root)

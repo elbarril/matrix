@@ -17,6 +17,11 @@ ALLOWED = {
     # nunca agregar `tool_response` ni claves que contengan contenido de archivo a
     # esta lista -- ver eval de Smith, ronda 4 de discovery-mediation.
     "invoked_artifact", "invoked_origin",
+    # guard_decision/guard_reason: solo allow|block y una razón redactada
+    # (verbo fijo + relpath de una lista pública) -- nunca comando/tool_input
+    # crudo ni texto de excepción. Ver hooks/pre_exec_guard.py y
+    # adapters/devin/hooks/pre_tool_use_guard.py.
+    "guard_decision", "guard_reason",
 }
 
 
