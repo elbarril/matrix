@@ -44,12 +44,6 @@
       "added": "2026-05-21T10:06:39-03:00"
     },
     {
-      "name": "bash",
-      "path": "/home/emiliano/www/Portal-Templates-Group/templatesTools/shellScripts/bash",
-      "type": "local",
-      "added": "2026-05-21T11:19:11-03:00"
-    },
-    {
       "name": "slalom",
       "path": "/home/emiliano/www/Portal-Templates-Group/slalom",
       "type": "local",
@@ -133,6 +127,13 @@
       "path": "/home/emiliano/www/emisrepos/artista-ia",
       "type": "local",
       "added": "2026-08-04T19:50:19-03:00",
+      "bound_target": "devin"
+    },
+    {
+      "name": "templatesTools",
+      "path": "/home/emiliano/www/Portal-Templates-Group/templatesTools",
+      "type": "local",
+      "added": "2026-08-14T09:27:55-03:00",
       "bound_target": "devin"
     }
   ],
