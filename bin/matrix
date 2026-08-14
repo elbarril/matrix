@@ -1600,6 +1600,7 @@ corpus_ingest_cmd() {
         log_error "corpus-ingest: atomic rename failed"
         return 1
     fi
+    chmod 644 "$target" || { log_error "corpus-ingest: chmod 644 failed on $target"; return 1; }
 
     log_success "Ingested corpus/$topic/sources/$nn-$slug.md"
 }
