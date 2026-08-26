@@ -571,9 +571,9 @@ cleanup_agents_local() {
 }
 
 update_gitignore() {
-    local pp="$1" target="${2:-devin}"
+    local pp="$1" target="${2:-devin}" stage="${3:-}"
     adapter_binding "$target" || return 1
-    [[ -d "$pp/.git" ]] || return 0
+    git -C "$pp" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
     local gi="$pp/.gitignore"
     local changed=0 entry
     for entry in "${ADB_GITIGNORE[@]}"; do
@@ -584,7 +584,122 @@ update_gitignore() {
         changed=1
     done
     [[ $changed -eq 1 ]] && log_success "Updated .gitignore with Matrix entries"
+    local porcelain
+    porcelain="$(git -C "$pp" status --porcelain -- .gitignore 2>/dev/null || true)"
+    if [[ -n "$porcelain" ]]; then
+        local branch
+        branch="$(git -C "$pp" symbolic-ref --short HEAD 2>/dev/null || echo "HEAD desprendido")"
+        if [[ "$stage" == "--stage-gitignore" ]]; then
+            git -C "$pp" add .gitignore
+            log_warning ".gitignore quedó STAGED (branch: $branch) pero NO comiteado — revisá 'git status' y comiteá vos"
+        else
+            log_warning ".gitignore tiene cambios sin comitear (branch: $branch). Esto es lo que causó el incidente de calian: un 'git add -A && git commit' posterior trackea archivos que debían estar ignorados. Comiteá .gitignore a mano o usá --stage-gitignore."
+        fi
+    fi
     return 0
+}
+
+# gitignore_leak_check <pp> <target> [ref]
+# For each entry in ADB_GITIGNORE, checks if it is tracked in the given ref
+# (default HEAD). Prints leaked entries one per line. Exit 0 always.
+gitignore_leak_check() {
+    local pp="$1" target="$2" ref="${3:-HEAD}"
+    adapter_binding "$target" || return 0
+    git -C "$pp" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+    local entry
+    for entry in "${ADB_GITIGNORE[@]}"; do
+        if git -C "$pp" ls-tree -r --name-only "$ref" -- "$entry" 2>/dev/null | grep -q .; then
+            printf '%s\n' "$entry"
+        fi
+    done
+    return 0
+}
+
+gitignore_audit() {
+    local name="" all_branches=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --all-branches) all_branches=true ;;
+            --*) log_error "Unknown flag '$arg'"; return 1 ;;
+            *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
+        esac
+    done
+    [[ -n "$name" ]] || { log_error "Usage: matrix gitignore audit <name> [--all-branches]"; return 1; }
+    local pp; pp="$(get_project_path "$name" 2>/dev/null)" || { log_error "Project '$name' not found"; return 1; }
+    [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
+    local target; target="$(registry_bound_target "$name")"
+    [[ -n "$target" && "$target" != "null" ]] || target="devin"
+    adapter_binding "$target" || { log_error "Cannot resolve adapter binding for target '$target'"; return 1; }
+
+    if $all_branches; then
+        local any_leak=false branch
+        while IFS= read -r branch; do
+            [[ -n "$branch" ]] || continue
+            local leaked
+            leaked="$(gitignore_leak_check "$pp" "$target" "$branch")"
+            if [[ -n "$leaked" ]]; then
+                any_leak=true
+                echo "[$branch] tracked leak: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
+            fi
+        done < <(git -C "$pp" for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null)
+        $any_leak || echo "clean"
+    else
+        local leaked
+        leaked="$(gitignore_leak_check "$pp" "$target" HEAD)"
+        if [[ -n "$leaked" ]]; then
+            echo "tracked leak on current branch: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
+        else
+            echo "clean"
+        fi
+    fi
+}
+
+gitignore_fix() {
+    local name="" do_fix=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --fix) do_fix=true ;;
+            --*) log_error "Unknown flag '$arg'"; return 1 ;;
+            *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
+        esac
+    done
+    [[ -n "$name" ]] || { log_error "Usage: matrix gitignore fix <name> [--fix]"; return 1; }
+    local pp; pp="$(get_project_path "$name" 2>/dev/null)" || { log_error "Project '$name' not found"; return 1; }
+    [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
+    local target; target="$(registry_bound_target "$name")"
+    [[ -n "$target" && "$target" != "null" ]] || target="devin"
+    adapter_binding "$target" || { log_error "Cannot resolve adapter binding for target '$target'"; return 1; }
+
+    local leaked
+    leaked="$(gitignore_leak_check "$pp" "$target" HEAD)"
+    if [[ -z "$leaked" ]]; then
+        log_success "No tracked leaks found for '$name'"
+        return 0
+    fi
+
+    if ! $do_fix; then
+        echo "tracked leak on current branch: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
+        log_warning "Usá 'matrix gitignore fix $name --fix' para destrackear (staged, sin commit)"
+        return 0
+    fi
+
+    local entry
+    while IFS= read -r entry; do
+        [[ -n "$entry" ]] || continue
+        git -C "$pp" rm -r --cached -- "$entry" 2>/dev/null || true
+        log_info "Destrackeado: $entry"
+    done <<< "$leaked"
+    update_gitignore "$pp" "$target"
+    git -C "$pp" add .gitignore
+    log_success "Cambios staged (destrackeados + .gitignore actualizado). NO se comiteó nada — revisá 'git status' y comiteá vos."
+}
+
+gitignore_cmd() {
+    case "${1:-}" in
+        audit) shift; gitignore_audit "$@" ;;
+        fix)   shift; gitignore_fix "$@" ;;
+        *)     log_error "Usage: matrix gitignore audit <name> [--all-branches] | fix <name> [--fix]"; return 1 ;;
+    esac
 }
 
 # ensure_project_output_dirs <name>
@@ -607,11 +722,12 @@ ensure_project_output_dirs() {
 }
 
 select_project() {
-    local name="${1:-}" target="devin" arg
+    local name="${1:-}" target="devin" stage_gi="" arg
     shift || true
     for arg in "$@"; do
         case "$arg" in
             --target=*) target="${arg#*=}" ;;
+            --stage-gitignore) stage_gi="--stage-gitignore" ;;
             --*) log_error "Unknown flag '$arg'"; return 1 ;;
             *) log_error "Unexpected argument '$arg'"; return 1 ;;
         esac
@@ -643,7 +759,7 @@ select_project() {
     [[ -e "$link" && ! -L "$link" ]] && { log_error "'_brain' exists and is not a symlink"; return 1; }
     [[ -L "$link" ]] || ln -sf "$BRAIN_DIR" "$link"
     update_agents_local "$pp" "$target"
-    update_gitignore "$pp" "$target"
+    update_gitignore "$pp" "$target" "$stage_gi"
     ensure_project_output_dirs "$name"
     set_registry_bound_target "$name" "$target"
     update_context "$name" "$pp"
@@ -1657,6 +1773,10 @@ Retrospectivas (Devin-specific):
   session-report [cwd] [YYYY-MM-DD] [--out PATH] [--limit N]  Genera reporte HTML estático
   session close '[<json>]'  Run the session_close hook and persist a session:close entry to the Link ledger
 
+Gitignore:
+  gitignore audit <name> [--all-branches]  Check for tracked files that should be gitignored
+  gitignore fix <name> [--fix]             Report (or --fix) tracked leaks (staged, never committed)
+
 Enforcement & adapters:
   phase close '<json>'    Run the validate_phase_close gate and persist the verdict
                           (PASS or BLOCK) to the Link ledger; exits non-zero on BLOCK
@@ -1702,6 +1822,7 @@ main() {
                 ship)       shift; ship_cmd "${1:-}" "${2:-}" ;;
                 corpus-ingest) shift; corpus_ingest_cmd "$@" ;;
                 hardline)   shift; hardline_cmd "$@" ;;
+                gitignore)  shift; gitignore_cmd "$@" ;;
                 phase)      shift; phase_cmd "$@" ;;
                 session)    shift; session_cmd "$@" ;;
                 hooks)      shift; run_hook "$@" ;;

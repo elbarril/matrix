@@ -8,6 +8,7 @@ code is 0 on PASS, 1 on BLOCK/FAIL. No third-party dependencies.
 import fnmatch
 import json
 import os
+import subprocess
 import sys
 
 
@@ -204,6 +205,43 @@ def entry_covered(entry, gitignore_lines):
     return False
 
 
+def _tracked_leak_via_audit(project_name, root=None):
+    """Run `bin/matrix gitignore audit <project>` and parse tracked leaks.
+
+    Returns a list of leaked entry names (e.g. ["_brain", "AGENTS.local.md"]),
+    or an empty list if the audit reports clean or fails. Same subprocess
+    pattern used by session_close.py for invoking bin/matrix from Python.
+    """
+    if root is None:
+        root = resolve_root()
+    bin_matrix = os.path.join(root, "bin", "matrix")
+    if not os.path.isfile(bin_matrix):
+        return []
+    try:
+        env = {**os.environ, "MATRIX_ROOT": root}
+        proc = subprocess.run(
+            [bin_matrix, "gitignore", "audit", project_name],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            stdin=subprocess.DEVNULL,
+        )
+        stdout = proc.stdout.strip()
+    except Exception:
+        return []
+    if not stdout or stdout == "clean":
+        return []
+    leaked = []
+    for line in stdout.splitlines():
+        if "tracked leak" in line:
+            # Format: "tracked leak on current branch: _brain AGENTS.local.md"
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                leaked.extend(parts[1].strip().split())
+    return leaked
+
+
 def gitignore_drift(project_name, root=None):
     """Compare adapter gitignore_entries against the real .gitignore of a project.
 
@@ -249,6 +287,9 @@ def gitignore_drift(project_name, root=None):
             lines = []
 
     missing = [e for e in entries if not entry_covered(e, lines)]
+
+    tracked_leak = _tracked_leak_via_audit(project_name, root)
+
     return {
         "applicable": True,
         "project": project_name,
@@ -256,7 +297,8 @@ def gitignore_drift(project_name, root=None):
         "target": target,
         "entries": entries,
         "missing": missing,
-        "ok": not missing,
+        "tracked_leak": tracked_leak,
+        "ok": not missing and not tracked_leak,
     }
 
 
