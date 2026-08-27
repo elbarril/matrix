@@ -86,7 +86,7 @@ binding:
   end_marker: "<!-- MATRIX:END -->"
   doc_path: "DEVIN.md"          # root-relative path to this adapter's own reference doc,
                                  # resolved into {{ADAPTER_DOC_PATH}} by matrix_block_tmp()/_build.py/session_audit.py
-  gitignore_entries:
+  exclude_entries:
     - "AGENTS.local.md"
     - "_brain"
 

@@ -45,7 +45,7 @@ Se carga automáticamente cuando la sesión resuelve el proyecto `calian`.
 
 ## Notas operativas específicas de este proyecto
 
-- **El `.gitignore` del harness no está en `stable`.** Cada branch nuevo creado con `branch` (que sale de stable) nace sin él, y `_brain`/`AGENTS.local.md` aparecen como untracked. Correr `bin/matrix select calian --stage-gitignore` y comitearlo **antes** de cualquier `gpush`/`git add .`, porque `gpush` hace `git add .`. (Incidente original: commit `9f4a1db` en el branch de esignature se llevó puestos esos archivos.)
+- **El `.git/info/exclude` del harness se comparte por gitdir.** Cada branch nuevo creado con `branch` (que sale de `stable`) ve el mismo `.git/info/exclude` que el repo principal, así que `_brain`/`AGENTS.local.md` ya aparecen ignorados sin pasos manuales. (Incidente original: commit `9f4a1db` en el branch de esignature se llevó puestos esos archivos; con el mecanismo exclude eso no vuelve a pasar.)
 - **Secuencia correcta para pullear un branch en las settings del portal**: cargar los 3 campos con tipeo real → **Pull** → **Ignore** (las advertencias "Leading spaces are not 4x" son de estilo, vienen del código foundational) → **Apply**. Sin el Apply final nada persiste. Ver lección core #59.
 - El input "Tag or branch" queda vacío tras un pull exitoso; el valor real vive en "Show portal information". No es un error.
 - sisifo para este portal: `scripts/sisifo-start.sh -oobfint55806 -p7` desde `calian/hiringmanager`.

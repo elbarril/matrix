@@ -28,7 +28,7 @@ Matrix es un cerebro persistente y compartido que le da a Devin CLI memoria, reg
    - un archivo `AGENTS.local.md` con un bloque especial que le dice a Devin: *"antes de responder cualquier cosa en este proyecto, leé primero el contrato de Matrix y el agente maestro Neo"*.
 3. Devin CLI lee automáticamente `AGENTS.local.md` al arrancar en esa carpeta. Por eso la activación de Neo **no depende de que te acuerdes de invocarlo**: es automática, mecánica, no probabilística.
 4. Una vez activo, siempre hablás con **Neo** (el agente maestro). Neo nunca te hace elegir un especialista de un menú: interpreta lo que pedís y, si hace falta, delega en el especialista correcto por su cuenta.
-5. El proyecto en sí **nunca se ensucia** con la inteligencia: solo tiene un symlink y un bloque de texto en un archivo que está en `.gitignore`. Si algún día "desconectás" el proyecto (`matrix deselect`), esos dos elementos se limpian solos.
+5. El proyecto en sí **nunca se ensucia** con la inteligencia: solo tiene un symlink y un bloque de texto en un archivo cuya ignorancia vive en `.git/info/exclude` (local, nunca se comitea, no ensucia el repo del proyecto). Si algún día "desconectás" el proyecto (`matrix deselect`), esos dos elementos se limpian solos.
 
 ### ¿Quién hace qué? (el equipo, en criollo)
 

@@ -151,10 +151,10 @@ def resolve_bound_target(project_name, root=None):
     return target
 
 
-def adapter_gitignore_entries(target, root=None):
-    """Return the gitignore_entries list declared for an adapter target.
+def adapter_exclude_entries(target, root=None):
+    """Return the exclude_entries list declared for an adapter target.
 
-    Reads adapters/<target>/adapter.yaml and extracts binding.gitignore_entries.
+    Reads adapters/<target>/adapter.yaml and extracts binding.exclude_entries.
     Returns None if the file is missing or the value is not a non-empty list
     of strings.
     """
@@ -167,7 +167,7 @@ def adapter_gitignore_entries(target, root=None):
     binding = cfg.get("binding")
     if not isinstance(binding, dict):
         return None
-    entries = binding.get("gitignore_entries")
+    entries = binding.get("exclude_entries")
     if not isinstance(entries, list) or not all(
         isinstance(item, str) and item for item in entries
     ):
@@ -206,7 +206,7 @@ def entry_covered(entry, gitignore_lines):
 
 
 def _tracked_leak_via_audit(project_name, root=None):
-    """Run `bin/matrix gitignore audit <project>` and parse tracked leaks.
+    """Run `bin/matrix exclude audit <project>` and parse tracked leaks.
 
     Returns a list of leaked entry names (e.g. ["_brain", "AGENTS.local.md"]),
     or an empty list if the audit reports clean or fails. Same subprocess
@@ -220,7 +220,7 @@ def _tracked_leak_via_audit(project_name, root=None):
     try:
         env = {**os.environ, "MATRIX_ROOT": root}
         proc = subprocess.run(
-            [bin_matrix, "gitignore", "audit", project_name],
+            [bin_matrix, "exclude", "audit", project_name],
             env=env,
             capture_output=True,
             text=True,
@@ -242,8 +242,8 @@ def _tracked_leak_via_audit(project_name, root=None):
     return leaked
 
 
-def gitignore_drift(project_name, root=None):
-    """Compare adapter gitignore_entries against the real .gitignore of a project.
+def exclude_drift(project_name, root=None):
+    """Compare adapter exclude_entries against the real .git/info/exclude of a project.
 
     Returns a dict when the project exists and its adapter binding can be read:
         {
@@ -252,14 +252,14 @@ def gitignore_drift(project_name, root=None):
             "project_path": "...",
             "target": "...",
             "entries": [...],   # adapter-declared entries
-            "missing": [...],  # entries not covered by the real .gitignore
+            "missing": [...],  # entries not covered by the real .git/info/exclude
             "ok": True/False,
         }
 
     Returns None when the project is not in .registry.json, its path does not
-    exist, or the adapter binding cannot be read. A missing .gitignore file is
-    treated as the limiting case of "all adapter entries missing" (every entry
-    appears in missing).
+    exist, or the adapter binding cannot be read. A missing .git/info/exclude
+    file is treated as the limiting case of "all adapter entries missing" (every
+    entry appears in missing).
     """
     if root is None:
         root = resolve_root()
@@ -273,15 +273,33 @@ def gitignore_drift(project_name, root=None):
     target = resolve_bound_target(project_name, root=root)
     if not target:
         return None
-    entries = adapter_gitignore_entries(target, root=root)
+    entries = adapter_exclude_entries(target, root=root)
     if entries is None:
         return None
 
-    gi_path = os.path.join(project_path, ".gitignore")
+    inside = subprocess.run(
+        ["git", "-C", project_path, "rev-parse", "--is-inside-work-tree"],
+        capture_output=True,
+        text=True,
+    )
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        return None
+    proc = subprocess.run(
+        ["git", "-C", project_path, "rev-parse", "--git-path", "info/exclude"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    exclude_relpath = proc.stdout.strip()
+    if not os.path.isabs(exclude_relpath):
+        exclude_path = os.path.join(project_path, exclude_relpath)
+    else:
+        exclude_path = exclude_relpath
     lines = []
-    if os.path.isfile(gi_path):
+    if os.path.isfile(exclude_path):
         try:
-            with open(gi_path, encoding="utf-8") as fh:
+            with open(exclude_path, encoding="utf-8") as fh:
                 lines = fh.read().splitlines()
         except OSError:
             lines = []

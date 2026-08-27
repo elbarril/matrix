@@ -332,6 +332,8 @@ En Devin CLI, el archivo de estado local del proyecto es `.devin` (directorio `.
 
 **Nota post-`workspace-mode-refinements` (no reescribe el incidente, lo contextualiza):** el mecanismo que este incidente motivó ya no aplica de la misma forma. Desde la sesión que retiró `matrix-output/` (ver `AGENTS.md` §1), los artefactos de research/plan/architecture/eval de un proyecto bindeado ya no se escriben en ningún directorio dentro del propio repo del cliente — van a `brain/output/<project>/<sub>/` en este repo. Por eso `matrix select` ya no agrega `matrix-output/` al `.gitignore` del proyecto: no hace falta, porque nada se vuelve a escribir ahí. El riesgo real de `saintlukes` (un artefacto trackeado en el repo de un cliente) sigue siendo un incidente real que pasó; lo que cambió es la superficie que lo hacía posible, no el hecho de que haya ocurrido.
 
+**Nota post-harness-ignore-exclude:** el mecanismo de sincronización pasó de escribir las entradas en el `.gitignore` del proyecto a escribirlas en `.git/info/exclude` (local al gitdir, nunca versionado). Los nombres de los comandos y funciones cambiaron (`matrix exclude audit|fix`, `update_exclude`) pero el drift de contenido y el drift de estado-de-git que documentan las lecciones #37 y #57 siguen siendo el mismo concepto sobre la nueva superficie.
+
 ### Lesson 38
 
 `sessions.db` (SQLite local del CLI) tuvo 2 incidentes de corrupción confirmados. Regla

@@ -443,9 +443,12 @@ adapter_binding() {
     ADB_BEGIN="$(jq -r '.begin_marker // empty' <<<"$json")"
     ADB_END="$(jq -r '.end_marker // empty' <<<"$json")"
     ADB_DOC_PATH="$(jq -r '.doc_path // empty' <<<"$json")"
-    mapfile -t ADB_GITIGNORE < <(jq -r '.gitignore_entries[]? // empty' <<<"$json")
+    mapfile -t ADB_EXCLUDE < <(jq -r '.exclude_entries[]? // empty' <<<"$json")
     [[ -n "$ADB_FILE" && -n "$ADB_BEGIN" && -n "$ADB_END" ]]
 }
+
+MATRIX_EXCLUDE_BEGIN="# === MATRIX:EXCLUDE:BEGIN (managed by bin/matrix — do not hand-edit) ==="
+MATRIX_EXCLUDE_END="# === MATRIX:EXCLUDE:END ==="
 
 adapter_doc_path() {
     # Resolve the current adapter's own reference doc (binding.doc_path in
@@ -570,44 +573,82 @@ cleanup_agents_local() {
     fi
 }
 
-update_gitignore() {
-    local pp="$1" target="${2:-devin}" stage="${3:-}"
+update_exclude() {
+    local pp="$1" target="${2:-devin}"
     adapter_binding "$target" || return 1
     git -C "$pp" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
-    local gi="$pp/.gitignore"
-    local changed=0 entry
-    for entry in "${ADB_GITIGNORE[@]}"; do
-        if [[ -f "$gi" ]] && grep -qxF "$entry" "$gi" 2>/dev/null; then
-            continue
-        fi
-        printf '%s\n' "$entry" >> "$gi"
-        changed=1
-    done
-    [[ $changed -eq 1 ]] && log_success "Updated .gitignore with Matrix entries"
-    local porcelain
-    porcelain="$(git -C "$pp" status --porcelain -- .gitignore 2>/dev/null || true)"
-    if [[ -n "$porcelain" ]]; then
-        local branch
-        branch="$(git -C "$pp" symbolic-ref --short HEAD 2>/dev/null || echo "HEAD desprendido")"
-        if [[ "$stage" == "--stage-gitignore" ]]; then
-            git -C "$pp" add .gitignore
-            log_warning ".gitignore quedó STAGED (branch: $branch) pero NO comiteado — revisá 'git status' y comiteá vos"
+    local exf
+    exf="$(git -C "$pp" rev-parse --git-path info/exclude)"
+    [[ "$exf" != /* ]] && exf="$pp/$exf"
+    local exdir
+    exdir="$(dirname "$exf")"
+    [[ -d "$exdir" ]] || mkdir -p "$exdir"
+    local block changed=0 entry
+    block="$(mktemp)"
+    {
+        printf '%s\n' "$MATRIX_EXCLUDE_BEGIN"
+        for entry in "${ADB_EXCLUDE[@]}"; do
+            printf '%s\n' "$entry"
+        done
+        printf '%s\n' "$MATRIX_EXCLUDE_END"
+    } > "$block"
+    if [[ -f "$exf" ]] && grep -qxF "$MATRIX_EXCLUDE_BEGIN" "$exf" && grep -qxF "$MATRIX_EXCLUDE_END" "$exf"; then
+        awk -v new="$block" -v begin="$MATRIX_EXCLUDE_BEGIN" -v end="$MATRIX_EXCLUDE_END" '
+            index($0, begin) == 1 {
+                while ((getline line < new) > 0) print line
+                close(new)
+                inside=1
+                next
+            }
+            $0 == end { inside=0; next }
+            !inside { print }
+        ' "$exf" > "$exf.new"
+        if diff -q "$exf" "$exf.new" >/dev/null 2>&1; then
+            rm -f "$exf.new"
         else
-            log_warning ".gitignore tiene cambios sin comitear (branch: $branch). Esto es lo que causó el incidente de calian: un 'git add -A && git commit' posterior trackea archivos que debían estar ignorados. Comiteá .gitignore a mano o usá --stage-gitignore."
+            mv "$exf.new" "$exf"
+            changed=1
         fi
+    else
+        { echo ""; cat "$block"; } >> "$exf"
+        changed=1
+    fi
+    rm -f "$block"
+    [[ $changed -eq 1 ]] && log_success "Updated .git/info/exclude with Matrix exclude block"
+    return 0
+}
+
+# cleanup_exclude <ap> <target>
+# Remove the managed MATRIX:EXCLUDE block from .git/info/exclude.
+# Never deletes the exclude file itself.
+cleanup_exclude() {
+    local ap="$1" target="${2:-devin}"
+    adapter_binding "$target" || return 1
+    git -C "$ap" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+    local exf
+    exf="$(git -C "$ap" rev-parse --git-path info/exclude)"
+    [[ "$exf" != /* ]] && exf="$ap/$exf"
+    [[ -f "$exf" ]] || return 0
+    if grep -qxF "$MATRIX_EXCLUDE_BEGIN" "$exf" && grep -qxF "$MATRIX_EXCLUDE_END" "$exf"; then
+        awk -v begin="$MATRIX_EXCLUDE_BEGIN" -v end="$MATRIX_EXCLUDE_END" '
+            index($0, begin) == 1 { inside=1; next }
+            $0 == end { inside=0; next }
+            !inside { print }
+        ' "$exf" > "$exf.new" && mv "$exf.new" "$exf"
+        log_success "Removed Matrix exclude block from .git/info/exclude"
     fi
     return 0
 }
 
-# gitignore_leak_check <pp> <target> [ref]
-# For each entry in ADB_GITIGNORE, checks if it is tracked in the given ref
+# exclude_leak_check <pp> <target> [ref]
+# For each entry in ADB_EXCLUDE, checks if it is tracked in the given ref
 # (default HEAD). Prints leaked entries one per line. Exit 0 always.
-gitignore_leak_check() {
+exclude_leak_check() {
     local pp="$1" target="$2" ref="${3:-HEAD}"
     adapter_binding "$target" || return 0
     git -C "$pp" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
     local entry
-    for entry in "${ADB_GITIGNORE[@]}"; do
+    for entry in "${ADB_EXCLUDE[@]}"; do
         if git -C "$pp" ls-tree -r --name-only "$ref" -- "$entry" 2>/dev/null | grep -q .; then
             printf '%s\n' "$entry"
         fi
@@ -615,7 +656,7 @@ gitignore_leak_check() {
     return 0
 }
 
-gitignore_audit() {
+exclude_audit() {
     local name="" all_branches=false arg
     for arg in "$@"; do
         case "$arg" in
@@ -624,7 +665,7 @@ gitignore_audit() {
             *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
         esac
     done
-    [[ -n "$name" ]] || { log_error "Usage: matrix gitignore audit <name> [--all-branches]"; return 1; }
+    [[ -n "$name" ]] || { log_error "Usage: matrix exclude audit <name> [--all-branches]"; return 1; }
     local pp; pp="$(get_project_path "$name" 2>/dev/null)" || { log_error "Project '$name' not found"; return 1; }
     [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
     local target; target="$(registry_bound_target "$name")"
@@ -636,7 +677,7 @@ gitignore_audit() {
         while IFS= read -r branch; do
             [[ -n "$branch" ]] || continue
             local leaked
-            leaked="$(gitignore_leak_check "$pp" "$target" "$branch")"
+            leaked="$(exclude_leak_check "$pp" "$target" "$branch")"
             if [[ -n "$leaked" ]]; then
                 any_leak=true
                 echo "[$branch] tracked leak: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
@@ -645,7 +686,7 @@ gitignore_audit() {
         $any_leak || echo "clean"
     else
         local leaked
-        leaked="$(gitignore_leak_check "$pp" "$target" HEAD)"
+        leaked="$(exclude_leak_check "$pp" "$target" HEAD)"
         if [[ -n "$leaked" ]]; then
             echo "tracked leak on current branch: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
         else
@@ -654,7 +695,7 @@ gitignore_audit() {
     fi
 }
 
-gitignore_fix() {
+exclude_fix() {
     local name="" do_fix=false arg
     for arg in "$@"; do
         case "$arg" in
@@ -663,7 +704,7 @@ gitignore_fix() {
             *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
         esac
     done
-    [[ -n "$name" ]] || { log_error "Usage: matrix gitignore fix <name> [--fix]"; return 1; }
+    [[ -n "$name" ]] || { log_error "Usage: matrix exclude fix <name> [--fix]"; return 1; }
     local pp; pp="$(get_project_path "$name" 2>/dev/null)" || { log_error "Project '$name' not found"; return 1; }
     [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
     local target; target="$(registry_bound_target "$name")"
@@ -671,7 +712,7 @@ gitignore_fix() {
     adapter_binding "$target" || { log_error "Cannot resolve adapter binding for target '$target'"; return 1; }
 
     local leaked
-    leaked="$(gitignore_leak_check "$pp" "$target" HEAD)"
+    leaked="$(exclude_leak_check "$pp" "$target" HEAD)"
     if [[ -z "$leaked" ]]; then
         log_success "No tracked leaks found for '$name'"
         return 0
@@ -679,7 +720,7 @@ gitignore_fix() {
 
     if ! $do_fix; then
         echo "tracked leak on current branch: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
-        log_warning "Usá 'matrix gitignore fix $name --fix' para destrackear (staged, sin commit)"
+        log_warning "Usá 'matrix exclude fix $name --fix' para destrackear (staged, sin commit)"
         return 0
     fi
 
@@ -689,23 +730,22 @@ gitignore_fix() {
         git -C "$pp" rm -r --cached -- "$entry" 2>/dev/null || true
         log_info "Destrackeado: $entry"
     done <<< "$leaked"
-    update_gitignore "$pp" "$target"
-    git -C "$pp" add .gitignore
-    log_success "Cambios staged (destrackeados + .gitignore actualizado). NO se comiteó nada — revisá 'git status' y comiteá vos."
+    update_exclude "$pp" "$target"
+    log_success "Destrackeado + bloque exclude sincronizado. NO se comiteó nada."
 }
 
-gitignore_cmd() {
+exclude_cmd() {
     case "${1:-}" in
-        audit) shift; gitignore_audit "$@" ;;
-        fix)   shift; gitignore_fix "$@" ;;
-        *)     log_error "Usage: matrix gitignore audit <name> [--all-branches] | fix <name> [--fix]"; return 1 ;;
+        audit) shift; exclude_audit "$@" ;;
+        fix)   shift; exclude_fix "$@" ;;
+        *)     log_error "Usage: matrix exclude audit <name> [--all-branches] | fix <name> [--fix]"; return 1 ;;
     esac
 }
 
 # ensure_project_output_dirs <name>
 # Creates this bound project's own artifact subtree under this repo's
 # brain/output/<name>/{architecture,plans,research,eval}/, if missing.
-# Idempotent — same pattern as update_agents_local()/update_gitignore().
+# Idempotent — same pattern as update_agents_local()/update_exclude().
 ensure_project_output_dirs() {
     local name="$1"
     [[ -n "$name" ]] || return 1
@@ -722,12 +762,11 @@ ensure_project_output_dirs() {
 }
 
 select_project() {
-    local name="${1:-}" target="devin" stage_gi="" arg
+    local name="${1:-}" target="devin" arg
     shift || true
     for arg in "$@"; do
         case "$arg" in
             --target=*) target="${arg#*=}" ;;
-            --stage-gitignore) stage_gi="--stage-gitignore" ;;
             --*) log_error "Unknown flag '$arg'"; return 1 ;;
             *) log_error "Unexpected argument '$arg'"; return 1 ;;
         esac
@@ -759,7 +798,7 @@ select_project() {
     [[ -e "$link" && ! -L "$link" ]] && { log_error "'_brain' exists and is not a symlink"; return 1; }
     [[ -L "$link" ]] || ln -sf "$BRAIN_DIR" "$link"
     update_agents_local "$pp" "$target"
-    update_gitignore "$pp" "$target" "$stage_gi"
+    update_exclude "$pp" "$target"
     ensure_project_output_dirs "$name"
     set_registry_bound_target "$name" "$target"
     update_context "$name" "$pp"
@@ -793,6 +832,7 @@ deselect_project() {
         return 0
     fi
     cleanup_agents_local "$ap" "$target"
+    cleanup_exclude "$ap" "$target"
     [[ -n "$ap" && -L "$ap/_brain" ]] && rm "$ap/_brain"
     if [[ "$active" == "$name" ]]; then
         update_context "null" "null"
@@ -840,6 +880,9 @@ work_project() {
     [[ -z "$name" ]] && { log_error "Usage: matrix work <name>"; return 1; }
     local path; path="$(resolve_project_path "$name")" || { log_error "Project '$name' not found"; return 1; }
     warm_project_entry "$name" "$path"
+    local target; target="$(registry_bound_target "$name")"
+    [[ -n "$target" && "$target" != "null" ]] || target="devin"
+    update_exclude "$path" "$target" 2>/dev/null || true
 }
 
 unwork_project() {
@@ -1773,9 +1816,9 @@ Retrospectivas (Devin-specific):
   session-report [cwd] [YYYY-MM-DD] [--out PATH] [--limit N]  Genera reporte HTML estático
   session close '[<json>]'  Run the session_close hook and persist a session:close entry to the Link ledger
 
-Gitignore:
-  gitignore audit <name> [--all-branches]  Check for tracked files that should be gitignored
-  gitignore fix <name> [--fix]             Report (or --fix) tracked leaks (staged, never committed)
+Exclude:
+  exclude audit <name> [--all-branches]  Check for tracked files that should be excluded
+  exclude fix <name> [--fix]             Report (or --fix) tracked leaks (staged, never committed)
 
 Enforcement & adapters:
   phase close '<json>'    Run the validate_phase_close gate and persist the verdict
@@ -1822,7 +1865,7 @@ main() {
                 ship)       shift; ship_cmd "${1:-}" "${2:-}" ;;
                 corpus-ingest) shift; corpus_ingest_cmd "$@" ;;
                 hardline)   shift; hardline_cmd "$@" ;;
-                gitignore)  shift; gitignore_cmd "$@" ;;
+                exclude)    shift; exclude_cmd "$@" ;;
                 phase)      shift; phase_cmd "$@" ;;
                 session)    shift; session_cmd "$@" ;;
                 hooks)      shift; run_hook "$@" ;;

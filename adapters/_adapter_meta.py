@@ -31,19 +31,19 @@ def binding(target):
     file_name = value.get("file")
     begin_marker = value.get("begin_marker")
     end_marker = value.get("end_marker")
-    gitignore_entries = value.get("gitignore_entries")
+    exclude_entries = value.get("exclude_entries")
     doc_path = value.get("doc_path")
     if not all(isinstance(item, str) and item for item in (file_name, begin_marker, end_marker)):
         return None
-    if not isinstance(gitignore_entries, list) or not all(
-        isinstance(item, str) and item for item in gitignore_entries
+    if not isinstance(exclude_entries, list) or not all(
+        isinstance(item, str) and item for item in exclude_entries
     ):
         return None
     result = {
         "file": file_name,
         "begin_marker": begin_marker,
         "end_marker": end_marker,
-        "gitignore_entries": gitignore_entries,
+        "exclude_entries": exclude_entries,
     }
     if isinstance(doc_path, str) and doc_path:
         result["doc_path"] = doc_path

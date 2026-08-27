@@ -83,7 +83,8 @@
       "name": "calian",
       "path": "/home/emiliano/www/Portal-Templates-Group/calian",
       "type": "local",
-      "added": "2026-07-16T01:50:44-03:00"
+      "added": "2026-07-16T01:50:44-03:00",
+      "bound_target": "devin"
     },
     {
       "name": "devin",
@@ -135,6 +136,12 @@
       "type": "local",
       "added": "2026-08-14T09:27:55-03:00",
       "bound_target": "devin"
+    },
+    {
+      "name": "templates-automation",
+      "path": "/home/emiliano/www/templates-automation",
+      "type": "local",
+      "added": "2026-08-27T15:30:11-03:00"
     }
   ],
   "created": "2026-05-19T18:31:00-03:00",
