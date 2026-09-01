@@ -7,6 +7,7 @@ experiment:
   # `bin/matrix select` is not enough on its own once the session's context
   # window moves past it.
   activation_inject: true
+  activation_inject_userprompt_full: true
 
 secret_deny:
   static:

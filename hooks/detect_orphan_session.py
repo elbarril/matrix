@@ -21,6 +21,7 @@ import datetime
 import json
 import os
 import subprocess
+import sys
 
 from _common import emit, read_input, resolve_root
 

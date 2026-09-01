@@ -116,6 +116,16 @@ hooks["PreToolUse"] = [
                 "timeout": 10,
             }
         ]
+    },
+    {
+        "matcher": "run_subagent",
+        "hooks": [
+            {
+                "type": "command",
+                "command": command,
+                "timeout": 10,
+            }
+        ]
     }
 ]
 

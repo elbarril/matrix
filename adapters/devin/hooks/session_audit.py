@@ -29,6 +29,7 @@ BIN_MATRIX = os.path.join(ROOT, "bin", "matrix")
 DEVIN_EVENT_MAP = {
     "SessionStart": "session_start",
     "UserPromptSubmit": "user_prompt_submit",
+    "PreToolUse": "pre_tool_use",
     "PostToolUse": "post_tool_use",
     "PostCompaction": "post_compaction",
     "SessionEnd": "session_end",
@@ -41,6 +42,7 @@ STRUCTURAL_TOOLS = {"read", "edit", "multi_edit", "write"}
 
 # B2: run validate_routing_signal every N post_tool_use events for a session.
 ROUTING_SIGNAL_INTERVAL = 20
+USERPROMPT_FULL_REINJECT_INTERVAL = 10
 
 # B3: nudge after this many mutating operations without a phase_close.
 MUTANT_WORK_THRESHOLD = 16
@@ -138,6 +140,11 @@ def _activation_inject_enabled():
     return bool(cfg.get("experiment", {}).get("activation_inject", False))
 
 
+def _activation_inject_userprompt_full():
+    cfg = _load_adapter_config(ROOT)
+    return bool(cfg.get("experiment", {}).get("activation_inject_userprompt_full", True))
+
+
 def _is_workspace_mode(root):
     """True when this session's cwd is the Matrix root itself (AGENTS.md §6
     step 0: "Matrix workspace mode", no external project bound). Devin runs
@@ -230,6 +237,11 @@ def _render_activation_preamble(root):
         .replace("{{ADAPTER_DOC_PATH}}", adapter_doc_path)
     )
     return text.strip()
+
+
+def _render_sentinel_text(session_id, turn):
+    next_drift = ((turn // USERPROMPT_FULL_REINJECT_INTERVAL) + 1) * USERPROMPT_FULL_REINJECT_INTERVAL
+    return f"Matrix contract active — session {session_id}, turn {turn}. Full activation preamble reinjects at turn {next_drift} or on-demand."
 
 
 SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
@@ -514,23 +526,82 @@ def _run_validate_routing_signal(session_id):
 
 
 def _post_tool_use_count(root, session_id):
-    """Count post_tool_use audit entries for this session."""
-    path = os.path.join(root, "brain", "state", "hook-audit.jsonl")
-    if not os.path.isfile(path):
-        return 0
+    """Read the audit-owned O(1) counter, rebuilding once on divergence."""
+    state_dir = os.path.join(root, "brain", "state")
+    log_path = os.path.join(state_dir, "hook-audit.jsonl")
+    counter_path = os.path.join(state_dir, "sessions", f"{session_id}-post-tool-count.json")
+    try:
+        with open(counter_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        stat = os.stat(log_path)
+        if data.get("log_inode") == stat.st_ino and data.get("log_size", 0) <= stat.st_size:
+            return int(data.get("count", 0))
+    except (OSError, ValueError, TypeError):
+        pass
     count = 0
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except ValueError:
-                continue
-            if entry.get("session_id") == session_id and entry.get("event") == "post_tool_use":
-                count += 1
+    if os.path.isfile(log_path):
+        with open(log_path, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if entry.get("session_id") == session_id and entry.get("event") == "post_tool_use":
+                    count += 1
+    print(f"[session_audit] rebuilt divergent counter for session {session_id}", file=sys.stderr)
+    try:
+        os.makedirs(os.path.dirname(counter_path), exist_ok=True)
+        stat = os.stat(log_path)
+        tmp = f"{counter_path}.tmp-{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"count": count, "log_inode": stat.st_ino, "log_size": stat.st_size}, fh)
+        os.replace(tmp, counter_path)
+    except OSError:
+        pass
     return count
+
+
+def _user_prompt_submit_count(root, session_id):
+    """Advance the audit-owned O(1) user-prompt counter, rebuilding on divergence."""
+    state_dir = os.path.join(root, "brain", "state")
+    log_path = os.path.join(state_dir, "hook-audit.jsonl")
+    counter_path = os.path.join(state_dir, "sessions", f"{session_id}-user-prompt-count.json")
+    count = None
+    try:
+        with open(counter_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        stat = os.stat(log_path)
+        if data.get("log_inode") == stat.st_ino and data.get("log_size", 0) <= stat.st_size:
+            count = int(data.get("count", 0)) + 1
+    except (OSError, ValueError, TypeError):
+        pass
+    if count is None:
+        count = 0
+        if os.path.isfile(log_path):
+            with open(log_path, encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        entry = json.loads(line)
+                    except ValueError:
+                        continue
+                    if entry.get("session_id") == session_id and entry.get("event") == "user_prompt_submit":
+                        count += 1
+        print(f"[session_audit] rebuilt divergent user-prompt counter for session {session_id}", file=sys.stderr)
+    try:
+        os.makedirs(os.path.dirname(counter_path), exist_ok=True)
+        stat = os.stat(log_path)
+        tmp = f"{counter_path}.tmp-{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"count": count, "log_inode": stat.st_ino, "log_size": stat.st_size}, fh)
+        os.replace(tmp, counter_path)
+    except OSError:
+        pass
+    return count
+
+
+def _drift_full_due(turn):
+    """Full preamble reinjection cadence for user_prompt_submit (A-minus)."""
+    return turn % USERPROMPT_FULL_REINJECT_INTERVAL == 0
 
 
 def _parse_iso_ts(ts):
@@ -667,6 +738,7 @@ def main():
     project_active = ctx.get("active_project")
 
     pre_ok = None
+    orphan_session_id = None
     if event == "session_start":
         pre_ok = _run_pre_activation_check()
         orphan_session_id = _run_detect_orphan_session(project_active)
@@ -680,12 +752,16 @@ def main():
         "pre_activation_check_ok": pre_ok,
     }
 
-    if event == "post_tool_use":
+    if event in ("pre_tool_use", "post_tool_use"):
         tool_name = payload.get("tool_name")
         tool_input = payload.get("tool_input", {})
         tool_response = payload.get("tool_response", {})
         envelope["tool_name"] = tool_name
-        envelope["tool_paths"] = _extract_tool_paths(tool_name, tool_input)
+        invocation_id = payload.get("tool_use_id") or payload.get("toolUseId")
+        if isinstance(invocation_id, str) and invocation_id.strip():
+            envelope["subagent_invocation_id"] = invocation_id
+        if event == "post_tool_use":
+            envelope["tool_paths"] = _extract_tool_paths(tool_name, tool_input)
 
         # Log the raw command string for shell-like tools so detective hooks can
         # audit mutations without replaying tool output.
@@ -730,17 +806,27 @@ def main():
     # activation_inject experiment is later disabled.
     contexts = []
 
+    # B3: nudge when mutating work since the last phase_close exceeds threshold.
+    nudge = None
+    if event == "user_prompt_submit" and session_id:
+        nudge = _b3_nudge_text(ROOT, session_id)
+
     # B1: reinject activation preamble on session_start / user_prompt_submit.
-    if _activation_inject_enabled() and _activation_reinject_scope() and event in ("session_start", "user_prompt_submit"):
-        preamble = _render_activation_preamble(ROOT)
+    if _activation_inject_enabled() and _activation_reinject_scope():
+        preamble = ""
+        if event == "session_start":
+            preamble = _render_activation_preamble(ROOT)
+        elif event == "user_prompt_submit" and session_id:
+            turn = _user_prompt_submit_count(ROOT, session_id)
+            if _activation_inject_userprompt_full() or _drift_full_due(turn):
+                preamble = _render_activation_preamble(ROOT)
+            else:
+                preamble = _render_sentinel_text(session_id, turn)
         if preamble:
             contexts.append(preamble)
 
-    # B3: nudge when mutating work since the last phase_close exceeds threshold.
-    if event == "user_prompt_submit" and session_id:
-        nudge = _b3_nudge_text(ROOT, session_id)
-        if nudge:
-            contexts.append(nudge)
+    if nudge:
+        contexts.append(nudge)
 
     if contexts:
         print(
