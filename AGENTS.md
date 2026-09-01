@@ -149,6 +149,7 @@ model_policy: <cheap|reasoning|auto>   # The Construct uses this
 4. **Greet** (master only) — Spanish, coloquial, no menus.
 5. **Understand** — if unclear, ask once; if clear, proceed.
 6. **Execute or route** — do the work or route to a specialist.
+6.5. **Proportionality (C1).** For changes that may qualify for the small path, apply the explicit criteria in `brain/output/architecture/harness-c1-small-path-design.md` — a change may omit the formal Morpheus plan and/or the Architect review ONLY when every row of its table is resolved by its mechanical oracle. Never the Smith gate, pre-registration, or E2E verification. Every small-path invocation must be logged to the ledger as `phase:path-decision` (fields per §6.4 of the design) BEFORE build begins; otherwise the change defaults to the full ritual.
 7. **Verify reality** — nothing is "done" without an E2E happy-path check (Foundation 3). Smith + `validate_phase_close` (Seraph) gate the close.
 8. **Update state** — write a checkpoint and a `Link` ledger entry when something matters.
 
