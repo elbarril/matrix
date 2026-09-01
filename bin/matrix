@@ -885,26 +885,91 @@ work_project() {
     update_exclude "$path" "$target" 2>/dev/null || true
 }
 
-unwork_project() {
-    local name="$1"
-    [[ -z "$name" ]] && { log_error "Usage: matrix unwork <name>"; return 1; }
-    init_state
-    if is_bound "$name"; then
-        deselect_project "$name"
-    fi
-    # Remove the 3-line block for this project (literal match, no regex).
-    local tmp; tmp="$(mktemp)"
+is_project_warm() {
+    grep -qxF "  - name: $1" "$WORKSPACE_FILE" 2>/dev/null
+}
+
+remove_warm_entry() {
+    local name="$1" tmp; tmp="$(mktemp)"
     NAME="$name" awk '
         BEGIN { line = "  - name: " ENVIRON["NAME"] }
         $0 == line { skip=2; next }
         skip > 0 { skip--; next }
         { print }
     ' "$WORKSPACE_FILE" > "$tmp" && mv "$tmp" "$WORKSPACE_FILE"
-    # If list is now empty, normalize.
     grep -q "^  - name:" "$WORKSPACE_FILE" || sed -i "s|^active_projects:.*|active_projects: []|" "$WORKSPACE_FILE"
     sed -i "s|^last_updated:.*|last_updated: \"$(date -Iseconds)\"|" "$WORKSPACE_FILE"
+}
+
+unwork_project() {
+    local name="$1"
+    [[ -z "$name" ]] && { log_error "Usage: matrix unwork <name>"; return 1; }
+    init_state
+    is_bound "$name" && deselect_project "$name"
+    if ! is_project_warm "$name"; then
+        log_warning "'$name' is not in the active set"
+        return 0
+    fi
+    remove_warm_entry "$name"
     link_append "project:unwork" "$name" ""
     log_success "Removed '$name' from the active set"
+}
+
+unwork_all_projects() {
+    local dry_run=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --dry-run) dry_run=true ;;
+            --all) : ;;  # ya consumido por el dispatcher, tolerado si se re-pasa
+            *) log_error "Usage: matrix unwork --all [--dry-run]"; return 1 ;;
+        esac
+    done
+    init_state
+    local deselected=0 unworked=0 untouched=0
+    local projects; projects="$(read_registry)"
+    while IFS=$'\t' read -r name path type; do
+        [[ -z "$name" ]] && continue
+        local bound=false warm=false
+        is_bound "$name" && bound=true
+        is_project_warm "$name" && warm=true
+        if ! $bound && ! $warm; then untouched=$((untouched+1)); continue; fi
+        if $dry_run; then
+            $bound && { echo "  deselect: $name"; deselected=$((deselected+1)); }
+            $warm  && { echo "  unwork:   $name"; unworked=$((unworked+1)); }
+            continue
+        fi
+        if $bound; then deselect_project "$name" || true; deselected=$((deselected+1)); fi
+        if $warm; then
+            remove_warm_entry "$name"
+            link_append "project:unwork" "$name" ""
+            unworked=$((unworked+1))
+        fi
+    done <<< "$projects"
+    if ! $dry_run; then
+        link_append "projects:unwork-all" "-" "deselected=$deselected unworked=$unworked"
+    fi
+    echo
+    log_info "Deselected: $deselected | Unworked: $unworked | Untouched: $untouched"
+}
+
+unwork_dispatch() {
+    local all=false name="" arg
+    for arg in "$@"; do
+        case "$arg" in
+            --all) all=true ;;
+            --dry-run) : ;;  # solo válido junto a --all, se re-chequea abajo
+            --target=*) log_error "unwork --all does not accept --target (each project resolves its own bound target)"; return 1 ;;
+            --*) log_error "Unknown flag '$arg'"; return 1 ;;
+            *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
+        esac
+    done
+    if $all; then
+        [[ -n "$name" ]] && { log_error "unwork --all does not take a project name"; return 1; }
+        unwork_all_projects "$@"
+        return $?
+    fi
+    for arg in "$@"; do [[ "$arg" == "--dry-run" ]] && { log_error "--dry-run only applies to --all"; return 1; }; done
+    unwork_project "$name"
 }
 
 show_workspace() {
@@ -1786,6 +1851,7 @@ Projects:
 Multi-project (warm set):
   work <name>             Warm a project into the active set
   unwork <name>           Remove a project from the active set
+  unwork --all [--dry-run]   Deselect + remove every registered project from the active set (registry untouched)
 
 State & telemetry:
   status [--all]          Show current Matrix status (checkpoints/Link scoped to the
@@ -1854,7 +1920,7 @@ main() {
                 deselect)   shift; deselect_project "$@" ;;
                 focus)      focus_project "${2:-}" ;;
                 work)       work_project "${2:-}" ;;
-                unwork)     unwork_project "${2:-}" ;;
+                unwork)     shift; unwork_dispatch "$@" ;;
                 bindings)   shift; show_bindings "$@" ;;
                 scope)      resolve_scope ;;
                 adapter-doc-path) shift; adapter_doc_path "${1:-devin}" ;;
