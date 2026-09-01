@@ -6,7 +6,7 @@ se resuelve a `templates-automation`. El detalle de investigación completo vive
 
 1. **El conocimiento del framework no está en wiki.xcade.net (deprecado) — está en el wiki de GitLab del repo `frontier-templates`** (https://gitlab.xcade.net/Portal-Templates-Automation/frontier-templates/-/wikis/home). Las páginas canónicas (sin prefijo `(update)`) tienen el contenido real; las `(update)X` son stubs. Mirror local extraído en `brain/output/templates-automation/research/frontier-wiki/`. La página wiki.xcade "Frontier" y "Automation with frontier" están deprecadas.
 
-2. **PAS = Portal App Services** (división de Professional Services). Los skills `-pas` del repo (`.agents/skills/`) son deltas específicos de portales sobre los skills generales Frontier — leer SIEMPRE el índice `.agents/skills/SKILL.md` y `.devin/rules/frontier-skills.md` antes de trabajar. Los skills generales están en el venv/aiad-common y se heredan.
+2. **PAS = Portal App Services** (división de Professional Services). Los skills `-pas` del repo (`.agents/skills/`) son deltas específicos de portales sobre los skills generales Frontier — leer SIEMPRE el índice `.agents/skills/SKILL.md` y la regla adapter-specific de Frontier antes de trabajar (path exacto en `brain/output/research/adapter-lessons-detail.md`). Los skills generales están en el venv/aiad-common y se heredan.
 
 3. **Regla de oro de navegación en features:** `user reaches X page by clicking Y element` para flujos; `navigates` solo en carga inicial (Given). Elementos interactivos van en `locators`, no en `validation` (website.yaml). Es la causa #1 de tests rotos.
 

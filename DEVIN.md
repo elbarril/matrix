@@ -90,12 +90,9 @@ vs. `diff` against the installed copy. Current written grant for a full-capabili
 the abstract `edit` capability maps to both here (Matrix accepts that widening; see `smith.md`
 `<boundaries>` for the narrower intent).
 
-Grant-resolution timing (subagent tool-grant snapshotting at CLI process start vs. hot-reload;
-audit-log session-id attribution for inner subagents) is now **resolved for the timing question**
-(snapshot-at-start, confirmed) but still has an open item on audit attribution — see
-`brain/output/research/devin-tool-grant-resolution-timing.md` for the spikes and current status.
+Grant-resolution timing status: `brain/output/research/devin-tool-grant-resolution-timing.md`.
 
-**Known fixes to this mapping (detail moved out, one-line pointer each):**
+**Known fixes (one-line pointers):**
 - `pre_exec_guard.py` token-match false-positive fix → `brain/output/eval/pre-exec-guard-false-positive-fix.md`.
 - Logos-Sparks `run-command` capability removal + exec allowlist for subagents (`permissions.allow` /
   `PreToolUse` guard) → `brain/output/eval/devin-subagent-exec-hardening.md`.
@@ -108,7 +105,7 @@ in practice: it runs in the foreground, user-approved, not as an unattended suba
 
 Devin withholds `ask_user_question` from every subagent unconditionally — not configurable via `allowed-tools` or `permissions`. Specialists that declare the `ask-user` capability (Architect, Morpheus, Oracle, Trinity) run as Devin subagents, so they cannot call it. When one of them needs a decision from the user, it stops and reports the question back to Neo (the master skill, not a subagent — it keeps `ask_user_question`), which asks and re-delegates. `run_subagent`/`read_subagent` are similarly unavailable inside a subagent by default (nesting is disabled beyond the root agent unless `max-nesting` is set — none of our core specialists need it, they're all depth-1 children of Neo).
 
-**Nesting spike (verified, not just documented):** a temporary custom subagent profile (`max-nesting: 2` in its frontmatter, no other restriction) was spawned by Neo and successfully called `run_subagent` itself, spawning a grandchild `subagent_explore` and reading its result back via `read_subagent(block=true)` — full round trip, no denial, no silent fallback. Confirms the docs' claim (`subagents.mdx` "Nesting Depth") is accurate in this environment: a depth-1 custom subagent with `max-nesting` set can legitimately spawn and read depth-2 children. This matters for federated ships (see `brain/subsystems/FEDERATION.md`): a ship's captain (e.g. Niobe) can be generated with `max-nesting: 2` and delegate directly to her own crew, instead of needing a courier protocol where the root agent spawns the crew on the captain's behalf.
+**Nesting verified in vivo:** depth-1 subagent with `max-nesting: 2` spawned `subagent_explore` and read via `read_subagent(block=true)` — details → `brain/output/research/adapter-lessons-detail.md` §14.
 
 ## Federated ships and `max-nesting`
 
@@ -132,14 +129,9 @@ See [`AGENTS.md`](AGENTS.md) §12. In short: read the contract, know the registr
 
 ## Matrix workspace mode auto-bootstrap (AGENTS.md §6 step 0)
 
-AGENTS.md §6 step 0 says becoming Neo in Matrix workspace mode must not depend
-on topic-matching heuristics alone. **This reuses existing infrastructure —
-`adapters/devin/hooks/session_audit.py` and its "Etapa G/H3" activation-inject
-experiment — rather than a new hook.** (A first pass at this added a brand-new
-project-level `.devin/config.json` + a second SessionStart script; that was
-reverted the same session once this existing, more complete mechanism was
-found. Lesson: check `adapters/<target>/` for an existing lever before adding
-a new one — see `brain/data/lessons.md`.)
+AGENTS.md §6 step 0: Neo must activate in Matrix workspace mode without relying
+on topic-matching alone. **Reuses `adapters/devin/hooks/session_audit.py` and its
+`experiment.activation_inject` flag.** See `lessons.md:35`.
 
 - `session_audit.py` is already wired into `~/.config/devin/config.json`'s
   `hooks.SessionStart` / `UserPromptSubmit` / `PostToolUse` / `PostCompaction` /
@@ -178,20 +170,7 @@ a new one — see `brain/data/lessons.md`.)
   since it was first built, 2026-07-17, and evidently never turned on). It now
   affects both Matrix workspace mode and bound external projects, by design.
 
-**2026-07-28 — verified with ground-truth evidence, not just a text response.**
-`devin -p "reply with just the word OK" --permission-mode dangerous` was run in
-a fresh process with cwd at the Matrix root. The final reply was just `"OK"` —
-the model did not narrate an activation — but `brain/state/hook-audit.jsonl`
-shows the *actual tool calls* of that exact session (`fringe-boat`,
-`session_start` → `session_end` in the matching time window): `read
-/home/emiliano/www/emisrepos/matrix/AGENTS.md` immediately followed by `read
-.../brain/agents/neo.md`, i.e. the session-start-bootstrap block was correctly
-delivered and followed, even though the visible task never mentioned Neo or
-Matrix and the final text gave no indication either way. **Silence in the
-reply is not evidence of failure here — check the audit log, not the prose.**
-Re-verify after any Devin CLI upgrade, since this depends on `SessionStart` +
-`additionalContext` injection continuing to work as documented in
-`extensibility/hooks/lifecycle-hooks.mdx`.
+**Activation injection verified 2026-07-28**: model replied only `OK`, but `hook-audit.jsonl` shows it read `AGENTS.md` then `neo.md`. Check audit log, not prose; re-verify on upgrade. → `brain/output/research/adapter-lessons-detail.md`.
 
 ## Hardening `permissions.deny` for secret stores
 
@@ -266,94 +245,4 @@ The Trainman resolves each agent's `model_policy` tier (`cheap`/`reasoning`/`aut
 
 ## Lessons — detalle de adapter
 
-`brain/data/lessons.md` keeps the universal operable rule for each lesson below; this section carries the Devin/Claude-Code-specific narrative and citations that were split out of it during the `validate_layer2` remediation, cross-referenced by lesson number. No rule content was lost in the split — only the platform-specific evidence moved here.
-
-### Lesson 11
-
-Se sospechó que subagents en background auto-deniegan tools MCP no aprobadas (basado en `subagents.mdx`). 4 tests controlados (MCP read-only y con side-effects, foreground vs background) no reprodujeron el bloqueo en este entorno. La causa real de un bloqueo pasado (figma-audit) fue más probablemente el grant de capabilities del *perfil* del subagente, no el flag `is_background`.
-
-### Lesson 13
-
-Evaluación real (Smith, 11 sesiones): Devin aplica `deny: ["Read(<ruta>/**)"]` sobre `read_file` inclusive en `--permission-mode dangerous`, y se propaga a subagentes. Ese mismo `deny` no bloquea `grep`/`glob` ni `exec` (`cat`, etc.).
-
-### Lesson 14 (steps 2 and 3)
-
-2. `subagents.mdx` "Nesting Depth" documentaba `max-nesting` desde el principio, y `capability-map.md` lo citaba correctamente ("subagents cannot spawn subagents **by default**") — la cláusula estaba ahí. El diseño leyó "by default" como "nunca".
-
-3. El spike fue un subagente temporal, un `max-nesting: 2`, un `run_subagent`, un `read_subagent`.
-
-### Lesson 18
-
-Primera pasada (Architect, agent_id=1b0251ef, feasibility review, sin medir) encontró 3 líos en `brain/agents/neo.md` y afirmó 2 supuestos sobre Claude Code que resultaron **falsos** al verificarlos contra `claude-master-documentation/docs/` en la auditoría siguiente (agent_id=09c037aa, con lectura real de doc en vez de inferencia): Claude Code SÍ anida subagentes por default (profundidad 3, sin opt-in) y SÍ expone `agent_id`/`agent_type` en el payload de sus hooks — ambos mejor que Devin, no peor. El único hallazgo real que sobrevivió verificación: Claude Code no tiene un primitivo de **resume de subagente** (el resume de sesión sí existe, pero no es direccionable a un hijo específico), así que el patrón *Secure build* de `neo.md:57,98` (resumir la sesión del mismo Trinity con el fix puntual) no porta.
-
-### Lesson 19 / 24 (twin findings, same flag)
-
-La prueba solo es válida corriendo con permisos abiertos (`--permission-mode dangerous` o equivalente) y `write`/`edit`/`exec` disponibles.
-
-### Lesson 20
-
-La lección 18 original nació de una feasibility review (lectura + inferencia, sin spike) y afirmó 2 de 3 supuestos sobre Claude Code que resultaron falsos al re-verificarlos con lectura real de `docs/` en la auditoría siguiente.
-
-### Lesson 21
-
-Auditoría repo-wide (Architect, agent_id=09c037aa, 2026-07-27) encontró 29 puntos de acoplamiento a Devin fuera de `adapters/devin/` (16 en `brain/`, 6 en `hooks/`+`bin/matrix`, 7 en `_build.py`/docs), de los cuales 3 producen **falso verde**: `hooks/validate_ship.py` reporta PASS si no encuentra artifacts de Devin en vez de fallar fuerte; `bin/matrix`'s `path_is_bound()` define "bound" por la presencia de `AGENTS.local.md` (formato Devin) como parte del predicado de estado; `adapters/_harden.py` adivina una ruta de config para cualquier target desconocido y reporta éxito al escribir un archivo que esa plataforma nunca lee.
-
-### Lesson 23
-
-Re-verificación en vivo (Smith, agent_id=f920c882, 2026-07-27) de los 29 hallazgos de la lección 21 encontró: 27 siguen presentes, 0 arreglados, y `niobe.md` (0→4 menciones), `capability-map.md` (8→10) y `lessons.md` (+4, las propias lecciones 18/20/21 nombran Devin/Claude Code en `brain/`) **crecieron** en acoplamiento durante la misma ventana de trabajo que documentó el problema.
-
-### Lesson 25
-
-El bug real era que el productor (`bin/matrix phase_close()`) nunca escribía ese `session_id` correcto (correlacionaba con un marker de sesión stale, porque la restricción de diseño "Devin no expone session id a los hooks" quedó obsoleta con una versión nueva del CLI y nadie la re-midió).
-
-### Lesson 26
-
-Al re-otorgarle `edit` a Smith (rol de evaluador-con-remediación, 2026-07-27), Trinity verificó `generated/.../smith/AGENT.md` == `~/.config/devin/agents/smith/AGENT.md` (idénticos) y lo dio por medido. El spike en vivo posterior (Neo, mismo proceso de CLI que corrió el `install`) mostró que una sesión `smith` recién spawneada solo tenía `read, grep, find_by_name, exec` — sin `edit`/`write`. Ninguna doc revisada (`09-advanced-cli-features.md`, `07-troubleshooting.md`) especifica si la resolución de tools de un subagente se cachea al arrancar el proceso de CLI o se lee en vivo.
-
-### Lesson 27
-
-El spike de Neo en un proceso de CLI genuinamente nuevo (arrancado después del `install` de 2026-07-27) confirmó la hipótesis pendiente de la lección 26: el subagente `smith` recién spawneado reportó `read, edit, exec, grep, find_file_by_name` — `edit` estaba vivo — mientras que un profile de control de solo lectura siguió reportando su set restringido de siempre. Una llamada `edit` real del subagente `smith` llegó a `brain/state/hook-audit.jsonl` con `tool_name` y `tool_paths` correctos, pero el `session_id` registrado fue el de la sesión padre Neo (`pointy-goldfish`), no un id propio del subagente. Un segundo spike independiente en un proceso fresco confirmó que `write` y `mcp__chrome-browser__*` están **CONFIRMED ABSENT** para subagentes independientemente de su declaración en `allowed-tools`, mientras que `glob` sí está presente bajo el nombre `find_file_by_name`. El mecanismo más probable para la creación de un artefacto nuevo pese a `write` ausente es `exec` con redirección de shell.
-
-### Lesson 28
-
-Fase-0 (Oracle) probó `.devin/config.json` con `permissions.deny: ["Exec(git commit)","Exec(git push)"]` a nivel de proyecto y vio bloquear un commit real bajo `--permission-mode dangerous`. Fase-4 (Trinity), invocando `devin -p` sin REPL contra el mismo tipo de proyecto, encontró que esa misma regla de proyecto **no bloqueó** un commit real — pasó. El mecanismo que sí funcionó de forma reproducible (confirmado independientemente por Neo, dos corridas: una sin `--config` que comiteó, una con `--config` que bloqueó): generar un archivo de config temporal que fusiona el `~/.config/devin/config.json` real del usuario con las reglas `deny`, y pasarlo explícitamente con `--config <path>` en la invocación. La causa exacta de por qué `.devin/config.json` de proyecto no se carga de forma confiable bajo `-p` queda **sin resolver** — no se investigó a fondo el motivo (¿se resuelve el cwd distinto al pasar `-p` con `--config`? ¿hay algún orden de precedencia distinto en modo no-interactivo?), solo se confirmó el síntoma y el workaround. Ver `hardline-dispatch.sh` (`adapters/devin/`) para la implementación real.
-
-### Lesson 29
-
-El pedido era "que Neo arranque solo en modo workspace de Matrix". Primera respuesta descartada: `hooks/session_start_bootstrap.py` (Seraph) + `adapters/devin/session-start-hook.sh` + un `.devin/config.json` de proyecto nuevo registrando `hooks.SessionStart`. Funcionaba (confirmado con un spike real de `devin -p`), pero duplicaba `adapters/devin/hooks/session_audit.py`, que ya estaba wireado globalmente en `~/.config/devin/config.json` por `adapters/devin/install-hooks.sh` (instalado a mano en esta máquina, nunca por el flujo de `bin/matrix install --target=devin`) y que ya tenía un experimento llamado "Etapa G/H3" (`experiment.activation_inject` en `adapters/devin/config.yaml`, `false` desde que se escribió el 2026-07-17) para inyectar la misma clase de contenido vía `hookSpecificOutput.additionalContext`. La corrección real: se borraron los tres archivos nuevos; se agregó `_is_workspace_mode()` (compara `os.getcwd()` contra `MATRIX_ROOT`) y `_render_activation_preamble()` (renderiza `brain/data/activation-preamble.tmpl`, la misma plantilla que ya usa el `neo` skill generado y el bloque `AGENTS.local.md` de proyectos bindeados vía `matrix_block_tmp()` en `bin/matrix`) a `session_audit.py`; se prendió `activation_inject: true` acotado por ese chequeo de cwd; y se agregó la llamada a `install-hooks.sh` al final de `adapters/devin/install.sh`, que antes no la incluía.
-
-### Lesson 34
-
-El hook de ciclo de vida mencionado en la lección 34 es `Stop`; el CLI concreto al que aplica es **Devin CLI**. El detalle del bug y la batería de inyección de errores quedan en `brain/data/lessons.md` lección 34.
-
-### Lesson 37
-
-En Devin CLI, el archivo de estado local del proyecto es `.devin` (directorio `.devin/` en la raíz del proyecto). En `saintlukes`, el `.gitignore` del proyecto solo tenía `_brain`, `AGENTS.local.md` y `.devin`; faltaba `matrix-output/`, por lo que un artefacto de research escrito ahí corría riesgo real de ser trackeado en el repo del cliente.
-
-**Nota post-`workspace-mode-refinements` (no reescribe el incidente, lo contextualiza):** el mecanismo que este incidente motivó ya no aplica de la misma forma. Desde la sesión que retiró `matrix-output/` (ver `AGENTS.md` §1), los artefactos de research/plan/architecture/eval de un proyecto bindeado ya no se escriben en ningún directorio dentro del propio repo del cliente — van a `brain/output/<project>/<sub>/` en este repo. Por eso `matrix select` ya no agrega `matrix-output/` al `.gitignore` del proyecto: no hace falta, porque nada se vuelve a escribir ahí. El riesgo real de `saintlukes` (un artefacto trackeado en el repo de un cliente) sigue siendo un incidente real que pasó; lo que cambió es la superficie que lo hacía posible, no el hecho de que haya ocurrido.
-
-**Nota post-harness-ignore-exclude:** el mecanismo de sincronización pasó de escribir las entradas en el `.gitignore` del proyecto a escribirlas en `.git/info/exclude` (local al gitdir, nunca versionado). Los nombres de los comandos y funciones cambiaron (`matrix exclude audit|fix`, `update_exclude`) pero el drift de contenido y el drift de estado-de-git que documentan las lecciones #37 y #57 siguen siendo el mismo concepto sobre la nueva superficie.
-
-### Lesson 38
-
-`sessions.db` (SQLite local del CLI) tuvo 2 incidentes de corrupción confirmados. Regla
-operable: `sqlite3 ... ".dump"` puede cerrar en `ROLLBACK` en vez de `COMMIT` sin error
-visible (exit 0, stderr vacío) — siempre revisar la última línea del dump antes de
-reimportar. Diagnóstico completo (procedimiento de reparación, auditoría de filas
-perdidas, causa raíz sin confirmar): `brain/output/research/devin-sessions-db-corruption-incidents.md`.
-
-### Lesson 42
-
-El hook de auditoría de sesión que implementa los mecanismos de detección de sesiones huérfanas es `adapters/devin/hooks/session_audit.py`, wireado globalmente en `~/.config/devin/config.json` por `adapters/devin/install-hooks.sh`.
-
-### Lesson 51
-
-Al retirar Keymaker del roster (2026-08-07), `adapters/devin/install.sh`'s `deploy()` regeneró e instaló correctamente los 10 artefactos vigentes en `~/.config/devin/agents/` y `~/.config/devin/skills/`, pero la carpeta `agents/keymaker/` (instalada en una corrida anterior) siguió existiendo intacta — `deploy()` itera sobre lo generado y sobreescribe/crea, nunca compara contra lo ya instalado para borrar lo que ya no tiene fuente; se borró a mano (`rm -rf`). Separado, se encontró un árbol de instalación completo `.agents/` (formato "thin pointer" viejo, con fecha 2026-06-15, distinto del formato actual con contenido inline) — deuda de una convención de wiring anterior a `skills/`+`agents/`, sin relación con el cambio de roster puntual; también se borró completo. Candidato real a mecanizar, no implementado esta sesión: que `install.sh` compare el directorio instalado contra el generado y pode las carpetas de specialists que ya no están en `brain/agents/*.md`, igual que ya hace `clean_broken_matrix_links` con symlinks rotos.
-
-### Lesson 56
-
-El tool nativo de invocación de subagente es `run_subagent` (Devin CLI). El log de auditoría de hooks es `brain/state/hook-audit.jsonl` — sus eventos `post_tool_use` de `edit`/`multi_edit`/`write` no llevan `subagent_profile` por evento individual, solo el evento externo `post_tool_use` de `run_subagent` (el que dispara la llamada) sí lo lleva. Esto es la misma brecha de atribución documentada arriba (§"Grant-resolution timing... audit attribution for inner subagents"), medida de nuevo en este caso concreto: cruzando `tool_paths`+`timestamp` de los eventos de edición contra los timestamps de los eventos `run_subagent` de Trinity y Smith en `hook-audit.jsonl`, se confirmó que las ediciones a `fix_stale_references.py`/`test_tracking.py` cayeron dentro de la ventana de Trinity (13:24–13:37) y no en ninguna de las dos ventanas de Smith (fin 13:23:43 y 13:37:28–13:42:08).
-
-### Saint Luke's
-
-La regla dura del usuario de `brain/data/lessons/saintlukes.md` surgió de una sesión con Devin CLI en la que el usuario compartía el working tree del proyecto `saintlukes` con ediciones manuales propias; dos cambios reales del usuario (`referrals/css/specifics.css` y el token `--t-tc--buttons--font--family` en `library__theme.css`) fueron revertidos por error al asumir que eran drift de un subagente.
+Narrativa por-lección (citas, versiones, IDs, nombres de tools) en `brain/output/research/adapter-lessons-detail.md`. `lessons.md` conserva la regla operable + puntero.

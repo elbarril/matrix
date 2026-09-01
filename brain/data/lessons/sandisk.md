@@ -162,10 +162,10 @@ revert:**
   `T1221196` (HEAD) ya tiene el estado correcto; el sandbox está desactualizado. Ninguna encontrada
   al revés dentro del alcance navbar/header/footer. Acción: confirmar con el equipo de deploy si el
   sandbox está pendiente de sync con HEAD, no tocar código por esto.
-- **Gap de tooling real, no específico de este caso:** `mcp__chrome-devtools__*` no estuvo
-  disponible para el subagente `figma-audit` corrido en foreground (declarado en su
-  `allowed-tools` pero ausente de su lista real de funciones) — mismo síntoma que la lección 27
-  (core) tuvo con `mcp__chrome-browser__*`. Por eso la tabla de discrepancias usa HTML/CSS servidos
+- **Gap de tooling real, no específico de este caso:** el binding adapter-native de browser no estuvo
+  disponible para el subagente `figma-audit` corrido en foreground (declarado en sus permisos
+  pero ausente de su lista real de funciones) — mismo síntoma que la lección 27 (core) tuvo con
+  otro binding de browser. Por eso la tabla de discrepancias usa HTML/CSS servidos
   vía `curl` como fallback explícito (Pattern 4/6d del skill), no `getComputedStyle()` real —
   válido para lo que se pudo confirmar (todo MATCH salvo el lag de deploy), pero deja sin cerrar:
   computed style real de `:hover`/`:focus` del footer, y el comportamiento real de colapso del
@@ -178,10 +178,10 @@ revert:**
 
 ### Cierre del gap — verificación en vivo real hecha por Neo (2026-08-12), `figma-audit` retirado del roster
 
-El usuario pidió borrar el skill/agente `figma-audit`
-(`~/.config/devin/skills/figma-styleguide-to-portal-templates/` +
-`~/.config/devin/agents/figma-audit/`, eliminados por completo — no era parte del roster de
-Matrix, no afecta `bin/matrix build/install`) y que Neo hiciera la revisión en vivo directamente
+El usuario pidió borrar el skill/agente `figma-audit` de los dos directorios de instalación del
+adapter (paths exactos preservados en `brain/output/research/adapter-lessons-detail.md`, lección 55),
+eliminados por completo — no era parte del roster de Matrix, no afecta `bin/matrix build/install` —
+y que Neo hiciera la revisión en vivo directamente
 con su propio acceso a `chrome-devtools` (confirmado disponible en la sesión raíz, a diferencia
 del subagente). Resultado, con `getComputedStyle()`/`hover` reales, no `curl`:
 

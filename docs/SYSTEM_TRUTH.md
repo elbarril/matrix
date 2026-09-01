@@ -24,8 +24,10 @@
 
 - `audit_event`
 - `detect_orphan_session`
+- `install_integrity_check`
 - `post_run_audit`
 - `pre_activation_check`
+- `pre_exec_guard`
 - `session_close`
 - `the_source`
 - `validate_layer2`
