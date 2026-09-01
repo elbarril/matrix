@@ -142,6 +142,13 @@
       "path": "/home/emiliano/www/templates-automation",
       "type": "local",
       "added": "2026-08-27T15:30:11-03:00"
+    },
+    {
+      "name": "kyndryl",
+      "path": "/home/emiliano/www/Portal-Templates-Group/kyndryl",
+      "type": "local",
+      "added": "2026-08-28T10:37:48-03:00",
+      "bound_target": "devin"
     }
   ],
   "created": "2026-05-19T18:31:00-03:00",
