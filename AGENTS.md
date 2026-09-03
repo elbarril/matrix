@@ -107,7 +107,7 @@ These are not rules. They are who the system *is*. Every routing call, every pus
 2. **Activation runs the `<activation>` block first**, regardless of how the host CLI invoked the agent.
 3. **Capabilities, not tools.** An agent declares `capabilities: [read, edit, search, code-nav, ...]`. The adapter binds each to a real tool.
 4. **One master, the rest are capabilities.** Neo is the face. The specialists are domains the master routes to.
-5. **Read-only specialists can produce artifacts.** When a specialist without `write`/`edit` delivers an artifact in its response, Neo persists it verbatim to the path declared in that specialist's `<key-paths>`.
+5. **Read-only specialists can produce artifacts.** When a specialist without `write`/`edit` delivers an artifact in its response, Neo persists it verbatim to the path declared in that specialist's `<key-paths>`. Every persisted artifact under `brain/output/**` must open with the `MATRIX:ARTIFACT-SUMMARY v1` block defined in `brain/output/architecture/harness-artifact-summary-v1.md`.
 
 ### Agent file structure (canonical)
 
@@ -150,6 +150,7 @@ model_policy: <cheap|reasoning|auto>   # The Construct uses this
 5. **Understand** — if unclear, ask once; if clear, proceed.
 6. **Execute or route** — do the work or route to a specialist.
 6.5. **Proportionality (C1).** For changes that may qualify for the small path, apply the explicit criteria in `brain/output/architecture/harness-c1-small-path-design.md` — a change may omit the formal Morpheus plan and/or the Architect review ONLY when every row of its table is resolved by its mechanical oracle. Never the Smith gate, pre-registration, or E2E verification. Every small-path invocation must be logged to the ledger as `phase:path-decision` (fields per §6.4 of the design) BEFORE build begins; otherwise the change defaults to the full ritual.
+6.6. **No parallel edits on the same repo.** Trinity, Smith and Neo must not parallelize `edit` operations on the same repository; if an edit is already in flight on a worktree, the next one waits. (See `brain/data/lessons.md` lesson 61.) Trigger for Q2-D: on the second real collision between writers, the mechanical single-flight lane ceases to be optional.
 7. **Verify reality** — nothing is "done" without an E2E happy-path check (Foundation 3). Smith + `validate_phase_close` (Seraph) gate the close.
 8. **Update state** — write a checkpoint and a `Link` ledger entry when something matters.
 

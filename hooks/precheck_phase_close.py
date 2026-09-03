@@ -18,6 +18,8 @@ from validate_phase_close import VALID_PHASES
 PATH_RE = re.compile(r"(?:brain/output/[^\s\"'`]+|/tmp/[^\s\"'`]+)")
 NA_RE = re.compile(r"^N/A\s*[-:]\s*\S+", re.IGNORECASE)
 LESSON_NUMBER_RE = re.compile(r"(?:lecci[oó]n|lesson)\s*#?\s*(\d+)", re.IGNORECASE)
+ARTIFACT_SUMMARY_OPEN = "<!-- MATRIX:ARTIFACT-SUMMARY v1 -->"
+ARTIFACT_SUMMARY_RELPATH = "brain/output"
 
 
 def emit_warn(errors):
@@ -69,6 +71,44 @@ def lesson_sources(root):
     return "\n".join(chunks)
 
 
+def check_artifact_summary(data, root):
+    errors = []
+    for field in ("evidence", "lesson"):
+        value = str(data.get(field) or "")
+        for raw_path in PATH_RE.findall(value):
+            referenced = raw_path.rstrip(".,;:)]}")
+            disk_path = referenced if os.path.isabs(referenced) else os.path.join(root, referenced)
+            if not os.path.isfile(disk_path):
+                continue
+            if not referenced.startswith(ARTIFACT_SUMMARY_RELPATH):
+                continue
+            if not disk_path.endswith(".md"):
+                continue
+            try:
+                with open(disk_path, encoding="utf-8") as fh:
+                    non_empty = 0
+                    found = False
+                    for line in fh:
+                        stripped = line.strip()
+                        if stripped == "":
+                            continue
+                        non_empty += 1
+                        if ARTIFACT_SUMMARY_OPEN in stripped:
+                            found = True
+                            break
+                        if non_empty >= 3:
+                            break
+                    if not found:
+                        errors.append(
+                            f"{field} referencia artefacto de salida sin el bloque "
+                            f"MATRIX:ARTIFACT-SUMMARY v1 en sus primeras 3 lineas no vacias: "
+                            f"{referenced}"
+                        )
+            except OSError as exc:
+                errors.append(f"{field}: no se pudo leer {referenced}: {exc}")
+    return errors
+
+
 def run_checks(data):
     root = resolve_root()
     phase = str(data.get("phase") or "").strip().lower()
@@ -113,6 +153,8 @@ def run_checks(data):
                 errors.append(
                     "lesson de eval no matchea lessons.md/lessons/<project>.md ni es N/A razonado"
                 )
+
+    errors.extend(check_artifact_summary(data, root))
     return errors
 
 
