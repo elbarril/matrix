@@ -12,7 +12,8 @@ Output JSON (Layer-1 contract):
 This is a tokenizer-based best-effort guard, not a real shell parser. It only
 covers the mutating operations called out in the architecture design: rm,
 rmdir, mv, truncate, sed -i, git rm, and output redirection (> / >>) to a
-protected path.
+protected path. Its tokenizer is intentionally duplicated in post_run_audit;
+the two hooks have a diverging fail policy — see the other module.
 
 Audit contract (see adapters/devin/hooks/pre_tool_use_guard.py): every
 `reason` this module returns is built only from a fixed verb plus the

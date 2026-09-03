@@ -5,7 +5,7 @@ After a run, verifies the enforced steps were executed, writes
 ``brain/state/validation-report.json``, and flags non-compliant or bypassed
 activations. Besides the existing input (``agent``, ``steps``, and optional
 ``required``), it accepts optional ``profile``, ``session_id``,
-``eval_artifact``, ``edited_paths``, and ``since`` keys.
+``eval_artifact``, ``edited_paths``, ``since``, and ``until`` keys.
 
 A Smith-profile run with edits must point to an eval artifact containing one
 ``<!-- MATRIX:EVAL-PREREG v1 -->`` JSON block, terminated by
@@ -21,19 +21,26 @@ prereg_block_duplicated, prereg_block_malformed, prereg_version_unsupported,
 prereg_session_mismatch, check_command_mutated, before_not_failing,
 after_not_passing, output_empty, output_unchanged, evidence_out_of_order,
 tier3_self_fixed, tier2_review_missing, tier2_review_wrong_reviewer,
-tier2_review_predates_fix, fix_not_one_sentence, since_unparseable,
-since_after_prereg, and file_containment_violated.
+tier2_review_predates_fix, fix_not_one_sentence, since_unparseable, since_after_prereg,
+until_unparseable, until_before_since, until_before_prereg,
+and file_containment_violated.
 
 Edited paths are the union of caller declaration and matching audit-log edit
 events. When the host does not expose inner-subagent events, attribution is
 self-report-only rather than an invented observation. Session-scoped observed
-edits without profile metadata are conservatively attributed to Smith; a
-``since`` window narrows that known false-positive mode.
+edits without profile metadata are conservatively attributed to Smith; a closed
+``[since, until]`` window narrows that known false-positive mode, because
+``session_id`` identifies the host session (verified to span ~38 h), not the
+run being audited.
+
+Shell mutation detection is intentionally duplicated with pre_exec_guard;
+the two hooks have a diverging fail policy — see the other module.
 """
 
 import datetime
 import json
 import os
+import shlex
 
 from _common import current_session_id, emit, read_input, resolve_root
 
@@ -42,19 +49,136 @@ SMITH_ALIASES = {"smith", "agent smith", "agent_smith"}
 EDIT_TOOLS = {"edit", "multi_edit", "write"}
 MUTANT_TOOL_NAMES = {"exec", "run_command", "run-command"}
 ALLOWED_MUTANT_PREFIX = "bin/matrix corpus-ingest"
+_WRITE_ALL_ARGS = {"rm", "rmdir", "truncate", "tee"}
+_WRITE_LAST_ARG = {"mv", "cp"}
+_CONTROL_OPS = {";", "&&", "||", "|", "&"}
+_WRITE_HINTS = (">", ">>", "tee ", "rm ", "rmdir ", "mv ", "cp ", "truncate ", "sed -i")
 
 
 def _is_smith(value):
     return str(value or "").strip().lower() in SMITH_ALIASES
 
 
-def _anomalous_mutant_commands(root, session_id, since):
-    """Return shell commands in this session that are not the allowed corpus-ingest.
+def _strip_heredocs(command):
+    """Return the command's shell lines with heredoc bodies removed.
 
-    This is a detective check, not a preventive guard. It flags any
-    exec/run_command logged in the audit trail that does not match the
-    single allowed shell operation, so a human/Smith can review it.
+    A heredoc body is data, not shell syntax: an eval artifact written with
+    `cat > path << 'EOF'` carries prose that must never reach the tokenizer
+    (a `>` inside a sentence is not a redirection). Delimiter forms handled:
+    << EOF, <<- EOF, << 'EOF', << "EOF".
     """
+    lines, out, i = command.splitlines(), [], 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        marker = None
+        idx = line.find("<<")
+        if idx != -1 and not line[idx:].startswith("<<<"):
+            rest = line[idx + 2:].lstrip()
+            if rest.startswith("-"):
+                rest = rest[1:].lstrip()
+            token = rest.split()[0] if rest.split() else ""
+            marker = token.strip("'\"") or None
+        i += 1
+        if marker:
+            while i < len(lines) and lines[i].strip() != marker:
+                i += 1
+            i += 1  # skip the terminating delimiter line
+    return out
+
+
+def _lexical_chunks(lines):
+    """Group physical shell lines into minimal chunks that shlex can parse.
+
+    A shell command is ONE lexical unit even when it spans several physical
+    lines: a quote opened on line 1 and closed on line 7 is valid syntax, not
+    garbage. Tokenizing line-by-line reported `python3 -c "` as unparseable
+    write intent and fail-closed on a command whose only target was /tmp.
+
+    shlex is the oracle for "is a quote still open" -- a ValueError means the
+    chunk is incomplete, so the next line is appended and the parse retried.
+    Nothing here re-implements shell lexing on purpose (Foundation 4).
+
+    Returns a list of (text, tokens) pairs. `tokens` is None when the chunk
+    never parsed (unterminated quote through the end of the command), leaving
+    the fail-closed policy of the caller in charge.
+    """
+    chunks, buffer = [], None
+    for line in lines:
+        buffer = line if buffer is None else buffer + "\n" + line
+        try:
+            tokens = shlex.split(buffer)
+        except ValueError:
+            continue
+        chunks.append((buffer, tokens))
+        buffer = None
+    if buffer is not None:
+        chunks.append((buffer, None))
+    return chunks
+
+
+def _write_targets(command, root):
+    """Return parsed write targets and whether write intent could not be parsed.
+
+    A shell command is a single lexical unit even across physical lines; see
+    `_lexical_chunks`. Order of operations: strip heredocs, chunk by quotable
+    lines, tokenize each chunk. This detective tokenizer intentionally
+    duplicates pre_exec_guard but fails closed on unparseable write intent;
+    the preventive guard fails open to avoid blocking on uncertainty.
+    """
+    targets = []
+    unparsed = False
+    for text, tokens in _lexical_chunks(_strip_heredocs(command)):
+        if tokens is None:
+            if any(hint in text for hint in _WRITE_HINTS):
+                unparsed = True
+            continue
+        for i, token in enumerate(tokens):
+            if token in (">", ">>") and i + 1 < len(tokens):
+                targets.append(tokens[i + 1])
+        segments, segment = [], []
+        for token in tokens:
+            if token in _CONTROL_OPS:
+                if segment:
+                    segments.append(segment)
+                segment = []
+            else:
+                segment.append(token)
+        if segment:
+            segments.append(segment)
+        for segment in segments:
+            verb = segment[0]
+            args = segment[1:]
+            if verb in _WRITE_ALL_ARGS:
+                targets.extend(arg for arg in args if not arg.startswith("-"))
+            elif verb in _WRITE_LAST_ARG and args:
+                targets.append(args[-1])
+            elif verb == "git" and args and args[0] == "rm":
+                targets.extend(arg for arg in args[1:] if not arg.startswith("-"))
+            elif verb == "sed" and any(arg == "-i" or arg.startswith("-i.") or arg == "--in-place" for arg in args):
+                targets.extend(arg for arg in args if not arg.startswith("-"))
+    return targets, unparsed
+
+
+def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=None):
+    """Return shell commands in this session that wrote to a repo path outside
+    the sanctioned set.
+
+    Detective check, not a preventive guard (that is pre_exec_guard). Four
+    classes are NOT anomalies, by design:
+      * commands outside the audited [since, until] window -- events that cannot
+        be attributed to the run in time must not be attributed to Smith;
+      * read-only commands (no write token at all) -- reproduction is required
+        of Smith by its own <rules>;
+      * writes whose target resolves outside the Matrix root (/tmp, /dev/null):
+        out of scope, this check protects repo integrity, not the filesystem;
+      * writes to a path already in `sanctioned` -- the declared + pre-registered
+        paths of this same run, which is how Smith's own eval artifact is
+        created via shell redirection per its <boundaries>.
+    A write to any other repo path is the mutant this check was written for
+    (see brain/subsystems/logos/agents/niobe.md: never ad-hoc redirection).
+    """
+    sanctioned = set(sanctioned or ())
     anomalies = []
     if not session_id:
         return anomalies
@@ -78,14 +202,26 @@ def _anomalous_mutant_commands(root, session_id, since):
                 continue
             if event.get("tool_name") not in MUTANT_TOOL_NAMES:
                 continue
-            if since is not None:
-                try:
-                    if _parse_time(event.get("timestamp")) < since:
-                        continue
-                except ValueError:
-                    continue
+            if not _in_window(event.get("timestamp"), since, until):
+                continue
             cmd = event.get("tool_command") or ""
-            if cmd and not cmd.startswith(ALLOWED_MUTANT_PREFIX):
+            if not cmd:
+                continue
+            if cmd.strip().startswith(ALLOWED_MUTANT_PREFIX):
+                continue
+            targets, unparsed = _write_targets(cmd, root)
+            if unparsed:
+                anomalies.append(cmd)
+                continue
+            offending = False
+            for target in targets:
+                norm = _normalize_path(root, target)
+                if os.path.isabs(norm):
+                    continue
+                if norm not in sanctioned:
+                    offending = True
+                    break
+            if offending:
                 anomalies.append(cmd)
     return anomalies
 
@@ -97,6 +233,28 @@ def _parse_time(value):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=datetime.datetime.now().astimezone().tzinfo)
     return parsed
+
+
+def _in_window(timestamp, since, until):
+    """Return True when `timestamp` falls inside the closed interval [since, until].
+
+    Bounds are optional: a None bound is no bound on that side. The interval is
+    inclusive on both ends. An event whose timestamp cannot be parsed is OUT of
+    the window by construction -- an event that cannot be placed in time cannot
+    be attributed to a run, and attributing it anyway is the false attribution
+    this amendment exists to remove (Foundation 3).
+    """
+    if since is None and until is None:
+        return True
+    try:
+        moment = _parse_time(timestamp)
+    except ValueError:
+        return False
+    if since is not None and moment < since:
+        return False
+    if until is not None and moment > until:
+        return False
+    return True
 
 
 def _normalize_path(root, path):
@@ -127,7 +285,7 @@ def _read_prereg(path):
         return None, "prereg_block_malformed: " + str(exc)
 
 
-def _observed_edits(root, session_id, since):
+def _observed_edits(root, session_id, since, until=None):
     paths, unparseable, profile_scoped, any_events = set(), 0, False, False
     if not session_id:
         return paths, unparseable, profile_scoped, any_events
@@ -145,12 +303,8 @@ def _observed_edits(root, session_id, since):
                 continue
             if event.get("event") != "post_tool_use" or event.get("session_id") != session_id or event.get("tool_name") not in EDIT_TOOLS:
                 continue
-            if since is not None:
-                try:
-                    if _parse_time(event.get("timestamp")) < since:
-                        continue
-                except ValueError:
-                    continue
+            if not _in_window(event.get("timestamp"), since, until):
+                continue
             event_profile = event.get("subagent_profile")
             if event_profile:
                 if not _is_smith(event_profile):
@@ -232,11 +386,27 @@ def check_smith_remediation(root, data, session_id):
     except ValueError:
         since = None
         reasons.append("since_unparseable: " + str(since_raw))
+    until_raw = data.get("until")
+    try:
+        until = _parse_time(until_raw) if until_raw is not None else None
+    except ValueError:
+        until = None
+        reasons.append("until_unparseable: " + str(until_raw))
     declared = {_normalize_path(root, p) for p in (data.get("edited_paths") or []) if isinstance(p, str)}
-    observed, bad_lines, profile_scoped, any_events = _observed_edits(root, session_id, since)
+    if since is not None and until is not None and until < since:
+        reasons.append("until_before_since: " + str(until_raw) + " < " + str(since_raw))
+    observed, bad_lines, profile_scoped, any_events = _observed_edits(root, session_id, since, until)
     evaluated = declared | observed
     if not evaluated:
-        return True, {"checked": True, "ok": True, "verdict": "no-edits", "edit_signal": "none", "attribution": "no-session-id" if not session_id else "self-report-only", "eval_artifact": None, "declared_paths": sorted(declared), "observed_paths": sorted(observed), "evaluated_paths": [], "since": since_raw, "findings": [], "reasons": [], "warnings": [], "audit_log_unparseable_lines": bad_lines}
+        return (not reasons), {"checked": True, "ok": (not reasons),
+                               "verdict": "no-edits" if not reasons else "non-compliant",
+                               "edit_signal": "none",
+                               "attribution": "no-session-id" if not session_id else "self-report-only",
+                               "eval_artifact": None, "declared_paths": sorted(declared),
+                               "observed_paths": sorted(observed), "evaluated_paths": [],
+                               "since": since_raw, "until": until_raw, "findings": [],
+                               "reasons": reasons, "warnings": warnings,
+                               "audit_log_unparseable_lines": bad_lines}
     if declared and observed:
         signal = "declared+observed"
     elif declared:
@@ -245,7 +415,7 @@ def check_smith_remediation(root, data, session_id):
         signal = "observed"
     attribution = "no-session-id" if not session_id else ("profile-scoped" if profile_scoped else ("session-scoped" if any_events else "self-report-only"))
     artifact_input = data.get("eval_artifact")
-    block = {"checked": True, "ok": False, "verdict": "non-compliant", "edit_signal": signal, "attribution": attribution, "eval_artifact": None, "declared_paths": sorted(declared), "observed_paths": sorted(observed), "evaluated_paths": sorted(evaluated), "since": since_raw, "findings": [], "reasons": reasons, "warnings": warnings, "audit_log_unparseable_lines": bad_lines}
+    block = {"checked": True, "ok": False, "verdict": "non-compliant", "edit_signal": signal, "attribution": attribution, "eval_artifact": None, "declared_paths": sorted(declared), "observed_paths": sorted(observed), "evaluated_paths": sorted(evaluated), "since": since_raw, "until": until_raw, "findings": [], "reasons": reasons, "warnings": warnings, "audit_log_unparseable_lines": bad_lines}
     if not artifact_input:
         reasons.append("eval_artifact_missing")
         return False, block
@@ -273,7 +443,7 @@ def check_smith_remediation(root, data, session_id):
     if not isinstance(findings, list) or not findings:
         reasons.append("findings_empty")
         findings = []
-    ids, declared_files, before_times = set(), set(), []
+    ids, declared_files, before_times, after_times = set(), set(), [], []
     for finding in findings:
         result, finding_reasons = _finding_check(finding)
         block["findings"].append(result)
@@ -291,8 +461,14 @@ def check_smith_remediation(root, data, session_id):
                 before_times.append(_parse_time(finding.get("before", {}).get("recorded_at")))
             except ValueError:
                 pass
+            try:
+                after_times.append(_parse_time(finding.get("after", {}).get("recorded_at")))
+            except ValueError:
+                pass
     if since is not None and before_times and since > min(before_times):
         reasons.append("since_after_prereg")
+    if until is not None and after_times and until < max(after_times):
+        reasons.append("until_before_prereg")
     for path in sorted(evaluated - declared_files):
         reasons.append("file_containment_violated: " + path)
     for path in sorted(declared_files - evaluated):
@@ -317,8 +493,16 @@ def main():
         since = _parse_time(since_raw) if since_raw is not None else None
     except ValueError:
         since = None
+    until_raw = data.get("until")
+    try:
+        until = _parse_time(until_raw) if until_raw is not None else None
+    except ValueError:
+        until = None
     smith_ok, smith_block = check_smith_remediation(root, data, session_id)
-    mutant_anomalies = _anomalous_mutant_commands(root, session_id, since)
+    sanctioned = set(smith_block.get("evaluated_paths") or ())
+    if smith_block.get("eval_artifact"):
+        sanctioned.add(_normalize_path(root, smith_block["eval_artifact"]))
+    mutant_anomalies = _anomalous_mutant_commands(root, session_id, since, sanctioned, until)
     compliant = (not missing) and smith_ok and not mutant_anomalies
     report = {"hook": "post_run_audit", "ok": compliant, "agent": agent, "profile": profile, "session_id": session_id, "timestamp": datetime.datetime.now().astimezone().isoformat(), "steps_seen": steps, "required": required, "missing": missing, "bypass_suspected": bool(bypass), "compliant": compliant, "smith_remediation": smith_block, "mutant_command_anomalies": mutant_anomalies}
     state_dir = os.path.join(root, "brain", "state")
