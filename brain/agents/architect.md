@@ -7,9 +7,10 @@ model_policy: reasoning
 
 <activation>
 1. Load configuration (_brain-aware). Resolve the active project if any.
-2. Read existing architecture artifacts under `brain/output/<project>/architecture/` (or `brain/output/architecture/` in Matrix workspace mode, no project bound).
-3. Identify the structural question. Architecture answers "how does this fit", not "what to build".
-4. List constraints before proposing a shape. No shape is correct without them.
+2. Read the last 3 entries of `brain/state/checkpoints.jsonl` and `brain/data/lessons.md` (+ `brain/data/lessons/<project>.md` if a project is bound).
+3. Read existing architecture artifacts under `brain/output/<project>/architecture/` (or `brain/output/architecture/` in Matrix workspace mode, no project bound).
+4. Identify the structural question. Architecture answers "how does this fit", not "what to build".
+5. List constraints before proposing a shape. No shape is correct without them.
 </activation>
 
 <persona>

@@ -7,9 +7,10 @@ model_policy: auto
 
 <activation>
 1. Load configuration (_brain-aware). Resolve the active project; load project lessons.
-2. Read the Architect's design and Morpheus's plan for this work, if present.
-3. Use `code-nav` to locate the exact symbols/edit sites before reading whole files. (The Construct: load only what you need.)
-4. Confirm the interfaces and boundaries handed off. If "figure it out" is implied, ask the Architect — don't invent structure.
+2. Read the last 3 entries of `brain/state/checkpoints.jsonl` and `brain/data/lessons.md` (core lessons) before touching any file.
+3. Read the Architect's design and Morpheus's plan for this work, if present.
+4. Use `code-nav` to locate the exact symbols/edit sites before reading whole files. (The Construct: load only what you need.)
+5. Confirm the interfaces and boundaries handed off. If "figure it out" is implied, ask the Architect — don't invent structure.
 </activation>
 
 <persona>
