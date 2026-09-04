@@ -6,14 +6,19 @@ Reads `brain/state/hook-audit.jsonl` for the session and `brain/state/activity.l
 for Link route/handoff entries. Warn-only: always returns `ok: true`. When the
 pattern repeats for a 3rd time (2 prior triggers + this one), it exposes
 `escalate_to_block: true` for a future process to decide on.
+A `phase:path-decision` declaration suppresses the signal only when its real
+git diff is small; unresolved diffs fail safe.
 
 Input (argv[1] or stdin):
   {"session_id": "..."}   # optional
 """
 
+import fnmatch
 import json
 import os
 import re
+import subprocess
+import time
 from datetime import datetime, timezone
 
 from _common import current_session_id, emit, read_input, resolve_root
@@ -27,6 +32,20 @@ MUTATING_TOOLS = {"write", "edit", "multi_edit"}
 RUN_COMMAND_TOOLS = {"exec", "run_command", "run-command"}
 EXCLUDED_PREFIXES = ("brain/state/", "brain/output/")
 DELEGATION_NAMES = ("trinity", "smith", "architect")
+PATH_DECISION_EVENT = "phase:path-decision"
+SMALL_PATH_MAX_LINES = 10
+SMALL_PATH_MAX_FILES = 1
+NEVER_SMALL_PREFIXES = ("hooks/", "bin/lib/", "brain/state/", "adapters/")
+NEVER_SMALL_EXACT = ("AGENTS.md", "bin/matrix", "brain/data/lessons.md")
+NEVER_SMALL_GLOBS = (
+    "brain/agents/*.md",
+    "brain/data/lessons/*.md",
+    "brain/data/capability-map.md",
+    "adapters/*/adapter.yaml",
+)
+GIT_CALL_TIMEOUT_S = 5
+GIT_BUDGET_S = 10.0
+MAX_GIT_CALLS = 6
 
 # Detection criterion (documented explicitly because activity.log is free text):
 # A line counts as delegation evidence only if it contains "route" or "handoff"
@@ -145,27 +164,24 @@ def _has_run_command(entries, session_id):
     return False
 
 
-def _find_delegation_evidence(root, start_dt, end_dt):
-    """Search activity.log for route/handoff entries naming Trinity/Smith/Architect."""
+def _iter_activity_events(root, start_dt, end_dt):
+    """Yield activity lines in the window as (timestamp, rest, original)."""
     if start_dt is None or end_dt is None:
-        return None
+        return
     path = os.path.join(root, ACTIVITY_LOG)
     if not os.path.isfile(path):
-        return None
+        return
     with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line:
                 continue
-            # Extract the leading timestamp. Accepted formats:
-            #   2026-06-15T14:26:15-03:00 | ...
-            #   [2024-06-23T10:30:00Z] phase:close | ...
             ts_str = ""
             if line.startswith("["):
-                m = re.match(r"\[([^\]]+)\]\s*(.*)", line)
-                if m:
-                    ts_str = m.group(1)
-                    rest = m.group(2)
+                match = re.match(r"\[([^\]]+)\]\s*(.*)", line)
+                if match:
+                    ts_str = match.group(1)
+                    rest = match.group(2)
                 else:
                     rest = line
             else:
@@ -177,11 +193,187 @@ def _find_delegation_evidence(root, start_dt, end_dt):
                 continue
             if not ts.tzinfo:
                 ts = ts.replace(tzinfo=timezone.utc)
-            if ts < start_dt or ts > end_dt:
-                continue
-            if ROUTE_HANDOFF_RE.search(rest) and DELEGATION_RE.search(rest):
-                return line
+            if start_dt <= ts <= end_dt:
+                yield ts, rest, line
+
+
+def _find_delegation_evidence(root, start_dt, end_dt):
+    """Search activity.log for route/handoff entries naming Trinity/Smith/Architect."""
+    for _ts, rest, line in _iter_activity_events(root, start_dt, end_dt):
+        if ROUTE_HANDOFF_RE.search(rest) and DELEGATION_RE.search(rest):
+            return line
     return None
+
+
+def _find_path_decision(root, start_dt, end_dt):
+    """Return the earliest exact path-decision declaration's timestamp and ref."""
+    earliest = None
+    for ts, rest, _line in _iter_activity_events(root, start_dt, end_dt):
+        event = rest.split("|", 1)[0].strip().split(None, 1)[0]
+        if event != PATH_DECISION_EVENT:
+            continue
+        match = re.search(r"\[([^\]]+)\]", rest)
+        candidate = (ts, match.group(1) if match else None)
+        if earliest is None or ts < earliest[0]:
+            earliest = candidate
+    return earliest
+
+
+def _git(repo, args, deadline):
+    """Run one read-only git command within the shared call/time budget."""
+    if deadline["calls"] >= MAX_GIT_CALLS or time.monotonic() >= deadline["end"]:
+        return None
+    deadline["calls"] += 1
+    env = os.environ.copy()
+    env.update({
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_TERMINAL_PROMPT": "0",
+        "LC_ALL": "C",
+    })
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo] + args,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=min(GIT_CALL_TIMEOUT_S, max(0.01, deadline["end"] - time.monotonic())),
+            stdin=subprocess.DEVNULL,
+            env=env,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _resolve_target_repo(root, paths, deadline):
+    absolute = [
+        path if os.path.isabs(path) else os.path.join(root, path)
+        for path in paths
+    ]
+    if not absolute:
+        return None
+    try:
+        probe = os.path.commonpath([os.path.dirname(path) for path in absolute])
+    except ValueError:
+        return None
+    top = _git(probe or root, ["rev-parse", "--show-toplevel"], deadline)
+    if top is None:
+        return None
+    values = [line.strip() for line in top.splitlines() if line.strip()]
+    if len(values) != 1:
+        return None
+    repo = os.path.realpath(values[0])
+    if any(os.path.commonpath([repo, os.path.realpath(path)]) != repo for path in absolute):
+        return None
+    worktrees = _git(repo, ["worktree", "list", "--porcelain"], deadline)
+    if worktrees is None or sum(1 for line in worktrees.splitlines() if line.startswith("worktree ")) != 1:
+        return None
+    return repo
+
+
+def _git_baseline(repo, declared_at, deadline):
+    value = _git(repo, ["rev-list", "-1", f"--before={declared_at.isoformat()}", "HEAD"], deadline)
+    return value.strip() if value and value.strip() else None
+
+
+def _diff_counts(repo, baseline, deadline):
+    output = _git(repo, ["diff", "--numstat", "--no-renames", baseline, "--"], deadline)
+    if output is None:
+        return None
+    counts = {}
+    for line in output.splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) != 3 or "-" in parts[:2]:
+            return None
+        try:
+            counts[parts[2]] = int(parts[0]) + int(parts[1])
+        except ValueError:
+            return None
+    return counts
+
+
+def _untracked_counts(repo, deadline):
+    output = _git(repo, ["ls-files", "--others", "--exclude-standard"], deadline)
+    if output is None:
+        return None
+    counts = {}
+    for rel in output.splitlines():
+        if not rel:
+            continue
+        path = os.path.join(repo, rel)
+        try:
+            if os.path.getsize(path) > 64 * 1024:
+                counts[rel] = 999
+                continue
+            with open(path, "rb") as fh:
+                line_count = sum(1 for _line in fh)
+            counts[rel] = 999 if line_count > 200 else line_count
+        except OSError:
+            return None
+    return counts
+
+
+def _is_never_small(path, repo, root):
+    if os.path.realpath(repo) != os.path.realpath(root):
+        return False
+    normalized = path.replace(os.sep, "/")
+    return (
+        normalized in NEVER_SMALL_EXACT
+        or normalized.startswith(NEVER_SMALL_PREFIXES)
+        or any(fnmatch.fnmatchcase(normalized, pattern) for pattern in NEVER_SMALL_GLOBS)
+    )
+
+
+def _evaluate_small_path(root, paths, start_dt, end_dt):
+    result = {
+        "declared": False, "ref": None, "declared_at": None,
+        "resolvable": False, "exempt": False, "files": None, "lines": None,
+        "never_small": [], "reason": "no_declaration",
+    }
+    try:
+        declaration = _find_path_decision(root, start_dt, end_dt)
+        if not declaration:
+            return result
+        declared_at, ref = declaration
+        result.update(declared=True, ref=ref, declared_at=declared_at.isoformat())
+        deadline = {"end": time.monotonic() + GIT_BUDGET_S, "calls": 0}
+        repo = _resolve_target_repo(root, paths, deadline)
+        if not repo:
+            result["reason"] = "not_a_git_repo"
+            return result
+        baseline = _git_baseline(repo, declared_at, deadline)
+        if not baseline:
+            result["reason"] = "no_baseline"
+            return result
+        tracked = _diff_counts(repo, baseline, deadline)
+        untracked = _untracked_counts(repo, deadline)
+        if tracked is None or untracked is None:
+            result["reason"] = "git_unresolved"
+            return result
+        counts = dict(tracked)
+        counts.update(untracked)
+        if not counts:
+            result["reason"] = "empty_diff"
+            return result
+        files = len(counts)
+        lines = sum(counts.values())
+        never_small = sorted(path for path in counts if _is_never_small(path, repo, root))
+        result.update(resolvable=True, files=files, lines=lines, never_small=never_small)
+        if never_small:
+            result["reason"] = f"never_small:{never_small[0]}"
+        elif files > SMALL_PATH_MAX_FILES:
+            result["reason"] = "files_exceeded"
+        elif lines > SMALL_PATH_MAX_LINES:
+            result["reason"] = "lines_exceeded"
+        else:
+            result.update(exempt=True, reason="within_tops")
+        return result
+    except Exception:
+        result["reason"] = "evaluation_error"
+        result["resolvable"] = False
+        result["exempt"] = False
+        return result
 
 
 def _prior_trigger_count(path):
@@ -204,29 +396,25 @@ def _prior_trigger_count(path):
 
 
 def _session_in_history(path, session_id):
-    """Return True if this session already has a trigger record."""
+    """Return True if this session already has an outcome record."""
     if not os.path.isfile(path):
         return False
     for record in _read_jsonl(path):
-        if record.get("session_id") == session_id and record.get("triggered"):
+        if record.get("session_id") == session_id:
             return True
     return False
 
 
-def _record_trigger(path, session_id, triggered):
-    """Append a trigger record if this session produced the signal.
-
-    Dedupes by session_id so periodic/orphan/session_close runs do not
-    write duplicate history lines for the same session.
-    """
-    if not triggered:
-        return
+def _record_outcome(path, session_id, triggered, resolved, small_path):
+    """Append one compact, deduplicated outcome record for the session."""
     if _session_in_history(path, session_id):
         return
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "session_id": session_id,
-        "triggered": True,
+        "triggered": triggered,
+        "resolved": resolved,
+        "small_path": small_path,
     }
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -255,28 +443,52 @@ def validate(data):
         len(mutating_paths) >= 2
         or (len(mutating_paths) >= 1 and run_command_seen)
     )
+    threshold_triggered = triggered
+    resolved = None
+    small_path = None
 
     delegation_evidence = None
     if triggered:
         delegation_evidence = _find_delegation_evidence(root, start_dt, end_dt)
         if delegation_evidence:
             triggered = False
+            resolved = "delegated"
+
+    if triggered:
+        small_path = _evaluate_small_path(root, mutating_paths, start_dt, end_dt)
+        if small_path["exempt"]:
+            triggered = False
+            resolved = "exempted"
+        elif small_path["declared"] and not small_path["resolvable"]:
+            resolved = "unknown"
+        else:
+            resolved = "triggered"
 
     history_path = os.path.join(root, HISTORY_LOG)
-    prior = 0
+    prior = _prior_trigger_count(history_path) if threshold_triggered else 0
     escalate = False
     if triggered:
-        prior = _prior_trigger_count(history_path)
         escalate = prior >= 2
-        _record_trigger(history_path, session_id, triggered)
+    if threshold_triggered:
+        _record_outcome(history_path, session_id, triggered, resolved, small_path)
 
     message = None
     if triggered:
+        reason = small_path["reason"] if small_path else "no_declaration"
+        detail = reason
+        if reason == "lines_exceeded":
+            detail = f"lines={small_path['lines']}>{SMALL_PATH_MAX_LINES}"
+        elif reason == "files_exceeded":
+            detail = f"files={small_path['files']}>{SMALL_PATH_MAX_FILES}"
+        elif resolved == "unknown":
+            detail = f"unresolved:{reason.replace('_', '-')}"
         message = (
             f"Session {session_id} did real engineering work "
             f"({len(mutating_paths)} file(s) edited, run_command={run_command_seen}) "
             f"but no Link route/handoff to Trinity/Smith/Architect was found in the session window."
         )
+        if reason != "no_declaration":
+            message = message[:-1] + f"; {detail}."
         if escalate:
             message += " This is the 3rd+ occurrence — escalate_to_block is set."
 
@@ -285,6 +497,8 @@ def validate(data):
         "ok": True,
         "session_id": session_id,
         "triggered": triggered,
+        "resolved": resolved,
+        "small_path": small_path,
         "window": {
             "start": start_dt.isoformat() if start_dt else None,
             "end": end_dt.isoformat() if end_dt else None,

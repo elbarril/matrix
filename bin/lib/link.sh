@@ -57,6 +57,9 @@ link_cmd() {
     fi
 
     local ns="${event%%:*}"
+    if [[ "$event" == "phase:path-decision" ]]; then
+        ns=""
+    fi
     case "$ns" in
         project|build|install|harden|checkpoint|phase)
             log_error "Event namespace '$ns' is reserved for Layer 1 infrastructure."
