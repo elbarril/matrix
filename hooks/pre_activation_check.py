@@ -35,11 +35,12 @@ except Exception:
 ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith"]
 
 # Infrastructure agents that deliberately live as installable subagent files in
-# brain/agents/ but are NOT subject to roster discipline (AGENTS.md §3,
-# "Supporting cast" — retire-one-to-add-one applies only to ROSTER above).
+# brain/agents/ but are NOT subject to roster discipline (see
+# brain/data/contract-catalog.md "Supporting cast" — retire-one-to-add-one
+# applies only to ROSTER above).
 # docs/SYSTEM_TRUTH.md lists these alongside the roster with their own description.
-# Add a name here ONLY if AGENTS.md §3 already documents it as supporting-cast
-# infrastructure — never to silently permit an undocumented new file.
+# Add a name here ONLY if brain/data/contract-catalog.md already documents it as
+# supporting-cast infrastructure — never to silently permit an undocumented new file.
 SUPPORTING_AGENTS = ["lock"]
 
 

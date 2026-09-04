@@ -75,10 +75,10 @@ Neo never knows the crew members of a ship. The captain is the only surface.
 
 ## 5. Spawn-direct pattern (canonical)
 
-Under the current adapter, a ship captain is generated with a nesting-depth grant (see the adapter's own reference doc and `capability-map.md` for the concrete field name) that authorizes it to spawn its crew. This removes the need for courier protocols like the old `CREW-ORDER`. Requirements:
+Under the current adapter, a depth-2 ship captain may be generated with a delegation-depth grant that authorizes it to spawn its direct crew. This removes the need for courier protocols like the old `CREW-ORDER`, but only for the depth-2 case that has been verified; deeper nesting is an open question, not an operational captain capability. Requirements:
 
 - The captain declares `run-subagent` in its brain capabilities.
-- The Trainman injects the required delegation-depth grant into the captain's generated artifact only (see the adapter's own reference doc for the concrete field name).
+- The Trainman injects the required delegation-depth grant into the captain's generated artifact **only when the manifest depth is ≤2** (see the adapter's own reference doc and `capability-map.md` for the concrete field name).
 - Crew leaves do **not** carry a delegation-depth grant; they cannot spawn anything.
 - If the captain cannot spawn a crew member, it aborts with `LOGOS_ABORTED: crew unreachable` and reports — never falls back to self-grading or self-ingesting.
 

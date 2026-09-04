@@ -170,6 +170,13 @@ on topic-matching alone. **Reuses `adapters/devin/hooks/session_audit.py` and it
   since it was first built, 2026-07-17, and evidently never turned on). It now
   affects both Matrix workspace mode and bound external projects, by design.
 
+### `activation_inject_userprompt_full` (throttled since 2026-09-01, Camino 2 Q1-A)
+
+The current value in `adapters/devin/config.yaml` is **`false`**. In this throttled mode the full activation preamble is injected on turn 1 and again roughly every 10 turns; between those full turns only the sentinel preamble is injected. This keeps the contract visible without inflating every turn.
+
+- **Revert criterion.** Turn the flag back to `true` only if either: (a) the observed BLOCK ratio exceeds 21% over at least 20 phase closes, **or** (b) one contract violation is traced to a turn where the preamble was throttled (i.e. the missing full preamble can be shown to have caused the violation).
+- **Known gap.** Unlike `activation_inject`, this flag has **no env-var kill-switch**. The only way to revert or override it is to edit `adapters/devin/config.yaml` directly.
+
 **Activation injection verified 2026-07-28**: model replied only `OK`, but `hook-audit.jsonl` shows it read `AGENTS.md` then `neo.md`. Check audit log, not prose; re-verify on upgrade. → `brain/output/research/adapter-lessons-detail.md`.
 
 ## Hardening `permissions.deny` for secret stores
