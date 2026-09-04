@@ -381,6 +381,11 @@ def classify_skill_origin(tool_input, tool_response):
 
 
 def _run_pre_activation_check():
+    """Run pre_activation_check and return {ok, status, payload}.
+
+    status is one of ok|failed|timeout|error and is stored in the audit envelope
+    without changing the boolean ok semantics of the hook.
+    """
     try:
         env = {**os.environ, "MATRIX_ROOT": ROOT}
         proc = subprocess.run(
@@ -388,7 +393,7 @@ def _run_pre_activation_check():
             env=env,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=20,
             stdin=subprocess.DEVNULL,
         )
         result = {}
@@ -397,10 +402,15 @@ def _run_pre_activation_check():
                 result = json.loads(proc.stdout)
             except ValueError:
                 pass
-        return bool(result.get("ok"))
+        ok = bool(result.get("ok"))
+        status = "ok" if ok else "failed"
+        return {"ok": ok, "status": status, "payload": result}
+    except subprocess.TimeoutExpired as exc:
+        print(f"[session_audit] pre_activation_check timed out: {exc}", file=sys.stderr)
+        return {"ok": False, "status": "timeout", "payload": {}}
     except Exception as e:
         print(f"[session_audit] pre_activation_check failed: {e}", file=sys.stderr)
-        return False
+        return {"ok": False, "status": "error", "payload": {}}
 
 
 def _run_detect_orphan_session(project_active):
@@ -708,6 +718,63 @@ def _b3_nudge_text(root, session_id):
     )
 
 
+def _boot_warn_tokens(payload):
+    """Extract the closed set of boot_warn tokens from a pre_activation payload."""
+    if not isinstance(payload, dict):
+        return []
+    tokens = (payload.get("boot_warn") or {}).get("warns") or []
+    if not isinstance(tokens, list):
+        return []
+    allowed = {
+        "the_source",
+        "validate_layer2",
+        "validate_lessons",
+        "model_drift",
+        "ttl_expired",
+        "snapshot_due",
+    }
+    return [t for t in tokens if isinstance(t, str) and t in allowed]
+
+
+def _render_boot_warn_text(payload):
+    """Render boot_warn context for additionalContext: ≤6 lines, each with a repair command."""
+    if not isinstance(payload, dict):
+        return ""
+    details = (payload.get("boot_warn") or {}).get("details") or {}
+    if not details:
+        return ""
+    mapping = {
+        "validate_lessons": ("lessons archive needs review", "run `bin/matrix hooks validate_lessons`"),
+        "model_drift": ("generated-vs-installed model drift", "run `bin/matrix build --target=devin && bin/matrix install --target=devin`"),
+        "ttl_expired": ("a TTL override has expired", "run `bin/matrix link ttl:<name> <subject> until=<new-date>`"),
+        "validate_layer2": ("Layer-2 CLI-neutrality drift", "run `bin/matrix hooks validate_layer2`"),
+        "the_source": ("SYSTEM_TRUTH/onboarding is stale", "run `bin/matrix hooks the_source`"),
+        "snapshot_due": ("metrics snapshot is due", "run the harness-health-report extractor, then `bin/matrix link metrics:snapshot matrix path=<output>`"),
+    }
+    lines = []
+    for token in ["validate_lessons", "model_drift", "ttl_expired", "validate_layer2", "the_source", "snapshot_due"]:
+        if token not in details:
+            continue
+        label, fix = mapping.get(token, (token, ""))
+        detail = details[token]
+        extra = ""
+        if token == "model_drift" and isinstance(detail, dict) and detail.get("drift"):
+            names = [d.get("agent") or d.get("skill") or "?" for d in detail["drift"]]
+            extra = f" ({', '.join(names)})"
+        elif token == "ttl_expired" and isinstance(detail, dict) and detail.get("expired"):
+            events = [f"{e.get('event')}:{e.get('subject')}" for e in detail["expired"]]
+            extra = f" ({', '.join(events)})"
+        elif token == "snapshot_due" and isinstance(detail, dict):
+            extra = f" ({detail.get('real_work_sessions', 0)} sessions, {detail.get('days', 0)} days)"
+        lines.append(f"WARN {token}: {label}{extra} — {fix}")
+    # Cap to 6 lines/900 bytes.
+    lines = lines[:6]
+    text = "\n".join(lines)
+    if len(text) > 900:
+        text = text[:900] + "…"
+    return text
+
+
 def main():
     raw = ""
     if not sys.stdin.isatty():
@@ -737,10 +804,10 @@ def main():
     session_id = _session_id(ROOT, event, payload, ctx)
     project_active = ctx.get("active_project")
 
-    pre_ok = None
+    pre_result = None
     orphan_session_id = None
     if event == "session_start":
-        pre_ok = _run_pre_activation_check()
+        pre_result = _run_pre_activation_check()
         orphan_session_id = _run_detect_orphan_session(project_active)
         if orphan_session_id:
             _run_session_close_async(orphan_session_id)
@@ -749,7 +816,9 @@ def main():
         "event": event,
         "session_id": session_id,
         "project_active": project_active,
-        "pre_activation_check_ok": pre_ok,
+        "pre_activation_check_ok": pre_result.get("ok") if pre_result else None,
+        "pre_activation_check_status": pre_result.get("status") if pre_result else None,
+        "boot_warn": _boot_warn_tokens(pre_result.get("payload") if pre_result else {}),
     }
 
     if event in ("pre_tool_use", "post_tool_use"):
@@ -827,6 +896,13 @@ def main():
 
     if nudge:
         contexts.append(nudge)
+
+    # D-boot WARN channel: always injected on session_start inside the reinjection scope,
+    # regardless of the activation_inject experiment flag.
+    if event == "session_start" and pre_result and _activation_reinject_scope():
+        warn_text = _render_boot_warn_text(pre_result.get("payload"))
+        if warn_text:
+            contexts.append(warn_text)
 
     if contexts:
         print(

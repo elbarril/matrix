@@ -87,7 +87,7 @@ def onboarding_coverage(root):
         [os.path.join(root, "bin", "matrix"), "help"],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=5,
     )
     # Help commands begin with two spaces and a lowercase hyphenated token.
     commands = re.findall(r"(?m)^  ([a-z]+(?:-[a-z]+)*)\s+", proc.stdout)
@@ -162,10 +162,12 @@ def generate(root):
     return "\n".join(out) + "\n"
 
 
-def main():
-    data = read_input()
-    check = bool(data.get("check")) or "--check" in sys.argv
-    root = resolve_root()
+def check(root, check=True):
+    """Validate (or regenerate) docs/SYSTEM_TRUTH.md and return a result dict.
+
+    This entry point is safe to call from boot_warn because it never calls
+    sys.exit. The surrounding caller is responsible for catching exceptions.
+    """
     target = os.path.join(root, "docs", "SYSTEM_TRUTH.md")
     content = generate(root)
 
@@ -177,7 +179,7 @@ def main():
         in_sync = existing.strip() == content.strip()
         coverage = onboarding_coverage(root)
         ok = in_sync and coverage["ok"]
-        emit({
+        return {
             "hook": "the_source",
             "ok": ok,
             "mode": "check",
@@ -185,19 +187,35 @@ def main():
             "onboarding_coverage": coverage,
             "target": target,
             "note": "in sync" if ok else "SYSTEM_TRUTH.md is stale, onboarding.html is missing live coverage, or its hook counts drifted",
-        })
-        return
+        }
 
     os.makedirs(os.path.dirname(target), exist_ok=True)
     with open(target, "w", encoding="utf-8") as fh:
         fh.write(content)
-    emit({
+    return {
         "hook": "the_source",
         "ok": True,
         "mode": "generate",
         "target": target,
         "agents": len(content.split("**")) // 2,
-    })
+    }
+
+
+def main():
+    data = read_input()
+    check_mode = bool(data.get("check")) or "--check" in sys.argv
+    root = resolve_root()
+    try:
+        result = check(root, check=check_mode)
+    except Exception as exc:
+        result = {
+            "hook": "the_source",
+            "ok": False,
+            "mode": "check" if check_mode else "generate",
+            "target": os.path.join(root, "docs", "SYSTEM_TRUTH.md"),
+            "note": f"the_source check failed: {exc}",
+        }
+    emit(result)
 
 
 if __name__ == "__main__":

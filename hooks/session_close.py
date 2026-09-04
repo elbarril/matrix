@@ -13,7 +13,7 @@ import json
 import os
 import subprocess
 
-from _common import current_session_id, emit, read_input, resolve_root
+from _common import _has_mutating_work, current_session_id, emit, read_input, resolve_root
 
 
 AUDIT_LOG = "hook-audit.jsonl"
@@ -65,42 +65,6 @@ def _derive_steps(entries):
     return steps
 
 
-MUTATING_TOOLS = {"write", "edit", "multi_edit"}
-
-
-def _is_state_path(root, raw_path):
-    """Return True if raw_path is under brain/state/** relative to root."""
-    if not isinstance(raw_path, str) or not raw_path:
-        return False
-    if os.path.isabs(raw_path):
-        try:
-            rel = os.path.relpath(raw_path, root)
-        except ValueError:
-            rel = raw_path
-    else:
-        rel = raw_path
-    norm = os.path.normpath(rel).replace(os.sep, "/")
-    return norm == "brain/state" or norm.startswith("brain/state/")
-
-
-def _has_mutating_work(entries, root):
-    """Return True if any post_tool_use mutating tool touches a path outside brain/state."""
-    for entry in entries:
-        if entry.get("event") != "post_tool_use":
-            continue
-        tool_name = entry.get("tool_name")
-        if tool_name not in MUTATING_TOOLS:
-            continue
-        paths = entry.get("tool_paths") or []
-        if not paths:
-            # fail-closed: a mutating tool with no visible path cannot be proven state-only
-            return True
-        for p in paths:
-            if not _is_state_path(root, p):
-                return True
-    return False
-
-
 # What a hook-derived audit can realistically observe. Unlike the LLM
 # self-report default in post_run_audit.py (which expects "load_config" and
 # "resolve_context" — steps no Devin lifecycle event exposes), a session
@@ -132,81 +96,6 @@ def _run_post_run_audit(root, steps, required=None):
             pass
     return {
         "hook": "post_run_audit",
-        "ok": False,
-        "stdout": proc.stdout,
-        "stderr": proc.stderr,
-    }
-
-
-def _run_the_source_check(root):
-    """Invoke the Source check and return its JSON result defensively."""
-    bin_matrix = os.path.join(root, "bin", "matrix")
-    env = {**os.environ, "MATRIX_ROOT": root}
-    proc = subprocess.run(
-        [bin_matrix, "hooks", "the_source", json.dumps({"check": True})],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        stdin=subprocess.DEVNULL,
-    )
-    if proc.stdout:
-        try:
-            return json.loads(proc.stdout)
-        except ValueError:
-            pass
-    return {
-        "hook": "the_source",
-        "ok": False,
-        "stdout": proc.stdout,
-        "stderr": proc.stderr,
-    }
-
-
-def _run_validate_layer2_check(root):
-    """Invoke validate_layer2 check and return its JSON result defensively."""
-    bin_matrix = os.path.join(root, "bin", "matrix")
-    env = {**os.environ, "MATRIX_ROOT": root}
-    proc = subprocess.run(
-        [bin_matrix, "hooks", "validate_layer2", json.dumps({"check": True})],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        stdin=subprocess.DEVNULL,
-    )
-    if proc.stdout:
-        try:
-            return json.loads(proc.stdout)
-        except ValueError:
-            pass
-    return {
-        "hook": "validate_layer2",
-        "ok": False,
-        "stdout": proc.stdout,
-        "stderr": proc.stderr,
-    }
-
-
-def _run_validate_lessons_check(root):
-    """Invoke validate_lessons check and return its JSON result defensively."""
-    bin_matrix = os.path.join(root, "bin", "matrix")
-    env = {**os.environ, "MATRIX_ROOT": root}
-    proc = subprocess.run(
-        [bin_matrix, "hooks", "validate_lessons", json.dumps({"check": True})],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        stdin=subprocess.DEVNULL,
-    )
-    if proc.stdout:
-        try:
-            return json.loads(proc.stdout)
-        except ValueError:
-            pass
-    return {
-        "hook": "validate_lessons",
         "ok": False,
         "stdout": proc.stdout,
         "stderr": proc.stderr,
@@ -258,9 +147,6 @@ def main():
     phase_close_missing = has_mutating_work and "phase_close" not in steps
 
     post_report = _run_post_run_audit(root, steps, required)
-    the_source_report = _run_the_source_check(root)
-    validate_layer2_report = _run_validate_layer2_check(root)
-    validate_lessons_report = _run_validate_lessons_check(root)
     validate_routing_signal_report = _run_validate_routing_signal_check(root, session_id)
 
     result = {
@@ -271,9 +157,6 @@ def main():
         "steps_seen": steps,
         "entries_examined": len(filtered),
         "validation": post_report,
-        "the_source_check": the_source_report,
-        "validate_layer2_check": validate_layer2_report,
-        "validate_lessons_check": validate_lessons_report,
         "validate_routing_signal_check": validate_routing_signal_report,
     }
     emit(result)

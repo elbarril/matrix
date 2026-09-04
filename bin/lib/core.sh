@@ -18,7 +18,11 @@ resolve_root() {
         if [[ -d "$dir/brain" && -f "$dir/AGENTS.md" ]]; then echo "$dir"; return 0; fi
         dir="$(dirname "$dir")"
     done
-    # 3) Last resort: parent of bin/.
+    # 3) MATRIX_ROOT env fallback when the filesystem markers are not discoverable.
+    if [[ -n "${MATRIX_ROOT:-}" && -d "$MATRIX_ROOT/brain" ]]; then
+        echo "$MATRIX_ROOT"; return 0
+    fi
+    # 4) Last resort: parent of bin/.
     cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
 }
 

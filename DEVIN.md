@@ -250,6 +250,23 @@ Resolution for the Devin adapter: a specialist that needs to ask the user stops 
 
 The Trainman resolves each agent's `model_policy` tier (`cheap`/`reasoning`/`auto`) through the adapter's `model_policy` map and writes the result as `model: <name>` in the generated `SKILL.md`/`AGENT.md` frontmatter (see `extensibility/skills` and `subagents` in the Devin CLI docs — both support a `model` override field). Re-run `bin/matrix build --target=devin && bin/matrix install --target=devin` after changing `adapters/devin/adapter.yaml`'s `model_policy` map for the change to take effect globally.
 
+## Boot WARN channel (D-boot)
+
+`pre_activation_check` now runs a `boot_warn` channel with six information-only emitters (`the_source`, `validate_layer2`, `validate_lessons`, `model_drift`, `ttl_expired`, `snapshot_due`). The channel never blocks activation and never writes to `errors`/`checks`; it populates `boot_warn.warns` in the JSON and the `additionalContext` reinjected on `session_start` when the session is in scope.
+
+- `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`: `0`/`false`/`off` disables the channel.
+- `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`: internal deadline, default `6.0`.
+- `PRE_ACTIVATION_TIMEOUT_S`: external `session_audit` timeout raised to `20` s; an internal `pre_activation_check_status` of `timeout` is now distinguishable from `ok`/`failed`/`error`.
+
+Two new manual mechanisms are supported by `bin/matrix link`:
+
+```bash
+bin/matrix link model:override <agent-or-skill-name> <model-name> until=YYYY-MM-DD
+bin/matrix link ttl:path-decision-reform matrix until=YYYY-MM-DD motivo=fallback-A-C1
+```
+
+`model:override` suppresses `model_drift` for that artifact while active. `ttl:path-decision-reform` is the fallback-A TTL; if it expires with zero real `phase:path-decision` uses, `ttl_expired` warns.
+
 ## Lessons — detalle de adapter
 
 Narrativa por-lección (citas, versiones, IDs, nombres de tools) en `brain/output/research/adapter-lessons-detail.md`. `lessons.md` conserva la regla operable + puntero.

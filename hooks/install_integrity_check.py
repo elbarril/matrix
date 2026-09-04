@@ -12,7 +12,7 @@ import json
 import os
 import re
 
-from _common import _load_yaml
+from _common import _load_yaml, parse_frontmatter
 
 
 def _roster_and_supporting():
@@ -223,6 +223,75 @@ def check_install_integrity(target, root):
         "errors": errors,
         "ok": not errors,
     }
+
+
+def model_drift(target, root):
+    """Compare generated vs installed model frontmatter for every generated artifact.
+
+    THIS FUNCTION IS INFORMATIONAL ONLY AND IS NEVER CALLED FROM
+    check_install_integrITY. It iterates the generated tree (agents + skills),
+    NOT the roster, so ship agents like logos-* are included. Missing or
+    model-less installed artifacts are reported as unknown and never emit a warn.
+    """
+    adapter_yaml = os.path.join(root, "adapters", target, "adapter.yaml")
+    cfg = _load_yaml(adapter_yaml)
+    if not isinstance(cfg, dict):
+        return {"applicable": False, "target": target, "drift": [], "unknown": []}
+
+    artifacts = cfg.get("artifacts", {}) if isinstance(cfg, dict) else {}
+    installed_agents_dir = artifacts.get("installed_agents_dir", "")
+    installed_skills_dir = artifacts.get("installed_skills_dir", "")
+    ii = cfg.get("install_integrity") or {}
+    agent_template = ii.get("installed_agent_path_template", "{installed_agents_dir}/{agent}/AGENT.md")
+    skill_template = ii.get("installed_skill_path_template", "{installed_skills_dir}/{skill}/SKILL.md")
+
+    generated_agents_dir = os.path.join(root, "adapters", target, "generated", ".agents", "agents")
+    generated_skills_dir = os.path.join(root, "adapters", target, "generated", ".agents", "skills")
+    if not os.path.isdir(generated_agents_dir) and not os.path.isdir(generated_skills_dir):
+        return {"applicable": False, "target": target, "drift": [], "unknown": []}
+
+    drift = []
+    unknown = []
+
+    if os.path.isdir(generated_agents_dir):
+        for name in sorted(os.listdir(generated_agents_dir)):
+            gen_path = os.path.join(generated_agents_dir, name, "AGENT.md")
+            if not os.path.isfile(gen_path):
+                continue
+            gen = parse_frontmatter(gen_path)
+            gen_model = gen.get("model")
+            installed_path = _expand_path(_template_path(agent_template, installed_agents_dir, name), root)
+            if not os.path.isfile(installed_path):
+                unknown.append({"agent": name, "path": installed_path})
+                continue
+            installed = parse_frontmatter(installed_path)
+            installed_model = installed.get("model")
+            if not installed_model:
+                unknown.append({"agent": name, "path": installed_path})
+                continue
+            if gen_model != installed_model:
+                drift.append({"agent": name, "generated": gen_model, "installed": installed_model, "path": installed_path})
+
+    if os.path.isdir(generated_skills_dir):
+        for name in sorted(os.listdir(generated_skills_dir)):
+            gen_path = os.path.join(generated_skills_dir, name, "SKILL.md")
+            if not os.path.isfile(gen_path):
+                continue
+            gen = parse_frontmatter(gen_path)
+            gen_model = gen.get("model")
+            installed_path = _expand_path(_template_path(skill_template, installed_skills_dir, name), root)
+            if not os.path.isfile(installed_path):
+                unknown.append({"skill": name, "path": installed_path})
+                continue
+            installed = parse_frontmatter(installed_path)
+            installed_model = installed.get("model")
+            if not installed_model:
+                unknown.append({"skill": name, "path": installed_path})
+                continue
+            if gen_model != installed_model:
+                drift.append({"skill": name, "generated": gen_model, "installed": installed_model, "path": installed_path})
+
+    return {"applicable": True, "target": target, "drift": drift, "unknown": unknown}
 
 
 if __name__ == "__main__":

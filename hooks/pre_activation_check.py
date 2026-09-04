@@ -11,15 +11,20 @@ Usage:
 """
 
 import os
+import time
 
 from _common import (
     _load_registry,
     _registry_project,
     emit,
     exclude_drift,
+    ledger_tail_events,
+    model_override_active,
     read_input,
     resolve_bound_target,
     resolve_root,
+    snapshot_window,
+    ttl_scan,
 )
 
 try:
@@ -28,9 +33,25 @@ except Exception:
     validate_ship = None
 
 try:
-    from install_integrity_check import check_install_integrity
+    from install_integrity_check import check_install_integrity, model_drift
 except Exception:
     check_install_integrity = None
+    model_drift = None
+
+try:
+    from validate_layer2 import validate as validate_layer2
+except Exception:
+    validate_layer2 = None
+
+try:
+    from validate_lessons import validate as validate_lessons
+except Exception:
+    validate_lessons = None
+
+try:
+    import the_source as the_source_mod
+except Exception:
+    the_source_mod = None
 
 ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith"]
 
@@ -81,6 +102,183 @@ def _brain_symlink_error(project_path, brain_dir, brain_real):
             return f"_brain is a dangling symlink (points to {target}); should point to {brain_dir}"
         return f"_brain points to {target}; should point to {brain_dir}"
     return None
+
+
+BOOT_WARN_ORDER = [
+    "validate_lessons",
+    "model_drift",
+    "ttl_expired",
+    "validate_layer2",
+    "the_source",
+    "snapshot_due",
+]
+
+
+def _boot_warn(root, target="devin"):
+    """Run the WARN-only boot health channel.
+
+    Never writes to errors/checks and never changes the hook's ok. Uses an
+    internal 6-second deadline; remaining emitters are reported in skipped.
+    """
+    warns = []
+    details = {}
+    skipped = []
+    start = time.perf_counter()
+
+    enabled = os.environ.get("BOOT_WARN_ENABLED", os.environ.get("MATRIX_BOOT_WARN", "1"))
+    if enabled in ("0", "false", "False", "no", "off"):
+        return {
+            "warns": [],
+            "details": {},
+            "skipped": list(BOOT_WARN_ORDER),
+            "elapsed_ms": 0,
+        }
+
+    budget = float(
+        os.environ.get("BOOT_WARN_BUDGET_S", os.environ.get("MATRIX_BOOT_WARN_BUDGET_S", 6.0))
+    )
+    deadline = start + budget
+
+    def hit_deadline():
+        return time.perf_counter() > deadline
+
+    def add_warn(token, detail):
+        if token not in warns:
+            warns.append(token)
+        details[token] = detail
+
+    events = ledger_tail_events(root)
+    now = time.time()
+
+    # 1. validate_lessons (cheap)
+    if hit_deadline():
+        skipped.append("validate_lessons")
+    else:
+        try:
+            if validate_lessons:
+                v = validate_lessons({})
+                if not v.get("ok") or v.get("size_warning"):
+                    add_warn(
+                        "validate_lessons",
+                        {
+                            "ok": v.get("ok"),
+                            "duplicates": v.get("duplicates", []),
+                            "size_warning": v.get("size_warning"),
+                            "fix": "bin/matrix hooks validate_lessons",
+                        },
+                    )
+        except Exception as exc:
+            add_warn("validate_lessons", {"error": str(exc), "fix": "bin/matrix hooks validate_lessons"})
+
+    # 2. model_drift
+    if hit_deadline():
+        skipped.append("model_drift")
+    else:
+        try:
+            if model_drift:
+                md = model_drift(target, root)
+                overrides = model_override_active(events)
+                if md.get("applicable"):
+                    unsuppressed = []
+                    for d in md.get("drift", []):
+                        name = d.get("agent") or d.get("skill")
+                        installed = d.get("installed")
+                        override = overrides.get(name)
+                        if override and override.get("model") == installed:
+                            continue
+                        unsuppressed.append(d)
+                    if unsuppressed:
+                        add_warn(
+                            "model_drift",
+                            {
+                                "drift": unsuppressed,
+                                "fix": "bin/matrix build --target=devin && bin/matrix install --target=devin",
+                            },
+                        )
+        except Exception as exc:
+            add_warn("model_drift", {"error": str(exc), "fix": "bin/matrix build --target=devin && bin/matrix install --target=devin"})
+
+    # 3. ttl_expired
+    if hit_deadline():
+        skipped.append("ttl_expired")
+    else:
+        try:
+            ttl = ttl_scan(events)
+            expired = ttl.get("expired", [])
+            if expired:
+                detail = {
+                    "expired": expired,
+                    "fix": "bin/matrix link ttl:<name> <subject> until=<new-date>",
+                }
+                for e in expired:
+                    if e.get("event") == "ttl:path-decision-reform":
+                        detail["path_decision_real_uses"] = e.get("path_decision_real_uses", 0)
+                        detail["fix"] = "bin/matrix link ttl:path-decision-reform matrix until=<new-date> motivo=fallback-A-C1"
+                add_warn("ttl_expired", detail)
+        except Exception as exc:
+            add_warn("ttl_expired", {"error": str(exc), "fix": "bin/matrix link ttl:<name> <subject> until=<new-date>"})
+
+    # 4. validate_layer2
+    if hit_deadline():
+        skipped.append("validate_layer2")
+    else:
+        try:
+            if validate_layer2:
+                v = validate_layer2({})
+                if not v.get("ok"):
+                    add_warn(
+                        "validate_layer2",
+                        {
+                            "errors": v.get("errors", [])[:5],
+                            "fix": "bin/matrix hooks validate_layer2",
+                        },
+                    )
+        except Exception as exc:
+            add_warn("validate_layer2", {"error": str(exc), "fix": "bin/matrix hooks validate_layer2"})
+
+    # 5. the_source
+    if hit_deadline():
+        skipped.append("the_source")
+    else:
+        try:
+            if the_source_mod:
+                v = the_source_mod.check(root, check=True)
+                if not v.get("ok"):
+                    add_warn(
+                        "the_source",
+                        {
+                            "in_sync": v.get("in_sync"),
+                            "fix": "bin/matrix hooks the_source",
+                        },
+                    )
+        except Exception as exc:
+            add_warn("the_source", {"error": str(exc), "fix": "bin/matrix hooks the_source"})
+
+    # 6. snapshot_due
+    if hit_deadline():
+        skipped.append("snapshot_due")
+    else:
+        try:
+            sw = snapshot_window(root, events=events)
+            if sw.get("due"):
+                add_warn(
+                    "snapshot_due",
+                    {
+                        "days": sw.get("days"),
+                        "real_work_sessions": sw.get("real_work_sessions"),
+                        "fix": "run the harness-health-report extractor, then bin/matrix link metrics:snapshot matrix path=<output>",
+                    },
+                )
+        except Exception as exc:
+            add_warn("snapshot_due", {"error": str(exc), "fix": "run the harness-health-report extractor, then bin/matrix link metrics:snapshot matrix path=<output>"})
+
+    elapsed = time.perf_counter() - start
+    return {
+        "warns": warns,
+        "details": details,
+        "skipped": skipped,
+        "elapsed_ms": round(elapsed * 1000),
+    }
 
 
 def main():
@@ -161,6 +359,8 @@ def main():
         detail = ""
     check("brain_symlinks_intact", not broken, detail)
 
+    target = data.get("target") or resolve_bound_target(data.get("project")) or "devin"
+
     # Ship validation (delegated, generic)
     if data.get("ship") and validate_ship:
         v = validate_ship(data)
@@ -170,12 +370,14 @@ def main():
 
     # Install integrity (delegated, generic — opt-in per adapter.yaml)
     if check_install_integrity:
-        target = data.get("target") or resolve_bound_target(data.get("project")) or "devin"
         ii = check_install_integrity(target, root)
         if ii.get("applicable"):
             checks.extend(ii.get("checks", []))
             if not ii.get("ok"):
                 errors.extend(ii.get("errors", []))
+
+    # Boot WARN channel — information only, never blocks, no project gate.
+    boot_warn = _boot_warn(root, target=target)
 
     # Exclude drift — informational only, warn-only. The result lives in its own
     # field and never feeds into the global `ok` of the hook.
@@ -191,6 +393,7 @@ def main():
         "root": root,
         "checks": checks,
         "errors": errors,
+        "boot_warn": boot_warn,
         "exclude_drift": drift,
     }
     emit(result)

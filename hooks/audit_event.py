@@ -100,6 +100,7 @@ def _rotate_if_needed(log_path):
 
 ALLOWED = {
     "event", "timestamp", "session_id", "project_active", "pre_activation_check_ok",
+    "pre_activation_check_status", "boot_warn",
     "tool_name", "tool_paths", "subagent_profile", "subagent_invocation_id", "tool_command",
     # nunca agregar `tool_response` ni claves que contengan contenido de archivo a
     # esta lista -- ver eval de Smith, ronda 4 de discovery-mediation.
@@ -111,6 +112,15 @@ ALLOWED = {
     "guard_decision", "guard_reason",
 }
 
+BOOT_WARN_IDS = {
+    "the_source",
+    "validate_layer2",
+    "validate_lessons",
+    "model_drift",
+    "ttl_expired",
+    "snapshot_due",
+}
+
 
 def main():
     data = read_input()
@@ -120,8 +130,20 @@ def main():
 
     # Only copy allowed keys; drop anything else (including prompt content).
     envelope = {k: data.get(k) for k in ALLOWED}
-    # Drop optional tool metadata when not supplied so non-tool events stay clean.
-    for optional_key in ("tool_name", "tool_paths", "subagent_profile", "subagent_invocation_id", "invoked_artifact", "invoked_origin"):
+    # Sanitize boot_warn to the closed token set; details never leave the hook JSON.
+    if envelope.get("boot_warn"):
+        envelope["boot_warn"] = [
+            t for t in envelope["boot_warn"]
+            if isinstance(t, str) and t in BOOT_WARN_IDS
+        ] or None
+    if not envelope.get("boot_warn"):
+        envelope.pop("boot_warn", None)
+    # Drop optional keys when not supplied so non-relevant events stay clean.
+    for optional_key in (
+        "tool_name", "tool_paths", "subagent_profile", "subagent_invocation_id",
+        "invoked_artifact", "invoked_origin", "pre_activation_check_ok",
+        "pre_activation_check_status", "boot_warn",
+    ):
         if envelope.get(optional_key) is None:
             envelope.pop(optional_key, None)
 
