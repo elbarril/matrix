@@ -98,3 +98,5 @@ Examples of `innermost-root-wins` topologies that the single scope-resolution ru
 - a bound project living inside the Matrix repo (`clients/<name>`, type `remote`);
 - a bound project inside another bound project (`emi ⊃ deseo`).
 
+- **Root resolution (robust).** Scripts resolve `MATRIX_ROOT` by: (1) following a `_brain` symlink up one level if present; else (2) walking up from the script location until `brain/` + `AGENTS.md` are found. Works from any subdirectory or active project.
+

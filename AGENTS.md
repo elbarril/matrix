@@ -12,7 +12,7 @@ This is the document of record. Every session, every agent invocation operates u
 
 Matrix is a personal intelligence layer. One root repo (this one) holds the brain. Project repos live separately and get pulled in on demand. A symlink `_brain` inside any active project points back to this root, giving the project access to the intelligence without contaminating its codebase.
 
-The intelligence never ships into project code. The brain stays here. **The reverse also holds: project work never ships into the brain's shared surface.** Work artifacts go to `brain/output/<project>/{architecture,plans,research,eval}/` in **this repo** — one subtree per bound project. Isolation is by convention, not by filesystem boundary — a residual risk, accepted. Only when working on Matrix itself (Matrix workspace mode, no project bound) do outputs go directly to this repo's own `brain/output/<sub>/` (no project subfolder — Matrix workspace mode is not a registered project, and `matrix` is reserved and cannot be registered as one, see `bin/matrix add`/`select`).
+The intelligence never ships into project code. The brain stays here. **The reverse also holds: project work never ships into the brain's shared surface.** Work artifacts go to `brain/output/<project>/{architecture,plans,research,eval}/` in **this repo** — one subtree per bound project. Isolation is by convention, not by filesystem boundary — a residual risk, accepted. Only when working on Matrix itself (Matrix workspace mode, no project bound) do outputs go directly to this repo's own `brain/output/<sub>/` (no project subfolder; `matrix` is reserved and cannot be registered).
 
 **Core thesis:** the brain is written once in abstract capabilities; a thin adapter (**The Trainman**) maps them to the host CLI. The current adapter reference doc lives at the repo root.
 
@@ -89,7 +89,7 @@ These are not rules. They are who the system *is*. Every routing call, every pus
 4. **Greet** (master only) — Spanish, coloquial, no menus.
 5. **Understand** — if unclear, ask once; if clear, proceed.
 6. **Execute or route** — do the work or route to a specialist.
-6.5. **Proportionality (C1).** For changes that may qualify for the small path, apply the explicit criteria in `brain/output/architecture/harness-c1-small-path-design.md` — a change may omit the formal Morpheus plan and/or the Architect review ONLY when every row of its table is resolved by its mechanical oracle. Never the Smith gate, pre-registration, or E2E verification. Every small-path invocation must be logged to the ledger as `phase:path-decision` (fields per §6.4 of the design) BEFORE build begins; otherwise the change defaults to the full ritual.
+6.5. **Proportionality (C1) — declare, don't prove.** The small path is entered with ONE ledger line BEFORE build: `bin/matrix link phase:path-decision A | subject=<x> | motivo=<frase>`. No oracle checklist at declaration time. Smith verifies that line at the gate against the real `git diff --stat`: outside the declared tops (≤10 lines, 1 file, no never-small path per `brain/output/architecture/harness-c1-small-path-design.md`) the exemption is void and the misdeclaration is itself a reportable finding. The small path scales the FORMAT of the phases, it never skips them: Morpheus/Architect answer inline (≤15 lines inside Neo's turn, no subagent session, no persisted artifact) and Smith closes with a gate corto (real E2E + one-line verdict); full format stays for the full path. A prior artifact on the same path/topic must be read and cited, but no longer forces the full ritual. Never the Smith gate, pre-registration, or E2E verification. Expiry: if `phase:path-decision` still has 0 real uses 4 weeks after adoption, §6.5 is repealed — enforced mechanically by the `until=` TTL channel once it ships, by calendar check until then.
 6.6. **No parallel edits on the same repo.** Trinity, Smith and Neo must not parallelize `edit` operations on the same repository; if an edit is already in flight on a worktree, the next one waits. (See `brain/data/lessons.md` lesson 61.) Any detected collision is logged as `bin/matrix link incident:writer-collision | detail=<...>`. Trigger for Q2-D: on the second real collision between writers, the mechanical single-flight lane ceases to be optional.
 7. **Verify reality** — nothing is "done" without an E2E happy-path check (Foundation 3). Smith + `validate_phase_close` (Seraph) gate the close.
 8. **Update state** — write a checkpoint and a `Link` ledger entry when something matters.
@@ -114,7 +114,7 @@ brain/state/
   - *Bound* is a filesystem/runtime fact, not a separate state flag: a project is bound when its path contains a valid `_brain` symlink to this brain **and** an `AGENTS.local.md` block managed by `bin/matrix`. `select` always warms the project first, so every bound project is also warm (`bound ⊆ warm`).
   - `.context.yaml` keeps the single `primary` (default) project. It is used only when a session does not resolve a project through `--project`, `$MATRIX_PROJECT`, or a `_brain` symlink in the current directory. It is no longer exclusive: several projects may be bound at the same time.
 - **Session resolution.** A session binds to one project at a time via `--project <name>` (or the `_brain` symlink in cwd / `$MATRIX_PROJECT`). If none of those resolve, the session falls back to the `primary` recorded in `.context.yaml`.
-- **Root resolution (robust).** Scripts resolve `MATRIX_ROOT` by: (1) following a `_brain` symlink up one level if present; else (2) walking up from the script location until `brain/` + `AGENTS.md` are found. Works from any subdirectory or active project.
+- **Root resolution (robust).** See `brain/data/contract-catalog.md`.
 - **Scope resolution (innermost-root-wins).** When `bin/matrix` (or an agent) needs to know "which project is this directory working on?", it walks up from cwd. The first directory that is either the Matrix root or a project root wins. This single rule handles all real topologies without special cases (see examples in `brain/data/contract-catalog.md`).
 - **Ledger (Link).** Append-only events: `session:start`, `route`, `decision`, `handoff`, `phase:close`. Both the core and any federated ship read and write it. Shared state without coupling.
 - **Never committed.** Everything under `brain/state/` and `brain/output/` is gitignored — it is per-machine, changes every session, and would otherwise turn every checkpoint into a noisy commit. Work *deliverables* for a bound project belong in this repo's `brain/output/<project>/` (see §1), not inside the project's own repo.
@@ -130,8 +130,6 @@ Enforcement lives in `hooks/` as **python/bash with a JSON in/out contract**, ca
 - **`post_run_audit`** — verifies enforced steps ran, writes `validation-report.json`, flags non-compliant runs, detects protocol bypass.
 - **No hook may emit a severity field (e.g. `escalate_to_block`, `in_sync`) without a declared consumer in the same change. Connect or delete; never leave dangling.**
 
-
-
 ---
 
 ## 9. Cost & context optimization (The Construct)
@@ -139,20 +137,15 @@ Enforcement lives in `hooks/` as **python/bash with a JSON in/out contract**, ca
 "Load exactly what you need, nothing more." Encoded as operating rules, exposed as abstract capabilities so any CLI can satisfy them.
 
 - **`code-nav` capability** — symbol-level navigation/edit instead of reading whole files.
-- **Model selection (`model_policy`).** Each agent declares a tier (`cheap`/`reasoning`/`auto`); the current adapter's `model_policy` map resolves it to a concrete model in the generated artifact. Current mapping and caveats live in the adapter reference doc at the repo root.
-- **Least-privilege tool grants.** The current adapter resolves each `capabilities:` entry into a host-native tool allowlist on the generated artifact. The concrete mapping and accepted widening live in `adapters/<target>/adapter.yaml` and the adapter reference doc at the repo root.
+- **Model selection & least-privilege grants.** Each agent declares a `model_policy` tier and a `capabilities:` list; the adapter resolves both into the generated artifact's frontmatter (concrete model + host tool allowlist). Mapping, caveats and accepted widening: `adapters/<target>/adapter.yaml` + the adapter reference doc at the repo root.
 - **Large-artifact delegation** — outputs > ~10 KB are produced by a sub-agent with a word cap, to avoid inflating the working context.
 - **Proactive resume checkpoints** — write a checkpoint before truncating context; split sessions on mode changes (build → eval → fix).
 
 ---
 
-## 10. Federation (the fleet)
+## 10. Federation & CLI commands
 
 Ships and their coordination rules live in `brain/subsystems/FEDERATION.md`.
-
----
-
-## 11. CLI commands (`bin/matrix`)
 
 The canonical command list is `bin/matrix help` (or `bin/matrix` with no args).
 
