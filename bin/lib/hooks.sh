@@ -22,6 +22,42 @@ require_layer2_clean() {
     fi
 }
 
+# --- Artifact summary advisory check (D8) -----------------------------------
+# Port of hooks/precheck_phase_close.py::check_artifact_summary, warn-only.
+# Reads the same phase-close payload and emits a JSON array of warning strings.
+check_artifact_summary_warn() {
+    local payload="$1"
+    local root="${MATRIX_DIR:-${MATRIX_ROOT:-$(pwd)}}"
+    local field value raw_path referenced disk_path
+    local re=$'brain/output/[^[:space:]"\'`]+|/tmp/[^[:space:]"\'`]+'
+    local -a warns=()
+
+    for field in evidence lesson; do
+        value="$(printf '%s' "$payload" | jq -r --arg f "$field" '.[$f] // ""' 2>/dev/null || true)"
+        [[ -z "$value" ]] && continue
+        while IFS= read -r raw_path; do
+            [[ -z "$raw_path" ]] && continue
+            referenced="$(printf '%s' "$raw_path" | sed 's/[].,;:\)}]\+$//')"
+            [[ "$referenced" == brain/output/* ]] || continue
+            disk_path="$root/$referenced"
+            [[ -f "$disk_path" && "$disk_path" == *.md ]] || continue
+            if [[ ! -r "$disk_path" ]]; then
+                warns+=("${field}: no se pudo leer ${referenced}: permiso denegado")
+                continue
+            fi
+            if ! awk 'NF{c++; if($0 ~ /<!-- MATRIX:ARTIFACT-SUMMARY v1 -->/){f=1; exit}; if(c>=3){exit}} END{exit !f}' "$disk_path" 2>/dev/null; then
+                warns+=("${field} referencia artefacto de salida sin el bloque MATRIX:ARTIFACT-SUMMARY v1 en sus primeras 3 lineas no vacias: ${referenced}")
+            fi
+        done < <(printf '%s' "$value" | grep -oE "$re" 2>/dev/null || true)
+    done
+
+    if [[ ${#warns[@]} -eq 0 ]]; then
+        printf '[]\n'
+    else
+        printf '%s\n' "${warns[@]}" | jq -R '{source:"artifact_summary",detail:.}' | jq -s .
+    fi
+}
+
 # --- Phase close (Seraph verdict → Link ledger) -----------------------------
 # phase_close <json>
 # Runs validate_phase_close, appends the verdict to the Link ledger (PASS *and*
@@ -43,6 +79,17 @@ phase_close() {
 
     if [[ "$verdict" == "PASS" ]]; then detail="evidence=${evidence}"
     else                                detail="errors=${errs} | evidence=${evidence}"; fi
+
+    local artifact_warns_json="[]" artifact_count=0
+    artifact_warns_json="$(check_artifact_summary_warn "$payload")" || artifact_warns_json="[]"
+    artifact_count="$(printf '%s' "$artifact_warns_json" | jq 'length' 2>/dev/null || echo 0)"
+    detail="${detail} | artifact_summary_warns=${artifact_count}"
+
+    if printf '%s' "$out" | jq -e 'has("warns")' >/dev/null 2>&1; then
+        out="$(printf '%s' "$out" | jq --argjson extra "$artifact_warns_json" '.warns += $extra')"
+    else
+        out="$(printf '%s' "$out" | jq --argjson extra "$artifact_warns_json" '. + {warns: $extra}' 2>/dev/null || printf '{"warns":%s}' "$artifact_warns_json")"
+    fi
 
     subject="$(resolve_scope_project || true)"
     subject="${subject:-matrix}"
