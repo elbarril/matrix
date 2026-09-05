@@ -101,7 +101,8 @@ def _rotate_if_needed(log_path):
 ALLOWED = {
     "event", "timestamp", "session_id", "project_active", "pre_activation_check_ok",
     "pre_activation_check_status", "boot_warn",
-    "tool_name", "tool_paths", "subagent_profile", "subagent_invocation_id", "tool_command",
+    "tool_name", "tool_paths", "subagent_profile", "subagent_invocation_id", "tool_command_head",
+    "tool_command_unparsed",
     # nunca agregar `tool_response` ni claves que contengan contenido de archivo a
     # esta lista -- ver eval de Smith, ronda 4 de discovery-mediation.
     "invoked_artifact", "invoked_origin",
@@ -141,6 +142,7 @@ def main():
     # Drop optional keys when not supplied so non-relevant events stay clean.
     for optional_key in (
         "tool_name", "tool_paths", "subagent_profile", "subagent_invocation_id",
+        "tool_command_head", "tool_command_unparsed",
         "invoked_artifact", "invoked_origin", "pre_activation_check_ok",
         "pre_activation_check_status", "boot_warn",
     ):

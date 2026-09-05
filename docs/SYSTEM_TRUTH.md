@@ -28,6 +28,7 @@
 - `post_run_audit`
 - `pre_activation_check`
 - `pre_exec_guard`
+- `precheck_phase_close`
 - `session_close`
 - `the_source`
 - `validate_layer2`

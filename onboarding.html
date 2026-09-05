@@ -861,7 +861,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <div class="grid">
   <div class="card">
     <h3><span class="tag tag-infra">HOOKS</span> Seraph</h3>
-    <p>Enforcement portable: 13 hooks en Python con contrato JSON in/out. <!-- verified: hooks/*.py listing (13 archivos .py excluyendo _common.py), esta sesión --> Detectan bypass y validan compliance. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista canónica.</p>
+    <p>Enforcement portable: 14 hooks en Python con contrato JSON in/out. <!-- verified: hooks/*.py listing (14 archivos .py excluyendo _common.py), esta sesión --> Detectan bypass y validan compliance. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista canónica.</p>
   </div>
   <div class="card">
     <h3><span class="tag tag-infra">LEDGER</span> Link</h3>
@@ -985,7 +985,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <table>
     <tr><th>Comando</th><th>Que hace</th></tr>
     <tr><td><code>matrix phase close '&lt;json&gt;'</code></td><td>Corre el gate <code>validate_phase_close</code> y persiste el veredicto PASS o BLOCK en el ledger Link</td></tr>
-    <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista completa de los 13 hooks</td></tr>
+    <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista completa de los 14 hooks</td></tr>
     <tr><td><code>matrix build --target=&lt;cli&gt;</code></td><td>Trainman: genera artefactos nativos para un CLI (hoy solo <code>devin</code>)</td></tr>
     <tr><td><code>matrix install --target=&lt;cli&gt;</code></td><td>Trainman: despliega los artefactos generados al discovery path del CLI (global)</td></tr>
     <tr><td><code>matrix harden --target=&lt;cli&gt; [--apply] [--revert]</code></td><td>Reconcilia <code>permissions.deny</code> contra <code>secret_deny</code> (dry-run por default)</td></tr>
@@ -1071,7 +1071,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <div class="channel-head">
 <div class="channel-kicker">Canal 6 / 12 (tour)</div>
 <h2>Enforcement (Seraph)</h2>
-<div class="level1"><p>Hooks portables en <code>hooks/</code>, Python con contrato JSON in/out. Se corren vía <code>bin/matrix hooks &lt;nombre&gt;</code>. Son 13 hooks en total (ver ficha técnica).</p></div>
+<div class="level1"><p>Hooks portables en <code>hooks/</code>, Python con contrato JSON in/out. Se corren vía <code>bin/matrix hooks &lt;nombre&gt;</code>. Son 14 hooks en total (ver ficha técnica).</p></div>
 <div class="level2" data-steps="3">
   <ol class="step-list" style="list-style:none;">
     <li class="step is-current" data-step="1"><div class="step-bubble"><span class="who">Usuario</span>pide cerrar una fase de trabajo.</div></li>
@@ -1088,7 +1088,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 
 </div><!-- /.channel-head -->
 <details class="level3" id="l3-enforcement">
-  <summary>Tabla de hooks (13 hooks)</summary>
+  <summary>Tabla de hooks (14 hooks)</summary>
   <!-- verified: ls hooks/*.py (excluyendo _common.py), esta sesión -->
   <table>
     <tr><th>Hook</th><th>Que hace</th><th>Cuando</th></tr>
@@ -1101,6 +1101,11 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
       <td><code>validate_phase_close</code></td>
       <td>Bloquea cerrar una fase sin evidencia real E2E. Implementa Foundation 3. En <code>phase=eval</code> tambien exige un campo <code>lesson</code> no trivial (que se capturo y donde, o un N/A razonado) &mdash; no escribe nada en disco, solo devuelve PASS/BLOCK</td>
       <td>Antes de declarar una fase &laquo;done&raquo;</td>
+    </tr>
+    <tr>
+      <td><code>precheck_phase_close</code></td>
+      <td>Advisory de cierre de fase: valida plan/step, paths citados y bloque MATRIX:ARTIFACT-SUMMARY v1 (warn-only)</td>
+      <td>Capa B de matrix phase precheck, antes de done</td>
     </tr>
     <tr>
       <td><code>post_run_audit</code></td>
@@ -1207,7 +1212,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 ./bin/matrix hooks the_source '{"check":true}'
 </code></pre>
 <div class="warn">
-  <p><strong>Drift conocido, documentado (no corregido aquí — corregirlo excede el alcance de un archivo):</strong> <code>docs/SYSTEM_TRUTH.md</code> lista <strong>11</strong> hooks, pero el árbol vivo (<code>hooks/*.py</code>, excluyendo <code>_common.py</code>) tiene hoy <strong>13</strong>. Faltan en el doc generado: <code>install_integrity_check</code> y <code>pre_exec_guard</code>. Causa raíz verificada leyendo <code>hooks/the_source.py</code>: su propia función <code>live_hooks()</code> ya cuenta 13 — el doc simplemente no se regeneró después de agregar esos dos hooks; no es una clasificación distinta de hooks. <!-- verified: hooks/*.py listing + hooks/the_source.py source, esta sesión --> Este onboarding usa 13 en todo su cuerpo; el número 11 solo aparece en este card, atribuido explícitamente a <code>docs/SYSTEM_TRUTH.md</code>.</p>
+  <p><strong>Drift histórico, resuelto (D5, esta sesión regeneró <code>docs/SYSTEM_TRUTH.md</code>):</strong> antes de D5, <code>docs/SYSTEM_TRUTH.md</code> listaba menos hooks que el árbol vivo (<code>hooks/*.py</code>, excluyendo <code>_common.py</code>); hoy ambos coinciden en <strong>14</strong> (<code>bin/matrix hooks the_source '{"check":true}'</code> reporta <code>in_sync:true</code>). <!-- verified: hooks/*.py listing + bin/matrix hooks the_source check, esta sesión --> Este onboarding usa 14 en todo su cuerpo.</p>
 </div>
 </details>
 </div>
@@ -1462,7 +1467,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 ├── .context.yaml                    # proyecto primario activo
 ├── .registry.json                   # todos los proyectos conocidos
 ├── bin/matrix                       # CLI orquestador (Layer 1)
-├── hooks/                           # Seraph &mdash; enforcement portable (13 hooks)
+├── hooks/                           # Seraph &mdash; enforcement portable (14 hooks)
 │   ├── _common.py
 │   ├── pre_activation_check.py
 │   ├── validate_phase_close.py

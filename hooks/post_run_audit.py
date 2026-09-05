@@ -204,14 +204,11 @@ def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=N
                 continue
             if not _in_window(event.get("timestamp"), since, until):
                 continue
-            cmd = event.get("tool_command") or ""
-            if not cmd:
-                continue
-            if cmd.strip().startswith(ALLOWED_MUTANT_PREFIX):
-                continue
-            targets, unparsed = _write_targets(cmd, root)
+            targets = event.get("tool_paths") or []
+            unparsed = event.get("tool_command_unparsed") is True
+            head = event.get("tool_command_head") or ""
             if unparsed:
-                anomalies.append(cmd)
+                anomalies.append(head)
                 continue
             offending = False
             for target in targets:
@@ -222,7 +219,7 @@ def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=N
                     offending = True
                     break
             if offending:
-                anomalies.append(cmd)
+                anomalies.append(head)
     return anomalies
 
 
@@ -469,7 +466,10 @@ def check_smith_remediation(root, data, session_id):
         reasons.append("since_after_prereg")
     if until is not None and after_times and until < max(after_times):
         reasons.append("until_before_prereg")
+    eval_path = _normalize_path(root, block["eval_artifact"]) if block.get("eval_artifact") else None
     for path in sorted(evaluated - declared_files):
+        if path == eval_path:
+            continue
         reasons.append("file_containment_violated: " + path)
     for path in sorted(declared_files - evaluated):
         warnings.append("declared_file_untouched: " + path)

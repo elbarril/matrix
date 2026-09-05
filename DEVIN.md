@@ -194,6 +194,8 @@ up to `max_depth` for hidden directories containing a `credentials/` folder or
 `.env` files, emitting directory-level `Read(...)` patterns only — it never
 writes specific credential filenames into the repo or logs.
 
+`secret_deny.static`, `class_b_repo_secrets` (patterns `**/.env`, `**/*.pem`, `**/id_rsa`, `**/id_ed25519`; enabled 2026-09-05, D4), `.discover`, and `.exclude` are the configuration keys surfaced by `adapters/devin/config.yaml`.
+
 **Important:** `permissions.deny` with `Read(...)` only blocks the `read_file`
 tool. It does **not** block `grep`/`glob` or `exec` (e.g. `cat`). It is a partial
 mitigation against incidental reads, not a sandbox.

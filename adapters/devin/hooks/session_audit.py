@@ -22,6 +22,7 @@ for _ in range(3):
     _candidate = os.path.dirname(_candidate)
 sys.path.insert(0, os.path.join(_candidate, "hooks"))
 import _common as common  # noqa: E402
+from post_run_audit import _write_targets, ALLOWED_MUTANT_PREFIX  # noqa: E402
 
 ROOT = common.resolve_root()
 BIN_MATRIX = os.path.join(ROOT, "bin", "matrix")
@@ -832,12 +833,27 @@ def main():
         if event == "post_tool_use":
             envelope["tool_paths"] = _extract_tool_paths(tool_name, tool_input)
 
-        # Log the raw command string for shell-like tools so detective hooks can
-        # audit mutations without replaying tool output.
+        # For shell-like tools, parse write targets in memory and only persist
+        # argv[0] + first subcommand plus a parsed-target flag. The full command
+        # line is never written to the audit log (secret leak surface).
         if tool_name in {"exec", "run_command", "run-command"} and isinstance(tool_input, dict):
             cmd = tool_input.get("command")
             if isinstance(cmd, str):
-                envelope["tool_command"] = cmd
+                if cmd.strip().startswith(ALLOWED_MUTANT_PREFIX):
+                    targets, unparsed = [], False
+                else:
+                    targets, unparsed = _write_targets(cmd, ROOT)
+                head = " ".join(cmd.split()[:2])
+                existing_paths = envelope.get("tool_paths") or []
+                seen = set()
+                merged = []
+                for p in existing_paths + targets:
+                    if isinstance(p, str) and p not in seen:
+                        seen.add(p)
+                        merged.append(p)
+                envelope["tool_paths"] = merged
+                envelope["tool_command_head"] = head
+                envelope["tool_command_unparsed"] = unparsed
 
         if tool_name == "run_subagent":
             try:

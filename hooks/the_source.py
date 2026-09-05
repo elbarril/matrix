@@ -16,7 +16,7 @@ import re
 import subprocess
 import sys
 
-from _common import emit, parse_frontmatter as _parse_frontmatter, read_input, resolve_root
+from _common import _load_yaml, emit, parse_frontmatter as _parse_frontmatter, read_input, resolve_root
 
 
 def parse_frontmatter(path):
@@ -111,6 +111,29 @@ def onboarding_coverage(root):
     }
 
 
+def config_flags_missing(root):
+    """Return config keys from adapters/devin/config.yaml (depth <= 2) not named in DEVIN.md."""
+    config_path = os.path.join(root, "adapters", "devin", "config.yaml")
+    devin_md_path = os.path.join(root, "DEVIN.md")
+    cfg = _load_yaml(config_path)
+    if not isinstance(cfg, dict):
+        return []
+    keys = set()
+    for top_key, top_val in cfg.items():
+        keys.add(top_key)
+        if isinstance(top_val, dict):
+            for child_key in top_val:
+                keys.add(child_key)
+    devin_text = ""
+    try:
+        if os.path.isfile(devin_md_path):
+            with open(devin_md_path, encoding="utf-8") as fh:
+                devin_text = fh.read()
+    except Exception:
+        pass
+    return sorted(k for k in keys if k not in devin_text)
+
+
 def generate(root):
     agents_dir = os.path.join(root, "brain", "agents")
 
@@ -178,15 +201,17 @@ def check(root, check=True):
                 existing = fh.read()
         in_sync = existing.strip() == content.strip()
         coverage = onboarding_coverage(root)
-        ok = in_sync and coverage["ok"]
+        missing_flags = config_flags_missing(root)
+        ok = in_sync and coverage["ok"] and not missing_flags
         return {
             "hook": "the_source",
             "ok": ok,
             "mode": "check",
             "in_sync": in_sync,
             "onboarding_coverage": coverage,
+            "config_flags_missing": missing_flags,
             "target": target,
-            "note": "in sync" if ok else "SYSTEM_TRUTH.md is stale, onboarding.html is missing live coverage, or its hook counts drifted",
+            "note": "in sync" if ok else "SYSTEM_TRUTH.md is stale, onboarding.html is missing live coverage, its hook counts drifted, or DEVIN.md omits a config flag",
         }
 
     os.makedirs(os.path.dirname(target), exist_ok=True)
