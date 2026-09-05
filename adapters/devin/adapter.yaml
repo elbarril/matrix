@@ -94,61 +94,58 @@ binding:
 # `bin/matrix build --target=devin --template=<name>`. The default is
 # `equilibrado` when no `--template` is supplied and no persisted choice
 # exists (changed from `gratis` on 2026-08-03, per user preference).
-# NOTE: model identifiers (`swe-1-6-fast`, `opus`) MUST be re-verified against
-# the real Devin CLI model picker (`/model` without arguments) the next time
-# anyone touches them — same "needs verification" convention as `swe-1-7-medium`
-# below.
+# NOTE (2026-09-05): every key in these presets was re-verified against live
+# evidence on this machine (sessions.db under ~/.local/share/devin/cli/,
+# ~/.config/devin/config.json agent.model=deepseek-v4-flash-high, bundled CLI
+# docs + changelog). DeepSeek keys are lowercase with a reasoning-level suffix
+# (-high/-max); bare `deepseek-V4-*` does not resolve. SWE-1.7's free preview
+# ended ~2026-08-08 (time-boxed date); the only confirmed free key is `swe-1-6`
+# (credit multiplier 0). `swe-1-7-fast`/`swe-1-6-medium` were never observed —
+# the real fast tiers are `swe-1-6-fast` (0.5 credits) and `swe-1-7-lightning`
+# (6 credits, latency-focused). Re-check against `/model` after any Devin upgrade.
 model_templates: [gratis, barato, equilibrado, caro, veloz]
 
 model_template_gratis:
-  cheap: swe-1-7-medium
-  reasoning: swe-1-7-medium
-  auto: swe-1-7-medium
+  cheap: swe-1-6
+  reasoning: swe-1-6
+  auto: swe-1-6
 
 model_template_barato:
-  cheap: swe-1-7-medium
-  reasoning: swe-1-6-fast
+  cheap: swe-1-6-fast
+  reasoning: swe-1-7-medium
   auto: swe-1-7-medium
 
 model_template_equilibrado:
   cheap: swe-1-7-medium
-  reasoning: sonnet
-  auto: adaptive
+  reasoning: deepseek-v4-pro-high
+  auto: deepseek-v4-flash-high
 
 model_template_caro:
-  cheap: sonnet
-  reasoning: opus
-  auto: adaptive
+  cheap: deepseek-v4-flash-high
+  reasoning: deepseek-v4-pro-max
+  auto: deepseek-v4-pro-high
 
-# `veloz`: lower cost / lower latency than `equilibrado` for the `reasoning`
-# tier (Architect, Morpheus, Oracle, Smith) while keeping `cheap` on the
-# free SWE tier. `gemini-3.5-flash` is a candidate model ID pulled from
-# Google's own published API model ID table in
-# devin-master-documentation/docs/25-google-gemini-models.md (2026-07-17
-# snapshot); it is NOT yet confirmed against this installation's live Devin
-# CLI `/model` picker and MUST be re-verified with `/model` before being
-# treated as load-bearing.
+# `veloz`: latency-first preset. `cheap` runs `swe-1-7-lightning` (Cerebras
+# fast tier — 6 credits, the highest multiplier in the SWE family, so this
+# preset trades cost for speed) and `reasoning` runs `gemini-3-1-pro-high`
+# (verified in sessions.db, 2026-05-26). `auto` keeps `adaptive` (Cognition's
+# per-task router).
 model_template_veloz:
-  cheap: swe-1-7-medium
-  reasoning: gemini-3.5-flash
-  auto: adaptive
+  cheap: swe-1-6-fast
+  reasoning: swe-1-7-lightning
+  auto: gemini-3-1-pro-high
 
 model_policy:
-  # Re-derived 2026-07-17 from devin-master-documentation's model pages
-  # (docs/22-devin-cli-models-overview.md, docs/26-cognition-swe-models.md),
-  # which mirror Devin CLI's own model-selection guidance (models.mdx):
-  #   - "multi-file refactors, architecture changes, deep reasoning" -> opus or gpt
-  #   - "quick edits, bug fixes, cost-sensitive work" -> swe (fast)
-  #   - mixed workloads -> adaptive (Cognition's own per-task router)
-  # SWE-1.7 Medium is gratis hoy durante su beta. La fecha 2026-08-08
-  # atribuida al fin de su free preview no es re-verificable hoy en una fuente
-  # viva: conservarla como no confirmada y re-chequear periódicamente.
-  # User chose capability-first for `reasoning` (accepting real per-token cost)
-  # and `adaptive` for `auto` (2026-07-17). Switched `reasoning` from `opus` to
-  # `sonnet` (2026-07-27) trading a small, measured quality gap (SWE-bench
-  # Verified 85.2% vs 88.6%, per docs/23-anthropic-claude-models.md) for lower
-  # latency and ~60% lower per-token cost ($2-3/$10-15 vs $5/$25) — user chose
-  # speed/cost over max quality for all 4 reasoning-tier specialists.
-  cheap: swe-1-7-medium       # mechanical/plumbing work (Lock, Logos Sparks): gratis hoy en beta; free-preview end date not confirmed, recheck periodically
-  reasoning: sonnet           # planning/architecture/research/evaluation (Architect, Morpheus, Oracle, Smith): floating alias for the latest Claude Sonnet family version; Anthropic frames it as "broadly comparable to Opus" at a fraction of the latency/cost ($2/$10 intro through 2026-08-31, then $3/$15; vs Opus $5/$25), 1M context
-  auto: adaptive              # mixed workloads (Neo, Trinity): Cognition's per-task router; intro pricing expired 2026-07-07, post-intro rate depends on the user's billing plan
+  # Fallback tier→model map used when no `--template` is supplied or the
+  # template lacks a tier. Aligned 2026-09-05 to `equilibrado` (the persisted
+  # default template) so the fallback path can never silently return to
+  # Claude/adaptive — DeepSeek is the user's compute-priority choice.
+  # History: re-derived 2026-07-17 from devin-master-documentation model pages;
+  # `reasoning` moved opus→sonnet on 2026-07-27 (user: speed/cost over max
+  # quality); 2026-09-05 all tiers → DeepSeek (user: prioritize compute-unit
+  # consumption). Keys verified in sessions.db (deepseek-v4-flash-high 27
+  # sessions incl. today; deepseek-v4-pro-high 2026-09-04; swe-1-7-medium 26
+  # sessions). SWE-1.7 free preview ended ~2026-08-08; only `swe-1-6` is free.
+  cheap: swe-1-7-medium          # mechanical/plumbing (Lock, Logos Sparks, Oracle)
+  reasoning: deepseek-v4-pro-high  # planning/architecture/eval (Architect, Morpheus, Smith)
+  auto: deepseek-v4-flash-high     # mixed workloads (Neo, Trinity)
