@@ -30,7 +30,10 @@ secret_deny:
     - "~/.mozilla/firefox/**/logins.json"
     - "~/.config/google-chrome/**/Login Data"
   class_b_repo_secrets:
-    enabled: false
+    # 2026-09-05: enabled per remediation decision U(i) (D4 flip inmediato).
+    # Cubre la superficie `read` del incidente 2 de la lección 49; la superficie
+    # `exec sed` del incidente 1 sigue abierta (grep/glob/exec cat no bloqueados).
+    enabled: true
     patterns:
       - "**/.env"
       - "**/.env.local"
