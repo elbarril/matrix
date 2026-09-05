@@ -77,7 +77,8 @@
       "name": "cronicas",
       "path": "/home/emiliano/www/emisrepos/cronicas",
       "type": "local",
-      "added": "2026-07-15T10:05:32-03:00"
+      "added": "2026-07-15T10:05:32-03:00",
+      "bound_target": "devin"
     },
     {
       "name": "calian",
