@@ -109,11 +109,10 @@ brain/state/
 └── sessions/                 # active session pings
 ```
 
-- **Three states, two files.**
+- **Two states, one file.**
   - `workspace.yaml` holds the *warm* set: projects of interest, with their resolved paths. Warm does not imply a live `_brain` symlink is present.
   - *Bound* is a filesystem/runtime fact, not a separate state flag: a project is bound when its path contains a valid `_brain` symlink to this brain **and** an `AGENTS.local.md` block managed by `bin/matrix`. `select` always warms the project first, so every bound project is also warm (`bound ⊆ warm`).
-  - `.context.yaml` keeps the single `primary` (default) project. It is used only when a session does not resolve a project through `--project`, `$MATRIX_PROJECT`, or a `_brain` symlink in the current directory. It is no longer exclusive: several projects may be bound at the same time.
-- **Session resolution.** A session binds to one project at a time via `--project <name>` (or the `_brain` symlink in cwd / `$MATRIX_PROJECT`). If none of those resolve, the session falls back to the `primary` recorded in `.context.yaml`.
+- **Session resolution.** A session binds to one project at a time via `--project <name>`, `$MATRIX_PROJECT`, or the `_brain` symlink in cwd. If none of those resolve, the session has **no subject** (neutral).
 - **Root resolution (robust).** See `brain/data/contract-catalog.md`.
 - **Scope resolution (innermost-root-wins).** When `bin/matrix` (or an agent) needs to know "which project is this directory working on?", it walks up from cwd. The first directory that is either the Matrix root or a project root wins. This single rule handles all real topologies without special cases (see examples in `brain/data/contract-catalog.md`).
 - **Ledger (Link).** Append-only events: `session:start`, `route`, `decision`, `handoff`, `phase:close`. Both the core and any federated ship read and write it. Shared state without coupling.

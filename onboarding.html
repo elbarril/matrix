@@ -907,7 +907,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <ol class="step-list" style="list-style:none;">
     <li class="step is-current" data-step="1"><div class="step-bubble"><span class="who">Usuario</span>"¿en qué proyecto estoy trabajando?"</div></li>
     <li class="step" data-step="2"><div class="step-bubble"><span class="who">Neo</span>corre <code>matrix status</code> en vez de adivinar.</div></li>
-    <li class="step" data-step="3"><div class="step-bubble"><span class="who">Harness</span><code>bin/matrix</code> (Capa 1) lee <code>.context.yaml</code>/<code>.registry.json</code> y devuelve el estado real; Neo lo reporta.</div></li>
+    <li class="step" data-step="3"><div class="step-bubble"><span class="who">Harness</span><code>bin/matrix</code> (Capa 1) lee <code>.registry.json</code>/<code>workspace.yaml</code> y devuelve el estado real; Neo lo reporta.</div></li>
   </ol>
   <div class="step-controls">
     <button type="button" class="step-prev" aria-label="Paso anterior del ejemplo">&larr; Paso anterior del ejemplo</button>
@@ -934,8 +934,8 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <tr><th>Comando</th><th>Que hace</th></tr>
     <tr><td><code>matrix list</code></td><td>Lista todos los proyectos registrados</td></tr>
     <tr><td><code>matrix add &lt;name&gt; [path] [--replace]</code></td><td>Registra un proyecto (sin path usa el dir actual; <code>--replace</code> actualiza uno existente)</td></tr>
-    <tr><td><code>matrix select &lt;name&gt;</code></td><td>Setea el proyecto primario activo + crea symlink <code>_brain</code></td></tr>
-    <tr><td><code>matrix deselect [name]</code></td><td>Quita el binding del proyecto nombrado (o del primario si no se da nombre); otros proyectos bound quedan intactos</td></tr>
+    <tr><td><code>matrix select &lt;name&gt;</code></td><td>Crea el binding: symlink <code>_brain</code> + bloque <code>AGENTS.local.md</code></td></tr>
+    <tr><td><code>matrix deselect &lt;name&gt;</code></td><td>Quita el binding del proyecto nombrado; otros proyectos bound quedan intactos</td></tr>
     <tr><td><code>matrix bindings [--warm-only]</code></td><td>Lista los proyectos bound, verificando el estado real de su symlink <code>_brain</code> y bloque <code>AGENTS.local.md</code>. <code>--warm-only</code> muestra solo el set caliente</td></tr>
   </table>
 </details>
@@ -953,7 +953,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <summary>Estado y telemetria</summary>
   <table>
     <tr><th>Comando</th><th>Que hace</th></tr>
-    <tr><td><code>matrix status [--all]</code></td><td>Muestra el estado del sistema (proyecto, link, set caliente, checkpoints, ledger). Por default, checkpoints/eventos Link salen filtrados al proyecto resuelto (symlink <code>_brain</code> del cwd &gt; <code>primary</code>); <code>--all</code> muestra la vista global sin filtrar</td></tr>
+    <tr><td><code>matrix status [--all]</code></td><td>Muestra el estado del sistema (proyecto, link, set caliente, checkpoints, ledger). Por default, checkpoints/eventos Link salen filtrados al proyecto resuelto (symlink <code>_brain</code> del cwd o foco de sesión); <code>--all</code> muestra la vista global sin filtrar</td></tr>
     <tr><td><code>matrix checkpoint "&lt;nota&gt;"</code></td><td>Escribe un checkpoint timestamped (+ entrada en Link)</td></tr>
     <tr><td><code>matrix activity [n] [--all] [--project=&lt;name&gt;]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20), filtrados al proyecto resuelto por default; <code>--all</code> para todos los proyectos, <code>--project=</code> para consultar otro proyecto sin cambiar de directorio</td></tr>
   </table>
@@ -1464,7 +1464,6 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 ├── AGENTS.md                        # contrato canonico (Layer 2)
 ├── README.md
 ├── DEVIN.md                         # notas del adaptador Devin
-├── .context.yaml                    # proyecto primario activo
 ├── .registry.json                   # todos los proyectos conocidos
 ├── bin/matrix                       # CLI orquestador (Layer 1)
 ├── hooks/                           # Seraph &mdash; enforcement portable (14 hooks)
@@ -1584,7 +1583,7 @@ model_policy:
 <h3 style="font-size:1rem;">FAQ / Troubleshooting</h3>
 <details>
   <summary>El symlink <code>_brain</code> está roto</summary>
-  <pre><code>./bin/matrix deselect
+  <pre><code>./bin/matrix deselect &lt;nombre&gt;
 ./bin/matrix select &lt;nombre&gt;
 </code></pre>
 </details>
@@ -1640,7 +1639,7 @@ model_policy:
 
 <details>
   <summary>Mi checkpoint reciente no aparece en <code>matrix status</code>/<code>matrix activity</code></summary>
-  <p>Ambos comandos filtran por default al proyecto resuelto (symlink <code>_brain</code> del directorio donde estás parado &gt; <code>primary</code> de <code>.context.yaml</code> &gt; foco de sesión con <code>matrix focus</code>). Si tu checkpoint es de otro proyecto, no lo vas a ver salvo que pidas la vista global: <code>matrix status --all</code> o <code>matrix activity --project=&lt;nombre&gt;</code>.</p>
+  <p>Ambos comandos filtran por default al proyecto resuelto (foco de sesión con <code>matrix focus</code> &gt; symlink <code>_brain</code> del directorio donde estás parado). Si tu checkpoint es de otro proyecto, no lo vas a ver salvo que pidas la vista global: <code>matrix status --all</code> o <code>matrix activity --project=&lt;nombre&gt;</code>.</p>
 </details>
 
 <details>

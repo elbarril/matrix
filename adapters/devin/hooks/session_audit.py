@@ -51,27 +51,33 @@ MUTANT_WORK_THRESHOLD = 16
 MUTANT_WORK_TOOLS = {"write", "edit", "multi_edit", "run_command", "run-command", "exec"}
 
 
-def _load_context(root):
-    """Parse the simple top-level .context.yaml without external deps."""
-    path = os.path.join(root, ".context.yaml")
-    values = {}
-    if not os.path.isfile(path):
-        return values
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.split("#", 1)[0]
-            m = re.match(r"^\s*([A-Za-z0-9_]+)\s*:\s*(.*)\s*$", line)
-            if not m:
-                continue
-            key, raw = m.groups()
-            raw = raw.strip()
-            if raw in ("null", "~", "None", ""):
-                values[key] = None
-            elif len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
-                values[key] = raw[1:-1]
-            else:
-                values[key] = raw
-    return values
+def _scope_project():
+    """Return the project scope for this session's cwd via `bin/matrix scope`.
+
+    Delegates to resolve_scope() — the single bash owner of the "where am I?"
+    walk-up — instead of re-implementing it in Python (same no-duplicate rule
+    as _activation_reinject_scope). Returns field 2 of the printed line
+    (workspace→matrix, bound→<name>, none/broken/bound-unregistered→empty,
+    normalized to None).
+    """
+    try:
+        proc = subprocess.run(
+            [BIN_MATRIX, "scope"],
+            env={**os.environ, "MATRIX_ROOT": ROOT},
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+        line = (proc.stdout or "").splitlines()[0] if proc.stdout else ""
+        fields = line.split("\t")
+        if len(fields) < 2:
+            return None
+        value = fields[1].strip()
+        return value or None
+    except Exception as e:
+        print(f"[session_audit] scope project resolution failed: {e}", file=sys.stderr)
+        return None
 
 
 def _parse_scalar(raw):
@@ -249,13 +255,13 @@ def _render_sentinel_text(session_id, turn):
 SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
 
 
-def _session_id_from_devin(payload, ctx):
+def _session_id_from_devin(payload):
     """Devin may provide a real session id in newer CLI versions."""
     for k in SESSION_ID_KEYS:
         v = payload.get(k)
         if v:
             return v
-    return ctx.get("session_id")
+    return None
 
 
 def _persist_session_marker(root, sid):
@@ -287,8 +293,8 @@ def _synthetic_session_id(root, event):
     return common.current_session_id(root)
 
 
-def _session_id(root, event, payload, ctx):
-    sid = _session_id_from_devin(payload, ctx)
+def _session_id(root, event, payload):
+    sid = _session_id_from_devin(payload)
     if sid:
         if event == "session_start":
             _persist_session_marker(root, sid)
@@ -816,9 +822,8 @@ def main():
         # Only the wired Devin events are forwarded; do not log unknown ones.
         return
 
-    ctx = _load_context(ROOT)
-    session_id = _session_id(ROOT, event, payload, ctx)
-    project_active = ctx.get("active_project")
+    session_id = _session_id(ROOT, event, payload)
+    project_active = _scope_project()
 
     pre_result = None
     orphan_session_id = None

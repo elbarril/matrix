@@ -353,10 +353,9 @@ select_project() {
     update_exclude "$pp" "$target"
     ensure_project_output_dirs "$name"
     set_registry_bound_target "$name" "$target"
-    update_context "$name" "$pp"
     warm_project_entry "$name" "$pp" "quiet"
     link_append "project:select" "$name" "$pp"
-    log_success "Selected primary project '$name' (symlink: $link)"
+    log_success "Selected project '$name' (symlink: $link)"
 }
 
 deselect_project() {
@@ -368,10 +367,9 @@ deselect_project() {
             *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
         esac
     done
-    local active; active="$(read_context)"
     if [[ -z "$name" ]]; then
-        [[ "$active" == "null" || -z "$active" ]] && { log_warning "No active project"; return 0; }
-        name="$active"
+        log_error "Usage: matrix deselect <name> [--target=<cli>]"
+        return 1
     fi
     if [[ -z "$target" ]]; then
         target="$(registry_bound_target "$name")"
@@ -386,9 +384,6 @@ deselect_project() {
     cleanup_agents_local "$ap" "$target"
     cleanup_exclude "$ap" "$target"
     [[ -n "$ap" && -L "$ap/_brain" ]] && rm "$ap/_brain"
-    if [[ "$active" == "$name" ]]; then
-        update_context "null" "null"
-    fi
     link_append "project:deselect" "$name" ""
     log_success "Deselected '$name'"
 }

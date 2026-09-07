@@ -47,7 +47,6 @@ def build_fixture(repo_root, fixture_root):
         if (docs / "SYSTEM_TRUTH.md").exists():
             shutil.copy2(docs / "SYSTEM_TRUTH.md", fixture_root / "docs" / "SYSTEM_TRUTH.md")
     (fixture_root / ".registry.json").write_text('{"projects":[],"created":"2024-01-01T00:00:00+00:00","version":"2.0.0"}')
-    (fixture_root / ".context.yaml").write_text('active_project: null\nactive_project_path: null\nlast_updated: "2024-01-01T00:00:00+00:00"\n')
     home_dir = fixture_root / "home"
     (home_dir / ".config").mkdir(parents=True, exist_ok=True)
     for pname in ["alpha", "beta"]:
@@ -91,7 +90,6 @@ def state_snapshot(fixture_root, home_dir, projects):
     snapshot = {}
     files = [
         ".registry.json",
-        ".context.yaml",
         "workspace.yaml",
         "brain/state/activity.log",
         "brain/state/checkpoints.jsonl",
@@ -206,6 +204,7 @@ def run_smoke(repo_root, matrix_rel="bin/matrix"):
             ("activity 5", ["activity", "5"], fixture_root, None),
             ("activity --all 3", ["activity", "--all", "3"], fixture_root, None),
             ("link", ["link", "test:event", "fixture-subject", "--ref=ref123", "detail1", "detail2"], fixture_root, None),
+            ("link route bare", ["link", "route", "primary-retirement", "--ref=refroute123", "Oracle? no - plan+execute: Morpheus -> Architect -> Trinity -> Smith"], fixture_root, None),
             ("ship list", ["ship", "list"], fixture_root, None),
             ("corpus-ingest", ["corpus-ingest", "--topic=test", "--slug=demo"], fixture_root, "corpus content line 1\n"),
             ("build", ["build", "--target=devin"], fixture_root, None),

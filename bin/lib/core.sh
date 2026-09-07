@@ -28,7 +28,6 @@ resolve_root() {
 
 MATRIX_DIR="$(resolve_root)"
 REGISTRY_FILE="$MATRIX_DIR/.registry.json"
-CONTEXT_FILE="$MATRIX_DIR/.context.yaml"
 BRAIN_DIR="$MATRIX_DIR/brain"
 STATE_DIR="$BRAIN_DIR/state"
 CLIENTS_DIR="$MATRIX_DIR/clients"
@@ -104,15 +103,6 @@ release_lock() {
 # --- Init -------------------------------------------------------------------
 init_registry() {
     [[ -f "$REGISTRY_FILE" ]] || echo '{"projects": [], "created": "'$(date -Iseconds)'", "version": "2.0.0"}' > "$REGISTRY_FILE"
-}
-init_context() {
-    [[ -f "$CONTEXT_FILE" ]] || cat > "$CONTEXT_FILE" << 'EOF'
-# Matrix Active Project Context (primary binding)
-active_project: null
-active_project_path: null
-last_updated: null
-session_id: null
-EOF
 }
 init_state() {
     mkdir -p "$STATE_DIR/sessions"

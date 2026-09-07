@@ -1,7 +1,6 @@
 # Matrix CLI — registry module (sourced by bin/matrix)
 
 read_registry() { init_registry; jq -r '.projects[] | "\(.name)\t\(.path)\t\(.type)"' "$REGISTRY_FILE" 2>/dev/null || echo ""; }
-read_context()  { init_context; sed -n 's/^active_project: //p' "$CONTEXT_FILE" | head -1 || echo "null"; }
 
 # --- Single source of truth: mode + subject resolution ----------------------
 # resolve_scope: answers "where am I?" exactly once, for every call-site.
@@ -94,8 +93,7 @@ resolve_scope_project() {
     case "$mode" in
         workspace) printf '%s\n' "$MATRIX_WORKSPACE_PROJECT" ;;
         bound)     printf '%s\n' "$project" ;;
-        *)         local primary; primary="$(read_context)"
-                   [[ "$primary" != "null" && -n "$primary" ]] && printf '%s\n' "$primary" ;;
+        *)         ;;
     esac
     return 0
 }
@@ -117,14 +115,6 @@ registry_name_for_path() {
         [[ "$(readlink -f "$CLIENTS_DIR/$n" 2>/dev/null || true)" == "$target" ]] && { printf '%s\n' "$n"; return 0; }
     done < <(jq -r '.projects[] | select(.type=="remote") | .name' "$REGISTRY_FILE" 2>/dev/null)
     return 1
-}
-
-update_context() {
-    init_context
-    local project="$1" path="$2"; path="${path%/}"
-    sed -i "s|^active_project:.*|active_project: $project|" "$CONTEXT_FILE"
-    sed -i "s|^active_project_path:.*|active_project_path: $path|" "$CONTEXT_FILE"
-    sed -i "s|^last_updated:.*|last_updated: $(date -Iseconds)|" "$CONTEXT_FILE"
 }
 
 # --- Project registry -------------------------------------------------------
@@ -169,11 +159,8 @@ add_project() {
             return 1
         fi
         if is_bound "$name"; then
-            local was_primary=false
-            [[ "$(read_context)" == "$name" ]] && was_primary=true
             log_info "Project '$name' is bound; removing old binding before replacing..."
             deselect_project "$name"
-            [[ "$was_primary" == true ]] && log_info "Primary project cleared; run 'matrix select $name' to rebind when ready"
         fi
         local tmp; tmp="$(mktemp)"
         jq --arg n "$name" --arg p "$path_or_url" --arg t "$type" \
@@ -231,10 +218,8 @@ list_projects() {
     init_registry
     local projects; projects="$(jq -r '.projects[] | "\(.name)\t\(.path)\t\(.type)"' "$REGISTRY_FILE" 2>/dev/null)"
     [[ -z "$projects" ]] && { echo "  No projects registered"; return; }
-    local active; active="$(read_context)"
     while IFS=$'\t' read -r name path type; do
         local marks=""
-        [[ "$active" == "$name" ]] && marks+="[primary] "
         is_bound "$name" && marks+="[bound]"
         if [[ -n "$marks" ]]; then
             echo "  ✓ $name ($type) - $path $marks"

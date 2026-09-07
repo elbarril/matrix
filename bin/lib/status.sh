@@ -65,16 +65,6 @@ show_status() {
             ;;
     esac
     echo
-    local active; active="$(read_context)"
-    if [[ "$active" != "null" && -n "$active" ]]; then
-        local ap; ap="$(get_project_path "$active" 2>/dev/null || true)"; ap="${ap%/}"
-        echo "Primary project: $active"
-        [[ -n "$ap" ]] && echo "Path: $ap"
-        if [[ -n "$ap" && -L "$ap/_brain" ]]; then echo "Brain link: ✓ active"; else echo "Brain link: ✗ broken"; fi
-    else
-        echo "Primary project: none"
-    fi
-    echo
     local bound_count=0 bound_names=""
     while IFS=$'\t' read -r n _ _; do
         [[ -z "$n" ]] && continue
@@ -90,11 +80,11 @@ show_status() {
     local reg_n; reg_n="$(jq '.projects | length' "$REGISTRY_FILE" 2>/dev/null)" || reg_n=0
     echo "Registered: ${reg_n:-0} project(s)"
     echo
-    # Default view is scoped to the resolved project (cwd _brain > primary) —
-    # global checkpoints/Link events are one project's needle in everyone
-    # else's haystack (see lessons.md: cross-project sessions were pushing a
-    # project's own recent checkpoint out of an unfiltered last-3 window).
-    # `matrix status --all` keeps the old unfiltered, cross-project view.
+    # Default view is scoped to the resolved project (session focus > cwd
+    # binding) — global checkpoints/Link events are one project's needle in
+    # everyone else's haystack (see lessons.md: cross-project sessions were
+    # pushing a project's own recent checkpoint out of an unfiltered last-3
+    # window). `matrix status --all` keeps the old unfiltered, cross-project view.
     local show_all="${1:-}" scope_project="" scope_label=""
     [[ "$show_all" != "--all" ]] && scope_project="$(resolve_scope_project)"
     if [[ "$mode" == "workspace" ]]; then
@@ -143,10 +133,10 @@ write_checkpoint() {
 }
 
 # show_activity [n] [--all] [--project=<name>]
-# Default scope mirrors show_status: filters to the resolved project (cwd
-# _brain > .context.yaml primary). --all forces the old unfiltered, all-
-# projects tail; --project=<name> filters to an explicit project regardless
-# of cwd/primary (e.g. to check on a project you aren't currently bound to).
+# Default scope mirrors show_status: filters to the resolved project (session
+# focus > cwd binding). --all forces the old unfiltered, all-projects tail;
+# --project=<name> filters to an explicit project regardless of cwd (e.g. to
+# check on a project you aren't currently bound to).
 show_activity() {
     init_state
     local n=20 show_all=false proj="" mode=""
@@ -162,7 +152,7 @@ show_activity() {
         IFS=$'\n' read -r line < <(resolve_scope)
         mode="$(printf '%s\n' "$line" | cut -f1)"
         raw_proj="$(printf '%s\n' "$line" | cut -f2)"
-        proj="${raw_proj:-$(read_context)}"
+        proj="$raw_proj"
         [[ "$proj" == "null" ]] && proj=""
     fi
     if [[ -n "$proj" && "$show_all" != true ]]; then

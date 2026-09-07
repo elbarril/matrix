@@ -28,7 +28,7 @@ Matrix es un cerebro persistente y compartido que le da a Devin CLI memoria, reg
    - un archivo `AGENTS.local.md` con un bloque especial que le dice a Devin: *"antes de responder cualquier cosa en este proyecto, leé primero el contrato de Matrix y el agente maestro Neo"*.
 3. Devin CLI lee automáticamente `AGENTS.local.md` al arrancar en esa carpeta. Por eso la activación de Neo **no depende de que te acuerdes de invocarlo**: es automática, mecánica, no probabilística.
 4. Una vez activo, siempre hablás con **Neo** (el agente maestro). Neo nunca te hace elegir un especialista de un menú: interpreta lo que pedís y, si hace falta, delega en el especialista correcto por su cuenta.
-5. El proyecto en sí **nunca se ensucia** con la inteligencia: solo tiene un symlink y un bloque de texto en un archivo cuya ignorancia vive en `.git/info/exclude` (local, nunca se comitea, no ensucia el repo del proyecto). Si algún día "desconectás" el proyecto (`matrix deselect`), esos dos elementos se limpian solos.
+5. El proyecto en sí **nunca se ensucia** con la inteligencia: solo tiene un symlink y un bloque de texto en un archivo cuya ignorancia vive en `.git/info/exclude` (local, nunca se comitea, no ensucia el repo del proyecto). Si algún día "desconectás" el proyecto (`matrix deselect <nombre>`), esos dos elementos se limpian solos.
 
 ### ¿Quién hace qué? (el equipo, en criollo)
 
@@ -68,7 +68,7 @@ Matrix necesita recordar cosas entre sesiones: qué proyecto es tu foco actual, 
 
 Un **checkpoint** es una nota con fecha que Neo (o vos) guarda cuando algo importante pasó ("implementé X, quedó pendiente Y"). Es memoria de **corto plazo**: sirve para retomar un hilo cortado (una sesión que se compactó, un cambio de foco), no para acordarse de algo para siempre. Se escribe con `bin/matrix checkpoint "nota"`, nunca a mano.
 
-Por default, `matrix status` y `matrix activity` muestran los checkpoints/eventos del **proyecto activo únicamente** (resuelto igual que Neo: symlink `_brain` del directorio donde estás parado > `primary` de `.context.yaml`). Esto es a propósito: `checkpoints.jsonl` es un archivo único y compartido entre *todos* tus proyectos, así que una vista global mezclaría el historial de sandisk con el de calian y el que te importa quedaría enterrado apenas trabajes en otro proyecto. Usá `matrix status --all` o `matrix activity --all` cuando de verdad quieras la vista cruzada, o `matrix activity --project=<nombre>` para mirar otro proyecto sin moverte de carpeta.
+Por default, `matrix status` y `matrix activity` muestran los checkpoints/eventos del **proyecto activo únicamente** (resuelto igual que Neo: symlink `_brain` del directorio donde estás parado, o el foco de sesión con `matrix focus`). Esto es a propósito: `checkpoints.jsonl` es un archivo único y compartido entre *todos* tus proyectos, así que una vista global mezclaría el historial de sandisk con el de calian y el que te importa quedaría enterrado apenas trabajes en otro proyecto. Usá `matrix status --all` o `matrix activity --all` cuando de verdad quieras la vista cruzada, o `matrix activity --project=<nombre>` para mirar otro proyecto sin moverte de carpeta.
 
 Una **lesson** (`brain/data/lessons.md` o `brain/data/lessons/<proyecto>.md`) es memoria de **largo plazo**: cosas que la realidad enseñó y que valen para siempre (una decisión del cliente, un link de acceso a una instancia, un bug real y su causa). A diferencia del checkpoint, no se cae de ninguna ventana — se lee siempre, íntegro, al bindear ese proyecto. La fase `eval` del ciclo de trabajo (ver `hooks/validate_phase_close.py`) es la que la exige, y el hook `validate_phase_close` **bloquea** cerrar la fase `eval` si no se declaró explícitamente qué se aprendió (o un "N/A" razonado) — antes era solo una convención que se podía saltear en silencio.
 
@@ -121,7 +121,6 @@ matrix/
 ├── AGENTS.md                  # canonical contract (Layer 2)
 ├── README.md                  # this file
 ├── DEVIN.md                   # Devin adapter notes
-├── .context.yaml              # primary/default project (fallback, not exclusive — see "Multi-project")
 ├── .registry.json             # all known projects
 ├── bin/matrix                 # CLI orchestrator (Layer 1)
 ├── hooks/                     # Seraph — portable enforcement (python)
@@ -148,10 +147,9 @@ Work artifacts for a **bound project** are written to `brain/output/<project>/{a
 list                      List registered projects
 add <name> [path]         Register a project
 select <name>             Bind a project: create its _brain symlink + AGENTS.local.md
-                           block and make it the primary/default. Does NOT unbind
-                           other already-bound projects (see "Multi-project" below).
-deselect [name]           Unbind the named project (or the current primary if no
-                           name is given). Other bound projects are untouched.
+                           block. Does NOT unbind other already-bound projects
+                           (see "Multi-project" below).
+deselect <name>           Unbind the named project. Other bound projects are untouched.
 work <name>               Warm a project into the active set (bookmark; does not
                            create the _brain symlink and does not unbind anything)
 unwork <name>             Remove a project from the warm set; if it was bound,
@@ -159,7 +157,7 @@ unwork <name>             Remove a project from the warm set; if it was bound,
 bindings [--warm-only]    List every registered project, verifying in real time
                            whether its _brain symlink + AGENTS.local.md block
                            actually exist on disk right now
-status [--all]            Show primary/default, bound count+names, warm count,
+status [--all]            Show bound count+names, warm count,
                            registered count, recent checkpoints and Link events —
                            scoped to the resolved project by default; --all for
                            the old unfiltered, cross-project view
@@ -176,13 +174,12 @@ help                      Usage
 
 Podés tener **más de un proyecto bindeado (`bound`) al mismo tiempo** — cada uno con su propio symlink `_brain` y su propio bloque en `AGENTS.local.md`, activando a Neo automáticamente sin que se molesten entre sí. Esto es útil si trabajás en paralelo (por ejemplo, dos terminales, dos proyectos distintos, cada uno con su sesión de Devin CLI).
 
-Hay tres conceptos distintos, y es importante no confundirlos:
+Hay dos conceptos distintos, y es importante no confundirlos:
 
 - **`bound` (bindeado)** — un hecho del *filesystem*, no un flag guardado en ningún archivo: un proyecto está bindeado si y solo si tiene un symlink `_brain` válido apuntando a este cerebro **y** un bloque `AGENTS.local.md` vigente. `matrix bindings` siempre chequea esto en vivo, nunca confía en un caché. Pueden estar bindeados varios proyectos a la vez.
 - **`warm` (caliente)** — un proyecto "de interés" guardado en `brain/state/workspace.yaml`. Es solo una lista de bookmarks; estar en la lista NO implica tener el symlink creado. Todo proyecto bindeado está automáticamente en la lista warm, pero no al revés.
-- **`primary`/default** — el único proyecto guardado en `.context.yaml`. Ya **no es exclusivo**: es simplemente el proyecto que se usa como *fallback* cuando una sesión no puede resolver su proyecto de otra forma (sin `--project`, sin `$MATRIX_PROJECT`, y sin estar parado dentro de una carpeta con `_brain`).
 
-**¿Cómo resuelve Neo qué proyecto es "el suyo" en una sesión dada?** Con esta prioridad: `--project <nombre>` (si lo pasaste explícito) > variable de entorno `$MATRIX_PROJECT` > el symlink `_brain` de la carpeta donde estás parado (`cwd`) > el `primary` de `.context.yaml` como último recurso. En la práctica esto significa: **si abrís una terminal dentro de un proyecto bindeado, esa sesión ya sabe cuál es su proyecto sin importar qué otro proyecto hayas seleccionado como "primary" en otro lado.**
+**¿Cómo resuelve Neo qué proyecto es "el suyo" en una sesión dada?** Con esta prioridad: `--project <nombre>` (si lo pasaste explícito) > variable de entorno `$MATRIX_PROJECT` > el symlink `_brain` de la carpeta donde estás parado (`cwd`). Si nada resuelve, la sesión **no tiene proyecto** (neutral). En la práctica esto significa: **si abrís una terminal dentro de un proyecto bindeado, esa sesión ya sabe cuál es su proyecto sin importar qué otros proyectos estén bindeados en otro lado.**
 
 Una regla adicional define qué pasa cuando cwd está dentro de más de una raíz posible (por ejemplo, `matrix/` adentro de un proyecto bindeado, o un proyecto bindeado adentro de `clients/` del propio Matrix): **innermost-root-wins** — caminando hacia arriba desde cwd, el primer directorio que sea la raíz de Matrix o tenga un `_brain` válido decide el modo. Si la raíz de Matrix gana, se entra en **Matrix workspace mode** y no se considera bindeado a ningún proyecto. Ejemplo real de proyecto anidado dentro de otro: `emi ⊃ deseo` (ambos bindeados).
 
@@ -200,7 +197,6 @@ Ejemplo de uso real con dos proyectos a la vez:
 #  ✓ api-backend -> /home/vos/proyectos/api-backend [bound]
 
 ./bin/matrix status
-# Primary project: api-backend       (el último select-eado, es el default)
 # Bound: 2 project(s) (sitio-web api-backend)
 # Warm set: 2 project(s)
 
@@ -209,7 +205,7 @@ Ejemplo de uso real con dos proyectos a la vez:
 
 Ahora podés abrir Devin CLI dentro de `sitio-web/` y dentro de `api-backend/` (en dos terminales distintas, o en momentos distintos) y ambas sesiones activan a Neo automáticamente, cada una con el contexto de su propio proyecto — sin que una sesión pise el binding de la otra.
 
-**Seguridad de estado concurrente:** `bin/matrix` toma un lock global (`flock`) al arrancar cualquier comando, así que si corrés dos comandos `bin/matrix` al mismo tiempo desde sesiones distintas no se corrompen los archivos de estado compartidos (`workspace.yaml`, `.registry.json`, `.context.yaml`, el ledger). Si `flock` no está disponible en tu sistema (por ejemplo, macOS sin GNU coreutils), el comando avisa y sigue sin lock — no instala nada nuevo, pero perdés esa protección puntual.
+**Seguridad de estado concurrente:** `bin/matrix` toma un lock global (`flock`) al arrancar cualquier comando, así que si corrés dos comandos `bin/matrix` al mismo tiempo desde sesiones distintas no se corrompen los archivos de estado compartidos (`workspace.yaml`, `.registry.json`, el ledger). Si `flock` no está disponible en tu sistema (por ejemplo, macOS sin GNU coreutils), el comando avisa y sigue sin lock — no instala nada nuevo, pero perdés esa protección puntual.
 
 ## Quick start
 
@@ -237,7 +233,7 @@ Ahora podés abrir Devin CLI dentro de `sitio-web/` y dentro de `api-backend/` (
 ## Uso diario típico
 
 - **Un solo proyecto, uso normal:** `matrix select <proyecto>` una vez; después simplemente abrís Devin CLI dentro de esa carpeta cuando quieras trabajar — Neo se activa solo. No hace falta re-seleccionar nada en cada sesión.
-- **Cambiar de foco sin perder el anterior:** `matrix select <otro-proyecto>` no rompe el binding del proyecto anterior — solo cambia cuál es el `primary`/default. Si querés desactivar explícitamente uno, usá `matrix deselect <nombre>`.
+- **Cambiar de foco sin perder el anterior:** `matrix select <otro-proyecto>` no rompe el binding del proyecto anterior — los dos quedan bindeados a la vez. Si querés desactivar explícitamente uno, usá `matrix deselect <nombre>`.
 - **Ver qué está pasando:** `matrix status` (resumen general), `matrix bindings` (verificación real en disco de cuáles proyectos tienen Neo activo ahora; `--warm-only` para la lista de bookmarks/warm), `matrix list` (todos los proyectos conocidos).
 - **Dejar una nota para la próxima sesión:** `matrix checkpoint "lo que hice y lo que falta"`. Neo también lo hace automáticamente en hitos importantes.
 - **Trabajar en el propio Matrix (no en un proyecto):** parate en la raíz de este repo y hablale a Neo directamente — entra en "Matrix workspace mode" (sin proyecto bindeado, trabajando sobre el sistema mismo).

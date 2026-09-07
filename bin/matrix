@@ -132,8 +132,8 @@ Projects:
   list                    List all registered projects
   add <name> [path] [--replace]  Register a project (path optional → current dir; --replace updates existing)
   remove <name>           Remove an unbound, non-warm project from the registry
-  select <name> [--target=<cli>]    Set primary active project + create adapter binding
-  deselect [name] [--target=<cli>] Remove an adapter binding (defaults to primary/stored target)
+  select <name> [--target=<cli>]    Create adapter binding
+  deselect <name> [--target=<cli>]  Remove an adapter binding (requires <name>; --target optional)
   bindings [--warm-only]  Show bound status for all registered projects (--warm-only for warm set)
   scope                   Print "<mode>\t<project>\t<detail>" for cwd (resolve_scope; used by adapters)
   focus <name>            Persist a session-scoped focus (brain/state/sessions/<sid>.json) that
