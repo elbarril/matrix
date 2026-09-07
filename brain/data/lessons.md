@@ -12,29 +12,17 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 ## Core lessons
 
-1. (regla ya cubierta por Foundation 3 en `AGENTS.md` §4 y por el gate `hooks/validate_phase_close.py` — ver ahí. Número no reutilizable.)
-
-2. (regla ya cubierta por Foundation 4 en `AGENTS.md` §4 — ver ahí. Número no reutilizable.)
-
-3. (regla ya cubierta por The Construct en `AGENTS.md` §9 — ver ahí. Número no reutilizable.)
-
 4. **El brain nunca nombra un CLI.** — enforced by `hooks/validate_layer2.py`.
 
 5. **State goes through the CLI.** Nothing under `brain/state/**` is hand-edited; state mutates via `bin/matrix`. Hand edits desync the ledger and the dashboard. An explicit, ledger-logged exception is admitted for emergencies.
 
 6. **Roster discipline.** Five core specialists. Adding one requires retiring or merging another. Proliferation (the old 9–12 roster) created overlap and maintenance cost with no gain.
 
-7. (regla ya cubierta por The Construct en `AGENTS.md` §9 — ver ahí. Número no reutilizable.)
-
 8. **Never log secrets.** Not in checkpoints, agent output, commits, or the ledger. Scrub emails and tokens from anything that leaves the machine.
-
-9. (regla ya cubierta por `brain/agents/neo.md` (regla de scope growth) — ver ahí. Número no reutilizable.)
 
 11. **No asumas gates de aprobación sin medirlos.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
-12. (regla ya cubierta por `brain/agents/neo.md:101` (promover lessons proactivamente) — ver ahí. Número no reutilizable.)
-
-13. **Tool-allowlist declarativa no restringe; denylist de lectura del CLI sí, pero no bloquea `grep`/`exec`.** Detalle: `brain/output/research/adapter-lessons-detail.md`. (Semántica re-verificada 2026-09-07 en Devin CLI 3000.6.14: `Read(...)` SÍ bloquea `grep`/`glob`/`read` y `exec` `cat`/`ls` con path literal — el claim anterior era obsoleto; ver lección 65.)
+13. **Tool-allowlist declarativa no restringe; denylist de lectura del CLI sí, pero no bloquea `grep`/`exec`.** Detalle: `brain/output/research/adapter-lessons-detail.md`. (Semántica re-verificada 2026-09-07 en Devin CLI 3000.6.14: `Read(...)` SÍ bloquea `grep`/`glob`/`read` y `exec` `cat`/`ls` con path literal — el claim anterior era obsoleto; ver lección 65.) <!-- adapter-note: semantica del matcher Read() re-verificada contra Devin CLI 3000.6.14 el 2026-09-07 (hecho adapter-specific, ver leccion 65) -->
 
 14. **Medí la capacidad antes de diseñar alrededor de su ausencia.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
@@ -46,21 +34,11 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 19. **Gatear una defensa fail-loud con permisos restringidos da un falso PASS.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
-20. (contenido movido al preámbulo del archivo — ver encabezado. Número no reutilizable.)
-
 21. **Un claim de arquitectura es una afirmación falsificable, auditala como tal.** Auditoría real (Architect, 2026-07-27) encontró 29 puntos de acoplamiento fuera del adapter, 3 con falso-verde. Mecanizado parcialmente por `hooks/validate_layer2.py` — ver lección 23.
 
 22. **El checkpoint es un puntero al artefacto, nunca un sustituto.** Regla general ya en `brain/agents/neo.md` ('Persist artifacts from read-only specialists'). Caso: la auditoría de la lección 21 se perdió por no persistirse a tiempo.
 
 23. **Si una violación se repite tras documentarla en prosa dos veces, el siguiente paso es un chequeo mecánico.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
-
-24. (texto casi idéntico a la lección 19 — ver ahí, mismo hallazgo. Número no reutilizable.)
-
-25. (consolidada en la lección 17 — ver ahí. Número no reutilizable.)
-
-26. (consolidada en la lección 17 — ver ahí. Número no reutilizable.)
-
-27. (consolidada en la lección 17 — ver ahí. Número no reutilizable.)
 
 28. **Re-corré una prueba de seguridad en el contexto real de uso antes de apoyar un diseño en ella.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
@@ -68,17 +46,11 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 30. **Un nuevo camino de escritura en log/cola debe pasar por el mismo filtro de secretos que el camino existente.** Detalle: `brain/output/research/lesson-30-new-write-path-security-filter.md`.
 
-31. (número retirado — sin registro de por qué en este archivo; confirmado por `git log -p` sobre los 6 commits que tocaron `lessons.md` que esta línea nunca existió, no hay contenido perdido. Ver Fase 0 del plan de remediación en `brain/output/plans/matrix-lessons-remediation-plan.md`.)
-
 32. **Correr una precondición de diseño antes del gate; no basta documentarla como pendiente.** Detalle: `brain/output/architecture/hardline-session-end-notify.md`.
-
-33. (número retirado — mismo caso que la línea 31, confirmado por el mismo forense de Fase 0.)
 
 34. **Un evento de hook que puede forzar un loop del agente necesita re-verificación independiente del gate.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
 35. **Antes de construir un mecanismo nuevo de coordinación, buscá si `adapters/<target>/` ya tiene un lever para eso.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
-
-36. (consolidada en la lección 17 — ver ahí. Número no reutilizable.)
 
 37. **Cuando agregás una entrada a `gitignore_entries`, auditá los proyectos ya bindeados.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
@@ -99,8 +71,6 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 45. **Supabase Auth + Resend: tres gotchas operables encontrados debuggeando un flujo de invite/reset roto, reusables en cualquier proyecto con esta misma pila:** (a) el sender por default de Supabase (sin custom SMTP) tiene un límite duro de 2 mails/hora **compartido por todo el proyecto**; (b) el sender sandbox de Resend (`onboarding@resend.dev`) solo puede mandar mail **a la cuenta dueña de la API key**, nunca a un tercero; (c) el botón "Invite user" del dashboard de Supabase no expone `redirectTo` — para aterrizar en una ruta puntual post-invite se debe usar la Admin API. Ninguno es específico del proyecto; son comportamientos de la plataforma.
 
 46. **Un gate de aceptación debe chequear el sentinel de workspace antes de rechazar por falta de bind.** Detalle: `brain/output/architecture/hardline-matrix-workspace-dispatch.md`.
-
-47. (número retirado; su retiro no quedó documentado al momento del audit 2026-09-04. Número no reutilizable.)
 
 49. **Nunca leas un `.env*` completo; preferí `grep` por clave o chequeos de longitud.** Detalle: `brain/output/research/lesson-49-no-full-env-read.md`.
 
@@ -126,8 +96,10 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 64. **Cuando el caller conoce el `session_id`, pasalo explícito a `post_run_audit` — el marker global (`.current-hook-session`) es racy con sesiones concurrentes y atribuye el report al último `session_start`, no al cierre.** Detalle: `brain/output/eval/session-close-attribution-gate.md`.
 
-65. **El matcher de deny `Read(...)` de Devin CLI es verb-aware y ruta-resoluble: bloquea tools read/grep/glob y exec que LEEN contenido con path literal (`cat`, `ls`), pero NO bloquea predicados (`test -f`), `source` ni indirección `$HOME` (3000.6.14, verificado 2026-09-07).** Reglas operables: (a) para chequear existencia de credenciales usá `test -f` (nunca `ls`/`cat`); (b) para cargar un token usá `source "$HOME/.avature/credentials/<host>.env"` (el matcher no resuelve $HOME); (c) nunca vuelques credenciales a la conversación ni a artefactos (lección 8/49); (d) si un comando lee una ruta denyada con path literal, el hook pre_tool_use_guard bloquea con guía de workaround. Incidente: incident-secret-deny-overblock-tl0090. **Decisión del usuario 2026-09-07: la deny list quedó DESHABILITADA** (`harden --revert` + `secret_deny.enabled: false` en config.yaml) — la semántica de este matcher queda documentada por si se re-habilita una versión angosta.
+65. **El matcher de deny `Read(...)` de Devin CLI es verb-aware y ruta-resoluble: bloquea tools read/grep/glob y exec que LEEN contenido con path literal (`cat`, `ls`), pero NO bloquea predicados (`test -f`), `source` ni indirección `$HOME` (3000.6.14, verificado 2026-09-07).** Reglas operables: (a) para chequear existencia de credenciales usá `test -f` (nunca `ls`/`cat`); (b) para cargar un token usá `source "$HOME/.avature/credentials/<host>.env"` (el matcher no resuelve $HOME); (c) nunca vuelques credenciales a la conversación ni a artefactos (lección 8/49); (d) si un comando lee una ruta denyada con path literal, el hook pre_tool_use_guard bloquea con guía de workaround. Incidente: incident-secret-deny-overblock-tl0090. **Decisión del usuario 2026-09-07: la deny list quedó DESHABILITADA** (`harden --revert` + `secret_deny.enabled: false` en config.yaml) — la semántica de este matcher queda documentada por si se re-habilita una versión angosta. <!-- adapter-note: semantica del matcher Read(...) verificada contra Devin CLI 3000.6.14 el 2026-09-07 (hecho adapter-specific del binding Devin) -->
 
 ## Números retirados 2026-09-07
 
 Registro: 10. (→ brain/output/research/retired-lessons-2026-09.md §10) 16. (→ brain/output/research/retired-lessons-2026-09.md §16) 48. (→ brain/output/eval/lesson-48-responseschema-conditional.md) 52. (→ brain/output/research/lesson-52-github-actions-platform-facts.md) 54. (→ brain/output/research/lesson-54-noninteractive-shell-and-clone-tool-gaps.md) 57. (→ brain/output/research/lesson-57-git-state-drift.md) 63. (→ lección 15 + brain/output/plans/link-bare-events.md)
+
+Compactados: 1. (→ Foundation 3, AGENTS.md §4) 2. (→ Foundation 4, AGENTS.md §4) 3. (→ The Construct, AGENTS.md §9) 7. (→ The Construct, AGENTS.md §9) 9. (→ neo.md scope growth) 12. (→ neo.md promotion rule) 20. (→ preámbulo de lessons.md) 24. (→ lección 19) 25. (→ lección 17) 26. (→ lección 17) 27. (→ lección 17) 31. (retirado — forense Fase 0: matrix-lessons-remediation-plan.md) 33. (idem 31) 36. (→ lección 17) 47. (retirado — retiro no documentado al audit 2026-09-04)

@@ -14,12 +14,18 @@ and reports:
   - the core file (`lessons.md`) growing past a soft threshold, either in
     raw size (~40 KB) or in active (non-placeholder) numbered entries (~60)
     (informational — does NOT flip `ok`; just a nudge to review/split).
+  - the core file (`lessons.md`) growing past the mechanical hard cap
+    (>64 KB raw or >100 active numbered entries) — flips `ok` to False via
+    the `hard_cap` field, reported alongside the advisory `size_warning`.
 
-Severity is intentionally asymmetric: only real duplicates are a hard
-warn-level failure (`ok: false`) because two lessons sharing one identifier
-breaks the "number is a stable id" invariant lessons.md itself declares.
-Gaps and size are advisory since a documented gap or a big-but-organized
-file is not, by itself, broken.
+Severity is intentionally asymmetric: `ok: false` now means one of two
+distinct classes of failure — real duplicates (corrupt: two lessons sharing
+one identifier breaks the "number is a stable id" invariant lessons.md itself
+declares) or the hard cap exceeded (too large: the archive can no longer be
+trusted to stay lean). The hard cap is WARN-only through the boot channel: it
+reports `ok: false` so the master sees it, but it never blocks activation.
+Gaps and the soft size threshold remain advisory since a documented gap or a
+big-but-organized file is not, by itself, broken.
 
 Usage:
   python3 hooks/validate_lessons.py
@@ -36,6 +42,11 @@ HEADER_RE = re.compile(r"^(\d+)\.\s+(.*)$")
 CORE_SIZE_BYTES_THRESHOLD = 40 * 1024
 # Números estables no reutilizables → el conteo solo crece; 60 = margen post-E1 (pointer format) + retiro 2026-09-07 (43 activas).
 CORE_ACTIVE_ENTRIES_THRESHOLD = 60
+# Hard cap mecánico: segunda clase de ok:false ("demasiado grande"). ~4x y ~2.3x
+# sobre el estado actual post-slim (14.6 KB, 43 activas); subirlos exige cadena
+# completa porque lessons son never-small por política.
+CORE_HARD_CAP_BYTES = 64 * 1024
+CORE_HARD_CAP_ACTIVE = 100
 CORE_ENTRY_MAX_LINES = 6
 CORE_ENTRY_MAX_BYTES = 900
 
@@ -135,11 +146,34 @@ def _size_warning(root, rel_path, abs_path, headers):
     )
 
 
+def _hard_cap(rel_path, abs_path, headers):
+    """Mechanical hard cap for the core lessons file (second class of ok:false).
+
+    Returns {"exceeded": bool, "reasons": [...]}. Unlike the advisory
+    size_warning this flips `ok` to False, but it is still WARN-only through
+    the boot channel — it never blocks activation by itself.
+    """
+    if rel_path != os.path.join("brain", "data", "lessons.md"):
+        return {"exceeded": False, "reasons": []}
+    size = os.path.getsize(abs_path)
+    active = sum(1 for h in headers if not h["placeholder"])
+    reasons = []
+    if size > CORE_HARD_CAP_BYTES:
+        reasons.append(f"{size} bytes (> {CORE_HARD_CAP_BYTES} hard cap)")
+    if active > CORE_HARD_CAP_ACTIVE:
+        reasons.append(f"{active} active entries (> {CORE_HARD_CAP_ACTIVE} hard cap)")
+    return {"exceeded": bool(reasons), "reasons": reasons}
+
+
 def find_long_entries(rel_path, headers, text):
     """Advisory list of active core lessons whose body between its header and
-    the next header exceeds CORE_ENTRY_MAX_LINES lines or CORE_ENTRY_MAX_BYTES
-    bytes — the mechanical proxy for "this looks like prose, not a short
-    pointer". Core lessons.md only; does NOT flip ok (spec Q2-D 1.e)."""
+    the next lesson/section header exceeds CORE_ENTRY_MAX_LINES lines or
+    CORE_ENTRY_MAX_BYTES bytes — the mechanical proxy for "this looks like
+    prose, not a short pointer". The body stops at the next numbered lesson
+    header OR the next markdown section header (e.g. the retirement register
+    under `## Números retirados ...`), so a trailing section is never counted
+    as the last lesson's body. Core lessons.md only; does NOT flip ok
+    (spec Q2-D 1.e)."""
     if rel_path != os.path.join("brain", "data", "lessons.md"):
         return []
     lines = text.splitlines()
@@ -148,7 +182,11 @@ def find_long_entries(rel_path, headers, text):
         if h["placeholder"]:
             continue
         start = h["line"]  # 1-based header line
-        next_line = headers[i + 1]["line"] if i + 1 < len(headers) else len(lines) + 1
+        next_line = len(lines) + 1
+        for j in range(start + 1, len(lines) + 1):
+            if HEADER_RE.match(lines[j - 1]) or re.match(r"^#{1,6}\s", lines[j - 1]):
+                next_line = j
+                break
         body = lines[start:next_line - 1]
         body_lines = len(body)
         body_bytes = len("\n".join(body).encode("utf-8"))
@@ -171,6 +209,7 @@ def validate(_data):
     unexplained_gaps = []
     long_entries = []
     size_warning = None
+    hard_cap = {"exceeded": False, "reasons": []}
 
     for rel_path, abs_path in lesson_paths(root):
         files.append(rel_path)
@@ -183,15 +222,19 @@ def validate(_data):
         warning = _size_warning(root, rel_path, abs_path, headers)
         if warning:
             size_warning = warning
+        cap = _hard_cap(rel_path, abs_path, headers)
+        if cap["exceeded"]:
+            hard_cap = cap
 
     return {
         "hook": "validate_lessons",
-        "ok": not duplicates,
+        "ok": not duplicates and not hard_cap["exceeded"],
         "files": files,
         "duplicates": duplicates,
         "unexplained_gaps": unexplained_gaps,
         "long_entries": long_entries,
         "size_warning": size_warning,
+        "hard_cap": hard_cap,
     }
 
 

@@ -4,27 +4,11 @@ Devin CLI is the **only** host Matrix currently runs under; this file documents 
 
 ## Prime directives
 
-1. **Read [`AGENTS.md`](AGENTS.md) first.** It is the document of record for all agent behavior.
-2. **The user talks only to Neo.** Specialists are reached through Neo's routing, never directly.
-3. **Sacred foundation (Zion) is non-negotiable.** See `AGENTS.md` §4.
-4. **State is files.** Managed by `bin/matrix`. Agents never mutate state files by hand.
-5. **Reality decides.** Nothing is "done" without an E2E happy-path check (`validate_phase_close`).
+Prime directives: AGENTS.md §1-§4 + §8 son el contrato; lo único Devin-específico está en este archivo. #1 Read AGENTS.md first.
 
 ## Capability → Devin tool mapping (the Trainman table)
 
-The Devin adapter binds the brain's abstract capabilities:
-
-| Capability | Devin native |
-|---|---|
-| `read` | read file |
-| `edit` | edit / multi-edit |
-| `search` | grep / find |
-| `code-nav` | semantic search (or fallback to search) |
-| `run-subagent` | `run_subagent` |
-| `ask-user` | `ask_user_question` |
-| `run-command` | `run_command` |
-| `browser` | `mcp__chrome-browser__*` (visual QA; no-op if that MCP server isn't configured) |
-| `docs-lookup` | `mcp__context7__*` (version-pinned library/framework docs; Oracle) |
+Puntero: la fuente es `adapters/devin/adapter.yaml` (`capabilities:` + `render:`), transcripto en "The live `adapter.yaml` binding" al final. No se mantiene una tabla manual paralela para no duplicar la fuente.
 
 Every generated `AGENT.md` also gets a Devin-native `allowed-tools:` grant from the same `capabilities:` list via the `allowed_tools:` map in `adapters/devin/adapter.yaml` — see "Least-privilege" below. Neo's `SKILL.md` deliberately has none.
 
@@ -46,6 +30,8 @@ bin/matrix install --target=devin   # 2. deploy them into Devin's global discove
 | Specialists | `~/.config/devin/agents/<name>/AGENT.md` | Subagent profiles available in **every** project |
 
 Global install is deliberate: Neo must be reachable from any repo (Matrix, `clients/`, or unrelated). The installer also removes stale Matrix-owned symlinks left by older ad-hoc wiring (never touches non-Matrix entries).
+
+**Native mapping:** Master → Devin Skill (`SKILL.md`), specialists → Devin Subagents (`AGENT.md`), routed via `run_subagent` (incl. Matrix workspace mode); enforcement → portable `hooks/*.py` via `bin/matrix hooks <name>` or skill pre/post steps.
 
 ## Model policy
 
@@ -72,12 +58,14 @@ No agent file changes — tier assignment is separate from its backing model.
 
 ## External MCP servers this brain assumes
 
-| Server | Scope | Added | Used by |
-|---|---|---|---|
-| `chrome-browser` | user (`~/.config/devin/config.json`) | pre-existing | Smith (`browser` capability) |
-| `context7` | user (`~/.config/devin/config.json`) | 2026-07-15, `devin mcp add context7 --url https://mcp.context7.com/mcp --scope user` | Oracle (`docs-lookup` capability) |
+| Capability | Server | Devin binding | Scope | Added | Used by |
+|---|---|---|---|---|---|
+| `browser` | `chrome-browser` | `mcp__chrome-browser` | user (`~/.config/devin/config.json`) | pre-existing | Smith |
+| `docs-lookup` | `context7` | `mcp__context7` | user (`~/.config/devin/config.json`) | 2026-07-15, `devin mcp add context7 --url https://mcp.context7.com/mcp --scope user` | Oracle |
 
 Both are **user-scope**, so they follow Neo/the specialists globally rather than needing per-project setup. Neither is required for the roster to function — the corresponding capability (`browser`, `docs-lookup`) is simply unavailable if the server isn't configured on a given machine, and the agent should say so rather than fake the check (Foundation 3). context7 works unauthenticated (rate-limited, verified live); running `devin mcp add ...` again prints an OAuth URL for higher rate limits — optional, not required.
+
+**Binding note:** `mcp__<server>__<tool>` es la convención de naming MCP de Devin, no un concepto del capability-map — el binding de otro adapter usaría su propia convención MCP (o no-MCP).
 
 ## Least-privilege `allowed-tools`
 
@@ -93,15 +81,11 @@ Neo's `SKILL.md` deliberately has no `allowed-tools` (`run_subagent`/`ask_user_q
 
 ## Subagents can never ask the user directly
 
-Devin withholds `ask_user_question` from every subagent unconditionally (not configurable via `allowed-tools`/`permissions`); specialists with `ask-user` run as subagents and report the question back to Neo to ask — mechanics: "ask-user withheld" below. `run_subagent`/`read_subagent` are likewise unavailable inside a subagent by default (nesting disabled beyond the root unless `max-nesting` is set; all core specialists are depth-1 children of Neo). **Nesting verified in vivo:** depth-1 subagent with `max-nesting: 2` spawned `subagent_explore`, read via `read_subagent(block=true)` → `brain/output/research/adapter-lessons-detail.md` §14.
+Puntero: mecanismo completo (withholding incondicional + bounce-to-Neo) en "`ask-user` withheld from every subagent (mechanics)" más abajo.
 
 ## Federated ships and `max-nesting`
 
-Ship captains (e.g. `logos-niobe`) get a `max-nesting` value derived by the Trainman from the manifest's `captain`/`crew` graph — mechanism below ("run-subagent in nestable artifacts"). For Logos: `logos-niobe` → `max-nesting: 2` (captain depth 1 from Neo, crew depth 2); `logos-ghost`/`logos-sparks` → no field. This lets Niobe call `run_subagent`/`read_subagent` directly on her crew. Formula verified only for depth 2; depth ≥3 (sub-captains) needs a spike first.
-
-## Mapping to Devin's native structure
-
-Master (Neo) → Devin Skill (`.agents/skills/neo/SKILL.md`); specialists → Devin Subagents (`.agents/agents/<name>/AGENT.md`), routed via `run_subagent` (incl. Matrix workspace mode); enforcement → portable `hooks/*.py` via `bin/matrix hooks <name>` or skill pre/post steps.
+Puntero: mecanismo completo del `max-nesting` (fórmula `depth_from_root + subtree_depth`, ejemplo Logos) en "`run-subagent` in nestable artifacts (the `max-nesting` mechanism)" más abajo.
 
 ## Session hygiene
 
@@ -111,11 +95,11 @@ See [`AGENTS.md`](AGENTS.md) §12.
 
 Reuses `adapters/devin/hooks/session_audit.py` + `experiment.activation_inject` (`lessons.md:35`).
 
-- **Wiring.** `session_audit.py` wired to hooks `SessionStart`/`UserPromptSubmit`/`PostToolUse`/`PostCompaction`/`SessionEnd` in `~/.config/devin/config.json` by `adapters/devin/install-hooks.sh`; `install.sh` runs it last, so `bin/matrix install --target=devin` sets it up anywhere.
-- **Injection.** `experiment.activation_inject: true` renders `brain/data/activation-preamble.tmpl` (same template as `matrix_block_tmp()` in `bin/matrix` and the generated `neo` SKILL.md) as `hookSpecificOutput.additionalContext` on `SessionStart`/`UserPromptSubmit`.
-- **`{{ADAPTER_DOC_PATH}}`** → `DEVIN.md` via `binding.doc_path: "DEVIN.md"` in `adapters/devin/adapter.yaml`; the three surfaces (`matrix_block_tmp()`, `adapters/_build.py`, `session_audit.py`'s `_render_activation_preamble()`) all resolve it to an **absolute path**.
-- **Scope.** `_activation_reinject_scope()` (B1-Option 1) applies to Matrix workspace mode **and** bound external projects (valid `_brain` symlink + managed `AGENTS.local.md`), via `bin/matrix scope` (wrapper over `resolve_scope()`), every `session_start`/`user_prompt_submit`.
-- **Flag state.** `activation_inject` is `true` (was `false` since first built 2026-07-17, never turned on); affects both workspace mode and bound projects.
+- **Wiring.** `session_audit.py` wired to `SessionStart`/`UserPromptSubmit`/`PostToolUse`/`PostCompaction`/`SessionEnd` in `~/.config/devin/config.json` by `adapters/devin/install-hooks.sh` (`install.sh` runs it last, so `install --target=devin` sets it up anywhere).
+- **Injection.** `experiment.activation_inject: true` renders `brain/data/activation-preamble.tmpl` (misma fuente que `matrix_block_tmp()` en `bin/matrix` y el `neo` SKILL.md generado) como `hookSpecificOutput.additionalContext` en `SessionStart`/`UserPromptSubmit`.
+- **`{{ADAPTER_DOC_PATH}}`** → `DEVIN.md` (`binding.doc_path` en `adapters/devin/adapter.yaml`); las tres superficies (`matrix_block_tmp()`, `adapters/_build.py`, `_render_activation_preamble()` de `session_audit.py`) la resuelven a ruta **absoluta**.
+- **Scope.** `_activation_reinject_scope()` (B1-Option 1) aplica en workspace mode y en proyectos bound (`_brain` symlink + `AGENTS.local.md`), cada `session_start`/`user_prompt_submit`, via `bin/matrix scope` (wrapper de `resolve_scope()`).
+- **Flag state.** `activation_inject` es `true` (fue `false` desde 2026-07-17, nunca encendido); afecta workspace mode y bound.
 
 ### `activation_inject_userprompt_full` (throttled since 2026-09-01, Camino 2 Q1-A)
 
@@ -188,17 +172,13 @@ render:
 
 ### `run-subagent` in nestable artifacts (the `max-nesting` mechanism)
 
-Under Devin, `run_subagent`/`read_subagent` are disabled inside a subagent by default. They become available when the subagent profile carries a `max-nesting` frontmatter field whose value is at least the depth of the children it needs to spawn. The Trainman derives this value from the ship manifest's `captain`/`crew` graph (`depth_from_root + subtree_depth`) and injects it **only** into the captain's artifact. Crew leaves do not carry the field, because they have no subordinates to spawn. This is the Devin representation of the abstract `run-subagent` capability; it is not an `allowed-tools` grant.
+Under Devin, `run_subagent`/`read_subagent` are disabled inside a subagent by default (all core specialists are depth-1 children of Neo). They become available when the subagent profile carries a `max-nesting` frontmatter field whose value is at least the depth of the children it needs to spawn. The Trainman derives this value from the ship manifest's `captain`/`crew` graph — `depth_from_root + subtree_depth` — and injects it **only** into the captain's artifact. Crew leaves do not carry the field, because they have no subordinates to spawn. This is the Devin representation of the abstract `run-subagent` capability; it is not an `allowed-tools` grant. For Logos: `logos-niobe` → `max-nesting: 2` (captain depth 1 from Neo, crew depth 2); `logos-ghost`/`logos-sparks` → no field — Niobe calls `run_subagent`/`read_subagent` directly on her crew. **Formula verified only for depth 2; depth ≥3 (sub-captains) needs a spike first.** **Nesting verified in vivo:** depth-1 subagent with `max-nesting: 2` spawned `subagent_explore`, read via `read_subagent(block=true)` → `brain/output/research/adapter-lessons-detail.md` §14.
 
 ### `ask-user` withheld from every subagent (mechanics)
 
 Devin **never** allows a subagent to call `ask_user_question` — it is withheld from every subagent unconditionally, regardless of `allowed-tools` or permissions (platform rule, not configurable). Several specialists (Architect, Morpheus, Oracle, Trinity) declare the `ask-user` capability in the agnostic brain, but under the Devin adapter they run as **subagents** (`.agents/agents/<name>/AGENT.md`), so they cannot exercise it directly.
 
 Resolution for the Devin adapter: a specialist that needs to ask the user stops and returns the question to **Neo** (the master skill — not a subagent, so it retains `ask_user_question`) instead of calling it itself. Neo relays the question, gets the answer, and re-delegates. This is a Devin-adapter concern only; the brain's `ask-user` capability declaration does not change, because another CLI's adapter may not have this restriction.
-
-### MCP tool bindings (concrete)
-
-`browser` resolves to `mcp__chrome-browser` and `docs-lookup` resolves to `mcp__context7` (see "External MCP servers this brain assumes" above for scope/setup). Both are Devin's MCP tool-naming convention (`mcp__<server>__<tool>`), not a capability-map concept — another adapter's docs-lookup/browser binding would use that CLI's own MCP (or non-MCP) tool-naming convention instead.
 
 ### Model policy → Devin frontmatter (mechanics)
 
