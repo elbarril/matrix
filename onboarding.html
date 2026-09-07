@@ -1239,7 +1239,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <ol class="step-list" style="list-style:none;">
     <li class="step is-current" data-step="1"><div class="step-bubble"><span class="who">Usuario</span>pide un refactor grande en un archivo de 2000 líneas.</div></li>
     <li class="step" data-step="2"><div class="step-bubble"><span class="who">Trinity</span>usa <code>code-nav</code> para ir al símbolo exacto en vez de leer el archivo entero (5-10x más barato).</div></li>
-    <li class="step" data-step="3"><div class="step-bubble"><span class="who">Harness</span>el <code>model_policy</code> de Trinity es <code>auto</code> → el adaptador resuelve a <code>adaptive</code>, el router de Cognition elige el modelo según la dificultad real de cada request.</div></li>
+    <li class="step" data-step="3"><div class="step-bubble"><span class="who">Harness</span>el <code>model_policy</code> de Trinity es <code>auto</code> → el adaptador resuelve a <code>deepseek-v4-flash-high</code> (DeepSeek, default compute-priority).</div></li>
   </ol>
   <div class="step-controls">
     <button type="button" class="step-prev" aria-label="Paso anterior del ejemplo">&larr; Paso anterior del ejemplo</button>
@@ -1253,11 +1253,11 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <summary>Ficha técnica: tabla de modelos + least-privilege</summary>
 <table>
   <tr><th>Tier</th><th>Modelo</th><th>Quién lo usa</th><th>Nota</th></tr>
-  <tr><td><code>cheap</code></td><td><code>swe-1-7-medium</code></td><td>Lock, Logos/Sparks</td><td>Gratis hoy durante su beta; apto para trabajo mecánico. Fecha de cierre del preview no re-verificable hoy.</td></tr>
-  <tr><td><code>reasoning</code></td><td><code>sonnet</code> (Claude Sonnet 5)</td><td>Architect, Morpheus, Oracle, Smith</td><td>Cambiado de <code>opus</code> a <code>sonnet</code> el 2026-07-27 (decisión explícita de costo/velocidad). $2/$10 por MTok, introductorio hasta 2026-08-31 (luego $3/$15).</td></tr>
-  <tr><td><code>auto</code></td><td><code>adaptive</code></td><td>Neo, Trinity</td><td>Router por tarea de Cognition. Ventana de precio introductorio ($0.50/$2.00 por MTok) venció el 2026-07-07; tarifa posterior desconocida &mdash; verificar vigencia.</td></tr>
+  <tr><td><code>cheap</code></td><td><code>swe-1-7-medium</code></td><td>Lock, Logos Sparks</td><td>Apto para trabajo mecánico. Preview gratis terminó ~2026-08-08; la única key gratis confirmada hoy es swe-1-6.</td></tr>
+  <tr><td><code>reasoning</code></td><td><code>deepseek-v4-pro-high</code></td><td>Architect, Morpheus</td><td>Planning/architecture/eval. Sonnet → deepseek-v4-pro-high el 2026-09-05 (prioridad de consumo de cómputo).</td></tr>
+  <tr><td><code>auto</code></td><td><code>deepseek-v4-flash-high</code></td><td>Neo, Trinity, Smith, Oracle</td><td>Mixed workloads. Default compute-priority — también el agent.model global de Devin. Key verificada (27 sesiones).</td></tr>
 </table>
-<!-- verified: DEVIN.md §"Model policy", esta sesión -->
+<!-- verified: DEVIN.md §"Model policy", 2026-09-07 tras mapa 2026-09-05 -->
 <p><strong><code>allowed-tools</code> (least-privilege):</strong> el adaptador Devin resuelve las <code>capabilities:</code> de cada agente a un grant nativo <code>allowed-tools:</code>, así un especialista no puede ejercer herramientas que no declaró necesitar. Neo (skill, no subagent) queda sin restringir a propósito.</p>
 <p><strong>Delegación:</strong> artefactos &gt;10 KB van a un sub-agente con word cap. <strong>Checkpoints de resume:</strong> escribir checkpoint antes de truncar contexto. Mapa completo en <code>brain/data/capability-map.md</code>.</p>
 </details>
