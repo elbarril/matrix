@@ -22,6 +22,7 @@
 
 ## Enforcement hooks (Seraph, live)
 
+- `_writer_lane`
 - `audit_event`
 - `detect_orphan_session`
 - `install_integrity_check`
