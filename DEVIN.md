@@ -128,24 +128,32 @@ Current value: **`false`** in `adapters/devin/config.yaml` — full preamble on 
 
 ## Hardening `permissions.deny` for secret stores
 
-`bin/matrix harden --target=devin` reconciles Devin's `permissions.deny` list
-against the declarative `secret_deny` block in `adapters/devin/config.yaml`.
-It is dry-run by default; use `--apply` to write and `--revert` to remove
-Matrix-managed entries. The command only touches `permissions.deny` and uses a
-sidecar (`~/.config/devin/.matrix-managed-deny.json`) so manual deletions are
-respected across runs.
+**Estado actual: DESHABILITADA** (decisión del usuario, 2026-09-07, incidente
+`incident-secret-deny-overblock-tl0090`). `permissions.deny` en
+`~/.config/devin/config.json` está vacío y el bloque `secret_deny` de
+`adapters/devin/config.yaml` está en `enabled: false`. Para re-habilitar:
+restaurar la config declarativa y correr `bin/matrix harden --target=devin --apply`.
 
-The static list covers common credential stores (SSH, AWS, GPG, kubeconfig,
-browser logins, Devin's own local state, etc.). Auto-discovery scans `$HOME`
-up to `max_depth` for hidden directories containing a `credentials/` folder or
-`.env` files, emitting directory-level `Read(...)` patterns only — it never
-writes specific credential filenames into the repo or logs.
+Mecánica (válida si se re-habilita): `bin/matrix harden --target=devin`
+reconcilia `permissions.deny` contra el bloque `secret_deny` de
+`adapters/devin/config.yaml`. Dry-run por defecto; `--apply` escribe, `--revert`
+elimina las entradas Matrix-managed. Solo toca `permissions.deny` y usa el
+sidecar (`~/.config/devin/.matrix-managed-deny.json`) para respetar borrados
+manuales. El `secret_deny.discover` escanea `$HOME` buscando carpetas
+`credentials/` y archivos `.env`, emitiendo patrones `Read(...)` a nivel
+directorio — nunca nombres de archivo de credenciales.
 
-`secret_deny.static`, `class_b_repo_secrets` (patterns `**/.env`, `**/*.pem`, `**/id_rsa`, `**/id_ed25519`; enabled 2026-09-05, D4), `.discover`, and `.exclude` are the configuration keys surfaced by `adapters/devin/config.yaml`.
-
-**Important:** `permissions.deny` with `Read(...)` only blocks the `read_file`
-tool. It does **not** block `grep`/`glob` or `exec` (e.g. `cat`). It is a partial
-mitigation against incidental reads, not a sandbox.
+**Por qué se deshabilitó (semántica verificada 2026-09-07, Devin CLI 3000.6.14):**
+`permissions.deny` con `Read(...)` no solo bloquea el tool `read`: bloquea
+también `grep`/`glob` y los comandos `exec` que LEEN contenido con path literal
+(`cat`, `ls`). NO bloquea predicados (`test -f`), `source`, ni indirección de
+variable (`$HOME`). La lista over-broad (`~/.local/share/devin/**`) rompió la
+lectura de la doc del propio CLI; la sesión en curso conserva el snapshot de
+permisos hasta reiniciar. Workaround sancionado (aplicable si se re-habilita):
+`test -f "$HOME/.avature/credentials/<host>.env"` para existencia,
+`source "$HOME/.avature/credentials/<host>.env"` para cargar el token. El hook
+`pre_tool_use_guard` bloquea con guía los verbos de volcado sobre rutas
+denyadas (inactivo con deny vacía). Ver lección 65.
 
 ## Headless / non-interactive execution (`devin -p`)
 

@@ -10,6 +10,7 @@ Devin contract (overview.mdx "Exit Codes"):
 - exit 2  → block the tool call
 - stdout must be JSON: {"decision": "block" | "allow", "reason": "..."}
 """
+import fnmatch
 import json
 import os
 import subprocess
@@ -21,6 +22,7 @@ for _ in range(3):
 sys.path.insert(0, os.path.join(_candidate, "hooks"))
 import _common as common  # noqa: E402
 import _writer_lane as lane  # noqa: E402
+import pre_exec_guard  # noqa: E402
 
 ROOT = common.resolve_root()
 BIN_MATRIX = os.path.join(ROOT, "bin", "matrix")
@@ -37,6 +39,124 @@ SHARED_SURFACE_PREFIXES = ("hooks/", "bin/", "adapters/")
 PROJECT_LESSON_PREFIX = "brain/data/lessons/"
 
 DEFAULT_LANE_TTL_S = 120
+
+# Secret-deny read guidance (spec 2026-09-07): Devin's Read(...) deny matcher
+# blocks read/grep/glob tools and exec commands that read content with a
+# literal path (`cat`, `ls`), but NOT predicates (`test -f`), `source`, or
+# `$HOME` indirection. This check adds user-visible guidance BEFORE the Layer-1
+# pre_exec_guard. Patterns come from the managed-deny sidecar per event (no
+# cache); any sidecar problem fails open (allow, no error log).
+SECRET_DENY_SIDECAR = os.path.join(
+    os.path.expanduser("~"), ".config", "devin", ".matrix-managed-deny.json"
+)
+SECRET_DENY_READ_VERBS = {"cat", "head", "tail", "less", "more", "grep"}
+SECRET_DENY_READ_VERBS_SPECIAL = {"sed", "ls"}
+
+
+def _secret_deny_managed_patterns():
+    """Return the sidecar's managed[] deny patterns (Read(...) wrapper
+    stripped), or None on any failure — the caller fails open to allow."""
+    if not os.path.isfile(SECRET_DENY_SIDECAR):
+        return None
+    try:
+        with open(SECRET_DENY_SIDECAR, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    managed = data.get("managed")
+    if not isinstance(managed, list):
+        return None
+    patterns = []
+    for p in managed:
+        if not isinstance(p, str):
+            continue
+        p = p.strip()
+        if p.startswith("Read(") and p.endswith(")"):
+            p = p[len("Read("):-1]
+        if p:
+            patterns.append(p)
+    return patterns
+
+
+def _secret_deny_literal_path(token):
+    """True only for tokens that look like a literal path the deny matcher
+    resolves (leading ~, /, ./ or ../). Tokens with indirection characters
+    ($, parens, quotes) fail open — skip them."""
+    if not isinstance(token, str) or not token:
+        return False
+    if any(ch in token for ch in "$()'\"`"):
+        return False
+    return token.startswith(("~", "/", "./", "../"))
+
+
+def _secret_deny_path_matches(pattern_abs, path_abs):
+    """fnmatch on the full absolute path; for directory patterns ending in
+    `**`, also accept the path equal to the pattern without `**` or falling
+    under that directory prefix."""
+    if pattern_abs.endswith("**"):
+        prefix = pattern_abs[:-2]
+        if path_abs == prefix.rstrip("/") or path_abs.startswith(prefix):
+            return True
+    return fnmatch.fnmatchcase(path_abs, pattern_abs)
+
+
+def _secret_deny_rel_hint(path_abs, home, raw_token):
+    try:
+        rel = os.path.relpath(path_abs, home)
+    except ValueError:
+        rel = None
+    if rel is not None and not rel.startswith(".."):
+        return "$HOME/" + rel
+    return raw_token
+
+
+def _secret_deny_read_block(command):
+    """Return (verb, pattern, rel_hint) when `command` reads a secret-deny
+    path with a literal path argument; None otherwise (allow). Fail-open on
+    any parse/sidecar problem — this hook only adds guidance on top of
+    Devin's native matcher."""
+    if not isinstance(command, str) or not command.strip():
+        return None
+    patterns = _secret_deny_managed_patterns()
+    if not patterns:
+        return None
+    tokens = pre_exec_guard._tokenize(command)
+    if tokens is None:
+        return None
+    home = os.path.expanduser("~")
+    for seg in pre_exec_guard._segment(tokens):
+        for i, verb in enumerate(seg):
+            if verb not in SECRET_DENY_READ_VERBS and verb not in SECRET_DENY_READ_VERBS_SPECIAL:
+                continue
+            args = seg[i + 1:]
+            if verb == "sed" and any(
+                a == "-i" or a == "--in-place" or (a.startswith("-i") and a != "-i")
+                for a in args
+            ):
+                # sed -i is a mutation, not a read; pre_exec_guard owns it.
+                continue
+            for arg in args:
+                if not _secret_deny_literal_path(arg):
+                    continue
+                if verb == "ls" and arg.endswith("/"):
+                    # Directory listing is not a file-content read.
+                    continue
+                path_abs = os.path.expanduser(arg)
+                for pattern in patterns:
+                    if _secret_deny_path_matches(os.path.expanduser(pattern), path_abs):
+                        return verb, pattern, _secret_deny_rel_hint(path_abs, home, arg)
+    return None
+
+
+def _secret_deny_read_message(pattern, rel_hint):
+    return (
+        f"comando lee una ruta protegida por secret-deny ({pattern}). "
+        f"Alternativas: test -f \"{rel_hint}\" para existencia, "
+        f"source \"{rel_hint}\" para cargar el token, o el script de la skill. "
+        "Nunca cat/ls sobre rutas de credenciales."
+    )
 
 
 def _read_stdin_json():
@@ -347,8 +467,21 @@ def main():
     if not isinstance(tool_input, dict):
         tool_input = {}
 
-    # Shell tools → pre_exec_guard (unchanged path).
+    # Shell tools → secret-deny read guidance first, then pre_exec_guard
+    # (Layer-1). The secret-deny check only blocks with guidance; everything
+    # else continues the unchanged flow.
     if tool_name in SHELL_TOOLS:
+        command = tool_input.get("command")
+        if isinstance(command, str):
+            block = _secret_deny_read_block(command)
+            if block:
+                verb, pattern, rel_hint = block
+                _block(
+                    _secret_deny_read_message(pattern, rel_hint),
+                    f"secret_deny_read:{verb}:{pattern}",
+                    session_id,
+                    tool_name,
+                )
         _run_shell_guard(tool_name, tool_input, session_id)
 
     # Native edit tools → shared-surface gate + writer lane (Q2-D).

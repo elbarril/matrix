@@ -30,19 +30,15 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 9. (regla ya cubierta por `brain/agents/neo.md` (regla de scope growth) — ver ahí. Número no reutilizable.)
 
-10. **Generated docs over hand-maintained docs.** The Source (`docs/SYSTEM_TRUTH.md`) is generated from the live brain and validated for drift. The old 22 hand-written docs drifted from reality; one generated doc cannot.
-
 11. **No asumas gates de aprobación sin medirlos.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
 12. (regla ya cubierta por `brain/agents/neo.md:101` (promover lessons proactivamente) — ver ahí. Número no reutilizable.)
 
-13. **Tool-allowlist declarativa no restringe; denylist de lectura del CLI sí, pero no bloquea `grep`/`exec`.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
+13. **Tool-allowlist declarativa no restringe; denylist de lectura del CLI sí, pero no bloquea `grep`/`exec`.** Detalle: `brain/output/research/adapter-lessons-detail.md`. (Semántica re-verificada 2026-09-07 en Devin CLI 3000.6.14: `Read(...)` SÍ bloquea `grep`/`glob`/`read` y `exec` `cat`/`ls` con path literal — el claim anterior era obsoleto; ver lección 65.)
 
 14. **Medí la capacidad antes de diseñar alrededor de su ausencia.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
 15. **Una afirmación documental que no tiene código que la genere o gate que la valide se vuelve falsa con un refactor.** Generala desde el estado vivo o agregá una validación de drift.
-
-16. **Con `set -euo pipefail`, capturar un comando que puede fallar requiere `|| rc=$?`.** Sin esa captura, el shell sale antes del camino de error; para gates de fase, eso convierte un BLOCK en evidencia no persistida.
 
 17. **Re-verificá claims de subagentes/fixtures vos mismo antes de confiar.** Detalle: `brain/output/research/lesson-17-self-report-not-evidence.md`.
 
@@ -106,25 +102,17 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 47. (número retirado; su retiro no quedó documentado al momento del audit 2026-09-04. Número no reutilizable.)
 
-48. **El `responseSchema` de un LLM no puede forzar reglas condicionales; validalas en código.** Detalle: `brain/output/eval/lesson-48-responseschema-conditional.md`.
-
 49. **Nunca leas un `.env*` completo; preferí `grep` por clave o chequeos de longitud.** Detalle: `brain/output/research/lesson-49-no-full-env-read.md`.
 
 51. **Retirar un especialista del roster no limpia por sí solo lo instalado — el instalador del adapter vigente copia/actualiza pero no poda huérfanos, y conviene buscar también instalaciones legacy fuera del path activo.** Reglas operables: (a) después de retirar un especialista, borrar a mano su carpeta instalada; (b) candidato a mecanizar: que el instalador compare instalado vs. generado y poda carpetas de specialists ya no en el roster; (c) ante limpieza, buscar también árboles legacy en otras convenciones de wiring. Detalle completo (Keymaker, `.agents/` viejo, paths exactos): `brain/output/research/adapter-lessons-detail.md` §51.
 
-52. **Verificá `schedule:` y branch protection de GitHub contra el tier real de la cuenta.** Detalle: `brain/output/research/lesson-52-github-actions-platform-facts.md`.
-
 53. **No asumas forma uniforme ni lista exhaustiva de call-sites sin `grep`.** Detalle: `brain/output/architecture/install-integrity-guard-and-hardline-secrets.md`.
-
-54. **Un comando `exec` de un solo tiro corre no-interactivo y no fuente `~/.bashrc`/`~/.bash_aliases`, así que una función/env var del usuario puede parecer inexistente sin que el dotfile esté mal.** Reglas operables: (a) antes de concluir que una herramienta/función/variable "no existe" en un shell no-interactivo, re-intentar con `bash -ic '<comando>'` (o el equivalente interactivo del usuario); (b) cuando existe una herramienta sancionada por el equipo para una tarea, usarla y reportar el bug real en vez de reimplementar a mano. Caso completo (`sandisk`, `PATHTOREPOS`, `basePortalCloner`, bug modo `-d`): `brain/output/research/lesson-54-noninteractive-shell-and-clone-tool-gaps.md`.
 
 55. **La ausencia de un tool MCP adapter-native en un subagente pese a estar declarado en sus permisos no fue un caso aislado: se repitió con dos bindings de browser distintos.** Correr en foreground no garantiza que un MCP declarado esté disponible para un subagente; cuando se necesite certeza, pedir al subagente que lo declare explícitamente al principio y, si falta, verificar desde la sesión raíz. Nombres exactos de tools/permisos/evidencia: `brain/output/research/adapter-lessons-detail.md` §55.
 
 50. **`post_run_audit` debe atrapar gaps de eval-artifact en remediaciones de Smith.** — enforced by `hooks/post_run_audit.py`.
 
 56. **Un `file_containment_violated` de `post_run_audit` sobre la remediación de Smith puede ser falso positivo del gap de atribución conocido (subagentes internos no llevan tag de perfil por evento de edición) — no lo aceptes ni lo rechaces sin cruzarlo contra el log de auditoría.** Regla operable: ante un `file_containment_violated` en una sesión con múltiples despachos intercalados de Trinity/Smith, cruzá rutas+timestamp de los eventos de edición contra los timestamps de cada despacho de subagente antes de tratar el hallazgo como violación real o ruido. Detalle completo (paths, timestamps, tool nativo): `brain/output/research/adapter-lessons-detail.md` §56.
-
-57. **Auditá el drift de estado de git (`tracked_leak`) en proyectos bindeados.** Detalle: `brain/output/research/lesson-57-git-state-drift.md`.
 
 58. **Para settings de instancias dev obdbqa, ir a `/_managerLogin` con cuenta avasso.** Detalle: `brain/output/research/lesson-58-obdbqa-manager-login.md`.
 
@@ -136,4 +124,10 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 62. **Un perfil "read-only" con `exec` en allowed-tools puede mutar archivos vía shell — el grant de tools no reemplaza la disciplina, y un brief de "solo lectura" no es un control.** Caso: en `cronicas`, la Oracle (grant: read, grep, glob, exec, mcp__context7 — sin `edit`/`write`) editó `informe/13-bibliografia.md` pese a un brief explícito de solo lectura, escribiendo vía shell (exec). El contenido pasó por gate de Smith (BLOCK → fix → PASS), así que el daño fue de proceso, no de contenido — pero el patrón es generalizable: cualquier subagente con `exec` puede mutar el filesystem. Regla operable: (a) cuando un rol requiere read-only real, quitar `exec` del grant o auditar post-hoc; (b) el brief no es control — si el dato crítico es "que no escriba", el control tiene que ser mecánico. Candidato a chequeo mecánico: hook que detecte mutaciones de archivos de proyecto por subagentes read-only, o quitar `exec` de los grants de Oracle. Incidente: `incident:writer-collision` 2026-09-05. <!-- adapter-note: contiene mcp__context7 (grant del perfil Oracle del adapter Devin); caso cronicas 2026-09-05 -->
 
-63. **El allowlist de eventos bare del ledger vive en dos lugares: `AGENTS.md` §7 (contrato) y `bin/lib/link.sh` (case `route|decision|handoff`).** Si se agrega o retira un evento bare, actualizar ambos — un evento documentado que el validador rechaza rompe la primera corrida de cualquier sesión con "[MATRIX] Invalid event". Fix 2026-09-07: plan `brain/output/plans/link-bare-events.md` + gate `brain/output/eval/link-bare-events-gate.md` (PASS, 7/7 E2E). Clase general (claim documental sin validador): lección 15.
+64. **Cuando el caller conoce el `session_id`, pasalo explícito a `post_run_audit` — el marker global (`.current-hook-session`) es racy con sesiones concurrentes y atribuye el report al último `session_start`, no al cierre.** Detalle: `brain/output/eval/session-close-attribution-gate.md`.
+
+65. **El matcher de deny `Read(...)` de Devin CLI es verb-aware y ruta-resoluble: bloquea tools read/grep/glob y exec que LEEN contenido con path literal (`cat`, `ls`), pero NO bloquea predicados (`test -f`), `source` ni indirección `$HOME` (3000.6.14, verificado 2026-09-07).** Reglas operables: (a) para chequear existencia de credenciales usá `test -f` (nunca `ls`/`cat`); (b) para cargar un token usá `source "$HOME/.avature/credentials/<host>.env"` (el matcher no resuelve $HOME); (c) nunca vuelques credenciales a la conversación ni a artefactos (lección 8/49); (d) si un comando lee una ruta denyada con path literal, el hook pre_tool_use_guard bloquea con guía de workaround. Incidente: incident-secret-deny-overblock-tl0090. **Decisión del usuario 2026-09-07: la deny list quedó DESHABILITADA** (`harden --revert` + `secret_deny.enabled: false` en config.yaml) — la semántica de este matcher queda documentada por si se re-habilita una versión angosta.
+
+## Números retirados 2026-09-07
+
+Registro: 10. (→ brain/output/research/retired-lessons-2026-09.md §10) 16. (→ brain/output/research/retired-lessons-2026-09.md §16) 48. (→ brain/output/eval/lesson-48-responseschema-conditional.md) 52. (→ brain/output/research/lesson-52-github-actions-platform-facts.md) 54. (→ brain/output/research/lesson-54-noninteractive-shell-and-clone-tool-gaps.md) 57. (→ brain/output/research/lesson-57-git-state-drift.md) 63. (→ lección 15 + brain/output/plans/link-bare-events.md)

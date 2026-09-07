@@ -13,35 +13,24 @@ experiment:
   activation_inject_userprompt_full: false
 
 secret_deny:
-  static:
-    - "~/.ssh/**"
-    - "~/.aws/**"
-    - "~/.gnupg/**"
-    - "~/.git-credentials"
-    - "~/.netrc"
-    - "~/.npmrc"
-    - "~/.pypirc"
-    - "~/.docker/**"
-    - "~/.kube/config"
-    - "~/.config/gh/hosts.yml"
-    - "~/.config/gcloud/credentials.db"
-    - "~/.local/share/devin/**"
-    - "~/.local/share/keyrings/**"
-    - "~/.mozilla/firefox/**/logins.json"
-    - "~/.config/google-chrome/**/Login Data"
+  # DESHABILITADA por decisión del usuario el 2026-09-07 (incidente
+  # incident-secret-deny-overblock-tl0090). Motivo: la deny list Read(...)
+  # del CLI bloquea también los tools read/grep/glob y los comandos exec que
+  # leen contenido con path literal (cat/ls) — causó bloqueos sin workaround
+  # (doc del propio CLI, chequeos de existencia de credenciales) y la sesión
+  # en curso conserva el snapshot de permisos hasta reiniciar.
+  # Ya se aplicó `bin/matrix harden --target=devin --revert` (config.json
+  # permissions.deny = []). Para re-habilitar: restaurar esta config y correr
+  # `bin/matrix harden --target=devin --apply`.
+  # Semántica del matcher (verificada 2026-09-07, Devin CLI 3000.6.14):
+  # Read(<glob>) bloquea read/grep/glob + exec con path literal (cat/ls);
+  # NO bloquea test -f, source, ni indirección $HOME. Ver lección 65.
+  enabled: false
+  static: []
   class_b_repo_secrets:
-    # 2026-09-05: enabled per remediation decision U(i) (D4 flip inmediato).
-    # Cubre la superficie `read` del incidente 2 de la lección 49; la superficie
-    # `exec sed` del incidente 1 sigue abierta (grep/glob/exec cat no bloqueados).
-    enabled: true
-    patterns:
-      - "**/.env"
-      - "**/.env.local"
-      - "**/.env.production"
-      - "**/*.pem"
-      - "**/id_rsa"
-      - "**/id_ed25519"
+    enabled: false
+    patterns: []
   discover:
-    enabled: true
+    enabled: false
     max_depth: 3
   exclude: []

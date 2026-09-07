@@ -18,9 +18,11 @@ ROOT = os.environ.get("MATRIX_ROOT") or os.path.dirname(
 )
 
 COVERAGE_NOTE = (
-    "Nota de cobertura: este control bloquea el tool `read` sobre las rutas listadas.\n"
-    "NO bloquea `grep`/`glob` (pueden devolver contenido de esas rutas igual) ni `exec`\n"
-    "(ej. `cat`). Es una mitigación parcial contra lectura incidental, no un sandbox."
+    "Nota de cobertura (verificado 2026-09-07, Devin CLI 3000.6.14): los patrones Read(...) bloquean\n"
+    "los tools `read`/`grep`/`glob` sobre esas rutas y comandos `exec` que LEEN contenido con path\n"
+    "literal (p. ej. `cat`, `ls`). NO bloquean predicados (`test -f`), `source`, ni indirección de\n"
+    "variable (`$HOME`). Es una mitigación contra lectura incidental, no un sandbox — los scripts\n"
+    "que leen credenciales internamente no pasan por el matcher."
 )
 
 KNOWN_SCHEMAS = {"permissions_deny_v1"}

@@ -12,7 +12,7 @@ and reports:
     does NOT flip `ok`; a documented placeholder for a retired/moved number
     is intentional per `lessons.md`'s own header note).
   - the core file (`lessons.md`) growing past a soft threshold, either in
-    raw size (~40 KB) or in active (non-placeholder) numbered entries (~30)
+    raw size (~40 KB) or in active (non-placeholder) numbered entries (~60)
     (informational — does NOT flip `ok`; just a nudge to review/split).
 
 Severity is intentionally asymmetric: only real duplicates are a hard
@@ -34,7 +34,8 @@ from _common import emit, read_input, resolve_root
 
 HEADER_RE = re.compile(r"^(\d+)\.\s+(.*)$")
 CORE_SIZE_BYTES_THRESHOLD = 40 * 1024
-CORE_ACTIVE_ENTRIES_THRESHOLD = 30
+# Números estables no reutilizables → el conteo solo crece; 60 = margen post-E1 (pointer format) + retiro 2026-09-07 (43 activas).
+CORE_ACTIVE_ENTRIES_THRESHOLD = 60
 CORE_ENTRY_MAX_LINES = 6
 CORE_ENTRY_MAX_BYTES = 900
 

@@ -74,12 +74,12 @@ def _derive_steps(entries):
 SESSION_REQUIRED_STEPS = ["session_start", "pre_activation_check", "session_end"]
 
 
-def _run_post_run_audit(root, steps, required=None):
+def _run_post_run_audit(root, session_id, steps, required=None):
     """Invoke post_run_audit via bin/matrix with the derived steps."""
     if required is None:
         required = list(SESSION_REQUIRED_STEPS)
     bin_matrix = os.path.join(root, "bin", "matrix")
-    payload = {"agent": "neo", "steps": steps, "required": required}
+    payload = {"agent": "neo", "session_id": session_id, "steps": steps, "required": required}
     env = {**os.environ, "MATRIX_ROOT": root}
     proc = subprocess.run(
         [bin_matrix, "hooks", "post_run_audit", json.dumps(payload)],
@@ -146,7 +146,7 @@ def main():
         required.append("phase_close")
     phase_close_missing = has_mutating_work and "phase_close" not in steps
 
-    post_report = _run_post_run_audit(root, steps, required)
+    post_report = _run_post_run_audit(root, session_id, steps, required)
     validate_routing_signal_report = _run_validate_routing_signal_check(root, session_id)
 
     result = {
