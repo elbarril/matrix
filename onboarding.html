@@ -861,7 +861,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <div class="grid">
   <div class="card">
     <h3><span class="tag tag-infra">HOOKS</span> Seraph</h3>
-    <p>Enforcement portable: 14 hooks en Python con contrato JSON in/out. <!-- verified: hooks/*.py listing (14 archivos .py excluyendo _common.py), esta sesión --> Detectan bypass y validan compliance. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista canónica.</p>
+    <p>Enforcement portable: 16 hooks en Python con contrato JSON in/out. <!-- verified: hooks/*.py listing (16 archivos .py excluyendo _common.py), esta sesión --> Detectan bypass y validan compliance. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista canónica.</p>
   </div>
   <div class="card">
     <h3><span class="tag tag-infra">LEDGER</span> Link</h3>
@@ -985,7 +985,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <table>
     <tr><th>Comando</th><th>Que hace</th></tr>
     <tr><td><code>matrix phase close '&lt;json&gt;'</code></td><td>Corre el gate <code>validate_phase_close</code> y persiste el veredicto PASS o BLOCK en el ledger Link</td></tr>
-    <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista completa de los 14 hooks</td></tr>
+    <tr><td><code>matrix hooks &lt;name&gt; [json]</code></td><td>Corre un hook de Seraph. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista completa de los 16 hooks</td></tr>
     <tr><td><code>matrix build --target=&lt;cli&gt;</code></td><td>Trainman: genera artefactos nativos para un CLI (hoy solo <code>devin</code>)</td></tr>
     <tr><td><code>matrix install --target=&lt;cli&gt;</code></td><td>Trainman: despliega los artefactos generados al discovery path del CLI (global)</td></tr>
     <tr><td><code>matrix harden --target=&lt;cli&gt; [--apply] [--revert]</code></td><td>Reconcilia <code>permissions.deny</code> contra <code>secret_deny</code> (dry-run por default)</td></tr>
@@ -1071,7 +1071,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <div class="channel-head">
 <div class="channel-kicker">Canal 6 / 12 (tour)</div>
 <h2>Enforcement (Seraph)</h2>
-<div class="level1"><p>Hooks portables en <code>hooks/</code>, Python con contrato JSON in/out. Se corren vía <code>bin/matrix hooks &lt;nombre&gt;</code>. Son 14 hooks en total (ver ficha técnica).</p></div>
+<div class="level1"><p>Hooks portables en <code>hooks/</code>, Python con contrato JSON in/out. Se corren vía <code>bin/matrix hooks &lt;nombre&gt;</code>. Son 16 hooks en total (ver ficha técnica).</p></div>
 <div class="level2" data-steps="3">
   <ol class="step-list" style="list-style:none;">
     <li class="step is-current" data-step="1"><div class="step-bubble"><span class="who">Usuario</span>pide cerrar una fase de trabajo.</div></li>
@@ -1088,7 +1088,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 
 </div><!-- /.channel-head -->
 <details class="level3" id="l3-enforcement">
-  <summary>Tabla de hooks (14 hooks)</summary>
+  <summary>Tabla de hooks (16 hooks)</summary>
   <!-- verified: ls hooks/*.py (excluyendo _common.py), esta sesión -->
   <table>
     <tr><th>Hook</th><th>Que hace</th><th>Cuando</th></tr>
@@ -1153,9 +1153,19 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
       <td>Mantenimiento</td>
     </tr>
     <tr>
+      <td><code>surface_budget</code></td>
+      <td>Presupuesto de tamaño (warn/fail) para la superficie documental compartida: <code>AGENTS.md</code>, <code>DEVIN.md</code>, <code>brain/agents/neo.md</code>. WARN-only, nunca bloquea; <code>ok:false</code> solo si excede <code>fail</code></td>
+      <td>Boot WARN / mantenimiento</td>
+    </tr>
+    <tr>
       <td><code>validate_routing_signal</code></td>
       <td>Valida que las señales de ruteo entre agentes tengan la forma esperada</td>
       <td>Mantenimiento</td>
+    </tr>
+    <tr>
+      <td><code>_writer_lane</code></td>
+      <td>Lane per-file de escritor sobre la superficie compartida (AGENTS.md, DEVIN.md, brain/agents/, lessons, hooks/, bin/, adapters/) &mdash; un lane tomado bloquea el segundo escritor</td>
+      <td>Antes/después de cada edit de la superficie</td>
     </tr>
     <tr>
       <td><code>validate_ship</code></td>
@@ -1212,7 +1222,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 ./bin/matrix hooks the_source '{"check":true}'
 </code></pre>
 <div class="warn">
-  <p><strong>Drift histórico, resuelto (D5, esta sesión regeneró <code>docs/SYSTEM_TRUTH.md</code>):</strong> antes de D5, <code>docs/SYSTEM_TRUTH.md</code> listaba menos hooks que el árbol vivo (<code>hooks/*.py</code>, excluyendo <code>_common.py</code>); hoy ambos coinciden en <strong>14</strong> (<code>bin/matrix hooks the_source '{"check":true}'</code> reporta <code>in_sync:true</code>). <!-- verified: hooks/*.py listing + bin/matrix hooks the_source check, esta sesión --> Este onboarding usa 14 en todo su cuerpo.</p>
+  <p><strong>Drift histórico, resuelto (D5, esta sesión regeneró <code>docs/SYSTEM_TRUTH.md</code>):</strong> antes de D5, <code>docs/SYSTEM_TRUTH.md</code> listaba menos hooks que el árbol vivo (<code>hooks/*.py</code>, excluyendo <code>_common.py</code>); hoy ambos coinciden en <strong>16</strong> (<code>bin/matrix hooks the_source '{"check":true}'</code> reporta <code>in_sync:true</code>). <!-- verified: hooks/*.py listing + bin/matrix hooks the_source check, esta sesión --> Este onboarding usa 16 en todo su cuerpo.</p>
 </div>
 </details>
 </div>
@@ -1466,19 +1476,22 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 ├── DEVIN.md                         # notas del adaptador Devin
 ├── .registry.json                   # todos los proyectos conocidos
 ├── bin/matrix                       # CLI orquestador (Layer 1)
-├── hooks/                           # Seraph &mdash; enforcement portable (14 hooks)
+├── hooks/                           # Seraph &mdash; enforcement portable (16 hooks)
 │   ├── _common.py
-│   ├── pre_activation_check.py
-│   ├── validate_phase_close.py
-│   ├── post_run_audit.py
-│   ├── the_source.py
+│   ├── _writer_lane.py
 │   ├── audit_event.py
-│   ├── session_close.py
 │   ├── detect_orphan_session.py
 │   ├── install_integrity_check.py
+│   ├── post_run_audit.py
+│   ├── pre_activation_check.py
 │   ├── pre_exec_guard.py
+│   ├── precheck_phase_close.py
+│   ├── session_close.py
+│   ├── surface_budget.py
+│   ├── the_source.py
 │   ├── validate_layer2.py
 │   ├── validate_lessons.py
+│   ├── validate_phase_close.py
 │   ├── validate_routing_signal.py
 │   └── validate_ship.py
 ├── adapters/                        # Trainman &mdash; Layer 3

@@ -7,8 +7,8 @@ Builds a throwaway Matrix fixture (never the real repo) and runs six cases:
 3. architect.md missing:        pre_activation_check -> ok:false, roster_intact
 4. audit_event ok:false + session close -> hook-audit.jsonl contains the new keys,
    session_close does NOT derive pre_activation_check, post_run_audit compliant:false
-5. healthy fixture (built/installed): ok:true, boot_warn.warns present (non-empty)
-6. BOOT_WARN_BUDGET_S=0:       ok:true, boot_warn.warns empty, skipped lists all six tokens
+5. healthy fixture (built/installed): ok:true, boot_warn.warns empty (dictamen Architect punto 4)
+6. BOOT_WARN_BUDGET_S=0:       ok:true, boot_warn.warns empty, skipped lists all seven tokens
 """
 import importlib.util
 import json
@@ -164,7 +164,7 @@ def case_healthy_fixture():
         result = json_or_die(proc, "case5")
         assert proc.returncode == 0, f"case5 expected exit 0, got {proc.returncode}"
         assert result.get("ok") is True, f"case5 expected ok:true: {result}"
-        assert result.get("boot_warn", {}).get("warns"), f"case5 expected non-empty boot_warn.warns: {result}"
+        assert result.get("boot_warn", {}).get("warns") == [], f"case5 expected empty boot_warn.warns: {result}"
         print("D9-5 PASS")
 
 
@@ -178,9 +178,9 @@ def case_boot_warn_disabled():
         assert result.get("ok") is True, f"case6 expected ok:true: {result}"
         assert result.get("boot_warn", {}).get("warns") == [], f"case6 expected empty warns: {result}"
         assert sorted(result.get("boot_warn", {}).get("skipped", [])) == sorted([
-            "validate_lessons", "model_drift", "ttl_expired",
+            "surface_budget", "validate_lessons", "model_drift", "ttl_expired",
             "validate_layer2", "the_source", "snapshot_due",
-        ]), f"case6 expected all 6 tokens skipped: {result}"
+        ]), f"case6 expected all 7 tokens skipped: {result}"
         print("D9-6 PASS")
 
 

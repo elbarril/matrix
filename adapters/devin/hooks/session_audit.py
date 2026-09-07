@@ -751,6 +751,7 @@ def _boot_warn_tokens(payload):
         "the_source",
         "validate_layer2",
         "validate_lessons",
+        "surface_budget",
         "model_drift",
         "ttl_expired",
         "snapshot_due",
@@ -767,6 +768,7 @@ def _render_boot_warn_text(payload):
         return ""
     mapping = {
         "validate_lessons": ("lessons archive needs review", "run `bin/matrix hooks validate_lessons`"),
+        "surface_budget": ("a shared-surface doc is over its size budget", "slim AGENTS.md/DEVIN.md/neo.md"),
         "model_drift": ("generated-vs-installed model drift", "run `bin/matrix build --target=devin && bin/matrix install --target=devin`"),
         "ttl_expired": ("a TTL override has expired", "run `bin/matrix link ttl:<name> <subject> until=<new-date>`"),
         "validate_layer2": ("Layer-2 CLI-neutrality drift", "run `bin/matrix hooks validate_layer2`"),
@@ -774,7 +776,7 @@ def _render_boot_warn_text(payload):
         "snapshot_due": ("metrics snapshot is due", "run the harness-health-report extractor, then `bin/matrix link metrics:snapshot matrix path=<output>`"),
     }
     lines = []
-    for token in ["validate_lessons", "model_drift", "ttl_expired", "validate_layer2", "the_source", "snapshot_due"]:
+    for token in ["surface_budget", "validate_lessons", "model_drift", "ttl_expired", "validate_layer2", "the_source", "snapshot_due"]:
         if token not in details:
             continue
         label, fix = mapping.get(token, (token, ""))

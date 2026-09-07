@@ -117,6 +117,7 @@ BOOT_WARN_IDS = {
     "the_source",
     "validate_layer2",
     "validate_lessons",
+    "surface_budget",
     "model_drift",
     "ttl_expired",
     "snapshot_due",

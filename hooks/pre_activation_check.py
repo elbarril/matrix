@@ -49,6 +49,11 @@ except Exception:
     validate_lessons = None
 
 try:
+    from surface_budget import validate as validate_surface_budget
+except Exception:
+    validate_surface_budget = None
+
+try:
     import the_source as the_source_mod
 except Exception:
     the_source_mod = None
@@ -105,6 +110,7 @@ def _brain_symlink_error(project_path, brain_dir, brain_real):
 
 
 BOOT_WARN_ORDER = [
+    "surface_budget",
     "validate_lessons",
     "model_drift",
     "ttl_expired",
@@ -150,7 +156,27 @@ def _boot_warn(root, target="devin"):
     events = ledger_tail_events(root)
     now = time.time()
 
-    # 1. validate_lessons (cheap)
+    # 1. surface_budget (cheap — 3 getsize baratos; nunca alimenta el ok global)
+    if hit_deadline():
+        skipped.append("surface_budget")
+    else:
+        try:
+            if validate_surface_budget:
+                v = validate_surface_budget({})
+                warned = [s.get("name") for s in v.get("surfaces", []) if s.get("status") != "ok"]
+                if not v.get("ok") or warned:
+                    add_warn(
+                        "surface_budget",
+                        {
+                            "ok": v.get("ok"),
+                            "warned": warned,
+                            "fix": "slim AGENTS.md/DEVIN.md/neo.md",
+                        },
+                    )
+        except Exception as exc:
+            add_warn("surface_budget", {"error": str(exc), "fix": "slim AGENTS.md/DEVIN.md/neo.md"})
+
+    # 2. validate_lessons (cheap)
     if hit_deadline():
         skipped.append("validate_lessons")
     else:
@@ -170,7 +196,7 @@ def _boot_warn(root, target="devin"):
         except Exception as exc:
             add_warn("validate_lessons", {"error": str(exc), "fix": "bin/matrix hooks validate_lessons"})
 
-    # 2. model_drift
+    # 3. model_drift
     if hit_deadline():
         skipped.append("model_drift")
     else:
@@ -198,7 +224,7 @@ def _boot_warn(root, target="devin"):
         except Exception as exc:
             add_warn("model_drift", {"error": str(exc), "fix": "bin/matrix build --target=devin && bin/matrix install --target=devin"})
 
-    # 3. ttl_expired
+    # 4. ttl_expired
     if hit_deadline():
         skipped.append("ttl_expired")
     else:
@@ -218,7 +244,7 @@ def _boot_warn(root, target="devin"):
         except Exception as exc:
             add_warn("ttl_expired", {"error": str(exc), "fix": "bin/matrix link ttl:<name> <subject> until=<new-date>"})
 
-    # 4. validate_layer2
+    # 5. validate_layer2
     if hit_deadline():
         skipped.append("validate_layer2")
     else:
@@ -236,7 +262,7 @@ def _boot_warn(root, target="devin"):
         except Exception as exc:
             add_warn("validate_layer2", {"error": str(exc), "fix": "bin/matrix hooks validate_layer2"})
 
-    # 5. the_source
+    # 6. the_source
     if hit_deadline():
         skipped.append("the_source")
     else:
@@ -254,7 +280,7 @@ def _boot_warn(root, target="devin"):
         except Exception as exc:
             add_warn("the_source", {"error": str(exc), "fix": "bin/matrix hooks the_source"})
 
-    # 6. snapshot_due
+    # 7. snapshot_due
     if hit_deadline():
         skipped.append("snapshot_due")
     else:

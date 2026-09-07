@@ -115,8 +115,11 @@ Current value: **`false`** in `adapters/devin/config.yaml` — full preamble on 
 **Estado actual: DESHABILITADA** (decisión del usuario, 2026-09-07, incidente
 `incident-secret-deny-overblock-tl0090`). `permissions.deny` en
 `~/.config/devin/config.json` está vacío y el bloque `secret_deny` de
-`adapters/devin/config.yaml` está en `enabled: false`. Para re-habilitar:
-restaurar la config declarativa y correr `bin/matrix harden --target=devin --apply`.
+`adapters/devin/config.yaml` está en `enabled: false`. Estado de los tres flags
+que exige el chequeo `config_flags_missing` de `the_source` (todos en su estado
+post-deny-list-off 2026-09-07): `class_b_repo_secrets` (`enabled: false`,
+`patterns: []`), `static: []` y `exclude: []`. Para re-habilitar: restaurar la
+config declarativa y correr `bin/matrix harden --target=devin --apply`.
 
 Mecánica (válida si se re-habilita): `bin/matrix harden --target=devin`
 reconcilia `permissions.deny` contra el bloque `secret_deny` de
@@ -186,8 +189,9 @@ The Trainman resolves each agent's `model_policy` tier (`cheap`/`reasoning`/`aut
 
 ## Boot WARN channel (D-boot)
 
-`pre_activation_check` now runs a `boot_warn` channel with six information-only emitters (`the_source`, `validate_layer2`, `validate_lessons`, `model_drift`, `ttl_expired`, `snapshot_due`). The channel never blocks activation and never writes to `errors`/`checks`; it populates `boot_warn.warns` in the JSON and the `additionalContext` reinjected on `session_start` when the session is in scope.
+`pre_activation_check` now runs a `boot_warn` channel with seven information-only emitters (`surface_budget`, `the_source`, `validate_layer2`, `validate_lessons`, `model_drift`, `ttl_expired`, `snapshot_due`). The channel never blocks activation and never writes to `errors`/`checks`; it populates `boot_warn.warns` in the JSON and the `additionalContext` reinjected on `session_start` when the session is in scope.
 
+- `surface_budget` token: size budget for the shared document surface (`AGENTS.md` warn 15,500 B / fail 16,200 B; `DEVIN.md` warn 20 KiB / fail 24 KiB; `brain/agents/neo.md` warn 18 KiB / fail 22 KiB). `ok:false` only if a surface exceeds its `fail`; a `warn` state never flips `ok` and never feeds the hook's global `ok`. Fix: slim the offending doc. Raising a threshold is the full-chain case, not a routine fix.
 - `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`: `0`/`false`/`off` disables the channel.
 - `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`: internal deadline, default `6.0`.
 - `PRE_ACTIVATION_TIMEOUT_S`: external `session_audit` timeout raised to `20` s; an internal `pre_activation_check_status` of `timeout` is now distinguishable from `ok`/`failed`/`error`.

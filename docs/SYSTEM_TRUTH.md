@@ -31,6 +31,7 @@
 - `pre_exec_guard`
 - `precheck_phase_close`
 - `session_close`
+- `surface_budget`
 - `the_source`
 - `validate_layer2`
 - `validate_lessons`
