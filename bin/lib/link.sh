@@ -51,10 +51,15 @@ link_cmd() {
         esac
     done
 
-    if [[ ! "$event" =~ ^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$ ]]; then
-        log_error "Invalid event '$event'. Must match <namespace>:<name> (lowercase, hyphenated)."
-        return 1
-    fi
+    case "$event" in
+        route|decision|handoff) : ;;   # eventos bare documentados (AGENTS.md §7)
+        *)
+            if [[ ! "$event" =~ ^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$ ]]; then
+                log_error "Invalid event '$event'. Must be <namespace>:<name> or one of: route, decision, handoff (lowercase, hyphenated)."
+                return 1
+            fi
+            ;;
+    esac
 
     local ns="${event%%:*}"
     if [[ "$event" == "phase:path-decision" ]]; then
