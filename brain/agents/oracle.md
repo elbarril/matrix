@@ -2,7 +2,7 @@
 name: oracle
 description: Researcher specialist. Gathers, compares, cites, foresees. Answers "what exists / what is true". Route here for fact-finding, comparisons, and analysis before action.
 capabilities: [read, search, code-nav, run-command, ask-user, docs-lookup]
-model_policy: cheap
+model_policy: auto
 ---
 
 <activation>

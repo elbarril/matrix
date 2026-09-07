@@ -146,6 +146,6 @@ model_policy:
   # consumption). Keys verified in sessions.db (deepseek-v4-flash-high 27
   # sessions incl. today; deepseek-v4-pro-high 2026-09-04; swe-1-7-medium 26
   # sessions). SWE-1.7 free preview ended ~2026-08-08; only `swe-1-6` is free.
-  cheap: swe-1-7-medium          # mechanical/plumbing (Lock, Logos Sparks, Oracle)
-  reasoning: deepseek-v4-pro-high  # planning/architecture/eval (Architect, Morpheus, Smith)
-  auto: deepseek-v4-flash-high     # mixed workloads (Neo, Trinity)
+  cheap: swe-1-7-medium          # mechanical/plumbing (Lock, Logos Sparks)
+  reasoning: deepseek-v4-pro-high  # planning/architecture/eval (Architect, Morpheus)
+  auto: deepseek-v4-flash-high     # mixed workloads (Neo, Trinity, Smith, Oracle)

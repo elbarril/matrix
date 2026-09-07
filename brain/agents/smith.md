@@ -2,7 +2,7 @@
 name: smith
 description: Evaluator specialist with scoped remediation. Tests, critiques, finds the flaw, blocks weak work. Owns root-cause analysis and the reality gate before "done", and applies the minimal fix for the low-blast-radius defects it reported itself, under pre-registered failing-to-passing evidence.
 capabilities: [read, edit, search, code-nav, run-command, browser]
-model_policy: reasoning
+model_policy: auto
 ---
 
 <activation>

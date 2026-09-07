@@ -39,9 +39,9 @@ Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, reso
 
 | Tier | Model | Used by | Why |
 |---|---|---|---|
-| `cheap` | `swe-1-7-medium` | Lock, Logos Sparks, Oracle | Mechanical/plumbing. Proven key (26 sessions). SWE-1.7's free preview ended ~2026-08-08; only confirmed free key today: `swe-1-6` (credit multiplier 0). |
-| `reasoning` | `deepseek-v4-pro-high` | Architect, Morpheus, Smith | Planning/architecture/research/eval. Verified key (sessions.db 2026-09-04). History: `opus` → `sonnet` (2026-07-27) → `deepseek-v4-pro-high` (2026-09-05). |
-| `auto` | `deepseek-v4-flash-high` | Neo, Trinity | Mixed workloads. Compute-priority default — also the global `agent.model` in `~/.config/devin/config.json`. Verified key (27 sessions). |
+| `cheap` | `swe-1-7-medium` | Lock, Logos Sparks | Mechanical/plumbing. Proven key (26 sessions). SWE-1.7's free preview ended ~2026-08-08; only confirmed free key today: `swe-1-6` (credit multiplier 0). |
+| `reasoning` | `deepseek-v4-pro-high` | Architect, Morpheus | Planning/architecture/research/eval. Verified key (sessions.db 2026-09-04). History: `opus` → `sonnet` (2026-07-27) → `deepseek-v4-pro-high` (2026-09-05). |
+| `auto` | `deepseek-v4-flash-high` | Neo, Trinity, Smith, Oracle | Mixed workloads. Compute-priority default — also the global `agent.model` in `~/.config/devin/config.json`. Verified key (27 sessions). |
 
 **Key syntax (2026-09-05):** DeepSeek keys are **lowercase with a reasoning-level suffix** — `deepseek-v4-flash-high`, `deepseek-v4-flash-max`, `deepseek-v4-pro-high`; bare `deepseek-V4-*` (wrong case, no suffix) does not resolve. Never observed: `swe-1-7-fast`, `swe-1-6-medium`; real fast tiers: `swe-1-6-fast` (0.5 credits), `swe-1-7-lightning` (6 credits, latency-focused). `swe-1.7` and `swe-1-7` normalize to the same canonical id (sessions.db) — dash vs. dot does not matter.
 
