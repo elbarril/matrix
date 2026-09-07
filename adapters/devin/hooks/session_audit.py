@@ -22,6 +22,7 @@ for _ in range(3):
     _candidate = os.path.dirname(_candidate)
 sys.path.insert(0, os.path.join(_candidate, "hooks"))
 import _common as common  # noqa: E402
+import _writer_lane as lane  # noqa: E402
 from post_run_audit import _write_targets, ALLOWED_MUTANT_PREFIX  # noqa: E402
 
 ROOT = common.resolve_root()
@@ -487,6 +488,20 @@ def _run_session_close(session_id):
         print(f"[session_audit] session close invocation failed: {e}", file=sys.stderr)
 
 
+def _release_session_lanes(session_id):
+    """Best-effort backstop: release every writer lane held by this session."""
+    if not session_id:
+        return
+    try:
+        for path in lane.lanes_for_session(ROOT, session_id):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
 def _run_session_close_async(session_id):
     """Fire-and-forget close for an orphan session; never blocks the current session.
 
@@ -832,6 +847,13 @@ def main():
             envelope["subagent_invocation_id"] = invocation_id
         if event == "post_tool_use":
             envelope["tool_paths"] = _extract_tool_paths(tool_name, tool_input)
+            # Release the per-file writer lane for every surface path this
+            # edit touched (best-effort; only when holder == session_id).
+            if tool_name in {"edit", "write", "multi_edit"}:
+                for p in envelope.get("tool_paths") or []:
+                    rel = lane.normalize_relpath(ROOT, p)
+                    if rel is not None:
+                        lane.release(ROOT, rel, session_id)
 
         # For shell-like tools, parse write targets in memory and only persist
         # argv[0] + first subcommand plus a parsed-target flag. The full command
@@ -883,6 +905,7 @@ def main():
 
     if event == "session_end":
         _run_session_close(session_id)
+        _release_session_lanes(session_id)
 
     # Build hookSpecificOutput.additionalContext. B1 (activation reinjection) and
     # B3 (phase_close nudge) are independent mechanisms but share this channel.

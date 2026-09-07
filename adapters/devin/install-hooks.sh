@@ -118,6 +118,36 @@ hooks["PreToolUse"] = [
         ]
     },
     {
+        "matcher": "edit",
+        "hooks": [
+            {
+                "type": "command",
+                "command": guard_command,
+                "timeout": 10,
+            }
+        ]
+    },
+    {
+        "matcher": "write",
+        "hooks": [
+            {
+                "type": "command",
+                "command": guard_command,
+                "timeout": 10,
+            }
+        ]
+    },
+    {
+        "matcher": "multi_edit",
+        "hooks": [
+            {
+                "type": "command",
+                "command": guard_command,
+                "timeout": 10,
+            }
+        ]
+    },
+    {
         "matcher": "run_subagent",
         "hooks": [
             {

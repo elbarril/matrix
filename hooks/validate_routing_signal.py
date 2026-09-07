@@ -36,7 +36,7 @@ PATH_DECISION_EVENT = "phase:path-decision"
 SMALL_PATH_MAX_LINES = 10
 SMALL_PATH_MAX_FILES = 1
 NEVER_SMALL_PREFIXES = ("hooks/", "bin/lib/", "brain/state/", "adapters/")
-NEVER_SMALL_EXACT = ("AGENTS.md", "bin/matrix", "brain/data/lessons.md")
+NEVER_SMALL_EXACT = ("AGENTS.md", "DEVIN.md", "bin/matrix", "brain/data/lessons.md")
 NEVER_SMALL_GLOBS = (
     "brain/agents/*.md",
     "brain/data/lessons/*.md",

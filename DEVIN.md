@@ -269,6 +269,14 @@ bin/matrix link ttl:path-decision-reform matrix until=YYYY-MM-DD motivo=fallback
 
 `model:override` suppresses `model_drift` for that artifact while active. `ttl:path-decision-reform` is the fallback-A TTL; if it expires with zero real `phase:path-decision` uses, `ttl_expired` warns.
 
+## Shared-surface gate & writer lane (Q2-D)
+
+El hook `PreToolUse` (`adapters/devin/hooks/pre_tool_use_guard.py`) ahora también cubre las tools nativas de edición (`edit`, `write`, `multi_edit`), pero **solo contra la superficie compartida del harness**: `AGENTS.md`, `DEVIN.md`, `brain/agents/*`, `brain/data/lessons.md`, `brain/data/capability-map.md`, `hooks/`, `bin/`, `adapters/`. Una sesión bound a un proyecto externo queda **bloqueada** para editar esa superficie — salvo la promoción proactiva de lessons, que solo permite `brain/data/lessons.md` (core) y `brain/data/lessons/<proyecto-actual>.md`, ambas bajo un lane de escritor per-file. Matrix workspace mode conserva acceso completo (también bajo lane).
+
+- **Excepción / kill-switch:** relanzar la sesión con `MATRIX_SHARED_SURFACE_ALLOW=1` (o `true`) para bypassar el bloqueo de modo-bound durante toda la sesión (solo emergencias; la decisión queda auditada). El kill-switch NO bypassa el lane.
+- **Lane de escritor:** `brain/state/lanes/<sha1(rel_path)[:16]>.json` — adquirido en `PreToolUse`, liberado en `PostToolUse`/`SessionEnd`, reclamado tras `MATRIX_WRITER_LANE_TTL_S` (default `120`). Un lane tomado bloquea el edit y loguea `bin/matrix link incident:writer-collision`.
+- **Wireado:** `adapters/devin/install-hooks.sh` registra matchers `PreToolUse` para `edit`/`write`/`multi_edit` → `pre_tool_use_guard.py`. Re-correr `bin/matrix install --target=devin` tras este cambio.
+
 ## Lessons — detalle de adapter
 
 Narrativa por-lección (citas, versiones, IDs, nombres de tools) en `brain/output/research/adapter-lessons-detail.md`. `lessons.md` conserva la regla operable + puntero.

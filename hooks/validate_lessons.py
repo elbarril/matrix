@@ -35,6 +35,8 @@ from _common import emit, read_input, resolve_root
 HEADER_RE = re.compile(r"^(\d+)\.\s+(.*)$")
 CORE_SIZE_BYTES_THRESHOLD = 40 * 1024
 CORE_ACTIVE_ENTRIES_THRESHOLD = 30
+CORE_ENTRY_MAX_LINES = 6
+CORE_ENTRY_MAX_BYTES = 900
 
 
 def lesson_paths(root):
@@ -132,11 +134,41 @@ def _size_warning(root, rel_path, abs_path, headers):
     )
 
 
+def find_long_entries(rel_path, headers, text):
+    """Advisory list of active core lessons whose body between its header and
+    the next header exceeds CORE_ENTRY_MAX_LINES lines or CORE_ENTRY_MAX_BYTES
+    bytes — the mechanical proxy for "this looks like prose, not a short
+    pointer". Core lessons.md only; does NOT flip ok (spec Q2-D 1.e)."""
+    if rel_path != os.path.join("brain", "data", "lessons.md"):
+        return []
+    lines = text.splitlines()
+    entries = []
+    for i, h in enumerate(headers):
+        if h["placeholder"]:
+            continue
+        start = h["line"]  # 1-based header line
+        next_line = headers[i + 1]["line"] if i + 1 < len(headers) else len(lines) + 1
+        body = lines[start:next_line - 1]
+        body_lines = len(body)
+        body_bytes = len("\n".join(body).encode("utf-8"))
+        if body_lines > CORE_ENTRY_MAX_LINES or body_bytes > CORE_ENTRY_MAX_BYTES:
+            entries.append(
+                {
+                    "file": rel_path,
+                    "number": h["number"],
+                    "lines": body_lines,
+                    "bytes": body_bytes,
+                }
+            )
+    return entries
+
+
 def validate(_data):
     root = resolve_root()
     files = []
     duplicates = []
     unexplained_gaps = []
+    long_entries = []
     size_warning = None
 
     for rel_path, abs_path in lesson_paths(root):
@@ -146,6 +178,7 @@ def validate(_data):
         headers = parse_headers(text)
         duplicates.extend(find_duplicates(rel_path, headers))
         unexplained_gaps.extend(find_unexplained_gaps(rel_path, headers, text))
+        long_entries.extend(find_long_entries(rel_path, headers, text))
         warning = _size_warning(root, rel_path, abs_path, headers)
         if warning:
             size_warning = warning
@@ -156,6 +189,7 @@ def validate(_data):
         "files": files,
         "duplicates": duplicates,
         "unexplained_gaps": unexplained_gaps,
+        "long_entries": long_entries,
         "size_warning": size_warning,
     }
 

@@ -47,7 +47,9 @@ def protected_paths(root):
         os.path.join(root, "brain", "state"),
         os.path.join(root, "brain", "agents"),
         os.path.join(root, "AGENTS.md"),
+        os.path.join(root, "DEVIN.md"),
         os.path.join(root, "hooks"),
+        os.path.join(root, "bin"),
         os.path.join(root, "adapters"),
     ]
     ships_dir = os.path.join(root, "brain", "subsystems")
