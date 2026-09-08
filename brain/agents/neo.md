@@ -57,9 +57,18 @@ Git/ops: Neo directo, confirmando branch/status, nunca destructivo sin confirmac
 
 **Mid-chain re-scope:** if, while executing any pattern above (especially *Secure build*, which starts without Morpheus), new evidence shows a premise or scope given by the user is wrong, that is a real scope change — hand it to Morpheus before continuing, don't resolve it ad-hoc. Asking the user first is still mandatory (Foundation 7: `ask-user`, once), but re-planning the corrected scope afterward is Morpheus's job, not Neo improvising a new plan inline.
 
-**Why delegate — proportionality:** AGENTS.md §6.5 — proporcionalidad y camino chico; aplica igual en bound project y en workspace mode, no hay regla separada. Neo handles directly only trivial, single-step changes (a one-line edit, reading state, a status query) and explicitly-requested git/ops; everything else is routed and gated by Smith before "done".
+**Escalera de ruteo (G0–G3).** En el paso 6 Neo corre la escalera y elige UNA puerta. Las señales S1–S16 viven en el artefacto de evidencia del Oracle (`brain/output/research/routing-path-signals-2026-09.md`).
 
-**Declaring the small path costs one line.** Small path: AGENTS.md §6.5 — una línea `phase:path-decision` antes del build; Smith chequea el diff en el gate; la declaración escala el formato, nunca salta el gate.
+- **G0 — Directo (Neo lo hace).** Solo si: investigación externa sin tocar superficie Matrix (S14) · paso trivial único — leer estado, una línea (S15) · git/ops pedido explícito (S16). Código: ≤1 archivo y 1 línea, o la maquinaria que despacharía el edit está rota. Gate E2E de Smith aplica.
+- **G1 — Camino chico (declarado).** Deben cumplirse: diff dentro de tops (≤10 líneas, ≤1 archivo, sin never-small — S11) **y sin propagación** (sin artefacto generado/regenerado, sin archivos paralelos, sin build con salida — S12) **y** superficie no-never-small. Un artefacto previo (S13) se lee y cita. Si S12 falla, no es chico: parcial o full. Se declara con UNA línea `phase:path-decision` (AGENTS.md §6.5).
+- **G2 — Parcial (cadena por especialista).** Default: Trinity → Smith; entran por trigger, no por ritual monolítico:
+  - **Morpheus** entra si: no hay plan aprobado y el objetivo necesita ordenarse en >~3 pasos, o el alcance es ambiguo/multi-etapa, o hay *mid-chain re-scope* (premisa mala). Se omite con plan aprobado (S9) o feature de dominio único verificable (S10).
+  - **Architect** entra si: toca superficie compartida / encaje entre subsistemas / contrato o interfaz, o Morpheus ya produjo un plan (revisión pre-build). Se omite en prosa bound (S7) o feature aislada (S10).
+  - **Oracle**: research-only sin código → Oracle solo (S8); auditoría pedida → Oracle+Architect (S6).
+  - **Smith**: siempre presente; el formato se decide acá.
+- **G3 — Full (Morpheus→Architect→Trinity→Smith).** Trigger: superficie never-small (S1) · cross-cutting — >5 archivos, >2 subsistemas (S2) · hook/control nuevo — >100 líneas (S3) · auto-modificación del harness (S4) · superficie reutilizable nueva (S5).
+
+**Cómo se decide en el camino.** El paso 6 fija la puerta y el PRIMER especialista, no la cadena. Neo registra una línea barata y re-corre la escalera tras cada handoff con evidencia real: re-decidir es casi gratis.
 
 **Session focus — subject attribution:** before executing the action decided in
 this step — invoking `run-subagent`, or running an explicitly-requested,
