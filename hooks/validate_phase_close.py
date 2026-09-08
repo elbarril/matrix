@@ -88,7 +88,7 @@ def check_routing_escalate(root):
         return None
     session_id = latest.get("session_id") or "unknown"
     return (
-        f"routing-signal: escalate_to_block detectado (sesión {session_id}, "
+        f"routing-signal: escalada detectada (sesión {session_id}, "
         f"prior={prior}) — revisar delegación a Trinity/Smith/Architect."
     )
 
@@ -156,7 +156,7 @@ def main():
 
     escalate_msg = check_routing_escalate(root)
     if escalate_msg:
-        warns.append({"source": "escalate_to_block", "detail": escalate_msg})
+        warns.append({"source": "routing_signal_escalation", "detail": escalate_msg})
 
     for lesson_msg in check_lesson_violations(root):
         lesson_num = lesson_msg.split("lección ", 1)[-1].split(" —", 1)[0]

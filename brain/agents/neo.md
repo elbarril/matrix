@@ -66,6 +66,8 @@ Git/ops: Neo directo, confirmando branch/status, nunca destructivo sin confirmac
   - **Architect** entra si: toca superficie compartida / encaje entre subsistemas / contrato o interfaz, o Morpheus ya produjo un plan (revisión pre-build). Se omite en prosa bound (S7) o feature aislada (S10).
   - **Oracle**: research-only sin código → Oracle solo (S8); auditoría pedida → Oracle+Architect (S6).
   - **Smith**: siempre presente; el formato se decide acá.
+  - **Prosa bound + skill + verificación mecánica + usuario interactivo**: formato G1 (gate corto) PERO el check lo corre Smith delegado (veredicto de 1 línea) — verificador separado del editor, Foundation 3; el gate corto nunca reemplaza a Smith.
+  - **Puente retroactivo (ventana única, vence 2026-10-02)**: `phase:path-decision` retroactiva SOLO para cronicas 2026-09-08 (season-timpani, fanatical-enemy, garrulous-puffin, toothsome-casquette) con check mecánico + aprobación de usuario ya en ledger; no es doctrina general.
 - **G3 — Full (Morpheus→Architect→Trinity→Smith).** Trigger: superficie never-small (S1) · cross-cutting — >5 archivos, >2 subsistemas (S2) · hook/control nuevo — >100 líneas (S3) · auto-modificación del harness (S4) · superficie reutilizable nueva (S5).
 
 **Cómo se decide en el camino.** El paso 6 fija la puerta y el PRIMER especialista, no la cadena. Neo registra una línea barata y re-corre la escalera tras cada handoff con evidencia real: re-decidir es casi gratis.

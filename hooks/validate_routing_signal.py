@@ -4,8 +4,8 @@ shows no Link evidence of delegation to Trinity/Smith/Architect.
 
 Reads `brain/state/hook-audit.jsonl` for the session and `brain/state/activity.log`
 for Link route/handoff entries. Warn-only: always returns `ok: true`. When the
-pattern repeats for a 3rd time (2 prior triggers + this one), it exposes
-`escalate_to_block: true` for a future process to decide on.
+pattern repeats for a 3rd time (2 prior triggers + this one), the escalation is
+informational — severity is derived by the consumer, never set by this hook.
 A `phase:path-decision` declaration suppresses the signal only when its real
 git diff is small; unresolved diffs fail safe.
 
@@ -58,6 +58,14 @@ DELEGATION_RE = re.compile(
     r"\b(" + "|".join(re.escape(n) for n in DELEGATION_NAMES) + r")\b",
     re.IGNORECASE,
 )
+# A delegation only counts as verified when it names a real harness check
+# (SMITH_CHECK_TOKENS) or references an eval artifact under brain/output/eval.
+SMITH_CHECK_TOKENS = ("fidelity_check", "informe_site", "e2e", "smoke")
+SMITH_CHECK_RE = re.compile(
+    r"\b(" + "|".join(re.escape(t) for t in SMITH_CHECK_TOKENS) + r")\b",
+    re.IGNORECASE,
+)
+EVAL_ARTIFACT_RE = re.compile(r"brain/output/[^\s]*eval|MATRIX:EVAL", re.IGNORECASE)
 
 
 def _read_jsonl(path):
@@ -198,11 +206,16 @@ def _iter_activity_events(root, start_dt, end_dt):
 
 
 def _find_delegation_evidence(root, start_dt, end_dt):
-    """Search activity.log for route/handoff entries naming Trinity/Smith/Architect."""
+    """Search activity.log for route/handoff entries naming Trinity/Smith/Architect.
+
+    Returns (line, verified): verified is True only when the entry also names a
+    real mechanical check (SMITH_CHECK_TOKENS) or references an eval artifact.
+    """
     for _ts, rest, line in _iter_activity_events(root, start_dt, end_dt):
         if ROUTE_HANDOFF_RE.search(rest) and DELEGATION_RE.search(rest):
-            return line
-    return None
+            verified = bool(SMITH_CHECK_RE.search(rest) or EVAL_ARTIFACT_RE.search(rest))
+            return line, verified
+    return None, False
 
 
 def _find_path_decision(root, start_dt, end_dt):
@@ -448,11 +461,14 @@ def validate(data):
     small_path = None
 
     delegation_evidence = None
+    unverified_delegation = False
     if triggered:
-        delegation_evidence = _find_delegation_evidence(root, start_dt, end_dt)
-        if delegation_evidence:
+        delegation_evidence, delegation_verified = _find_delegation_evidence(root, start_dt, end_dt)
+        if delegation_evidence and delegation_verified:
             triggered = False
             resolved = "delegated"
+        elif delegation_evidence:
+            unverified_delegation = True
 
     if triggered:
         small_path = _evaluate_small_path(root, mutating_paths, start_dt, end_dt)
@@ -466,9 +482,6 @@ def validate(data):
 
     history_path = os.path.join(root, HISTORY_LOG)
     prior = _prior_trigger_count(history_path) if threshold_triggered else 0
-    escalate = False
-    if triggered:
-        escalate = prior >= 2
     if threshold_triggered:
         _record_outcome(history_path, session_id, triggered, resolved, small_path)
 
@@ -482,15 +495,21 @@ def validate(data):
             detail = f"files={small_path['files']}>{SMALL_PATH_MAX_FILES}"
         elif resolved == "unknown":
             detail = f"unresolved:{reason.replace('_', '-')}"
-        message = (
-            f"Session {session_id} did real engineering work "
-            f"({len(mutating_paths)} file(s) edited, run_command={run_command_seen}) "
-            f"but no Link route/handoff to Trinity/Smith/Architect was found in the session window."
-        )
+        if unverified_delegation:
+            message = (
+                f"Session {session_id} did real engineering work "
+                f"({len(mutating_paths)} file(s) edited, run_command={run_command_seen}) "
+                f"but the Link route/handoff names Trinity/Smith/Architect without a "
+                f"verified mechanical check or eval artifact (delegación sin check verificado)."
+            )
+        else:
+            message = (
+                f"Session {session_id} did real engineering work "
+                f"({len(mutating_paths)} file(s) edited, run_command={run_command_seen}) "
+                f"but no Link route/handoff to Trinity/Smith/Architect was found in the session window."
+            )
         if reason != "no_declaration":
             message = message[:-1] + f"; {detail}."
-        if escalate:
-            message += " This is the 3rd+ occurrence — escalate_to_block is set."
 
     return {
         "hook": "validate_routing_signal",
@@ -506,8 +525,8 @@ def validate(data):
         "mutating_paths": sorted(mutating_paths),
         "run_command_seen": run_command_seen,
         "delegation_evidence": delegation_evidence,
+        "unverified_delegation": unverified_delegation,
         "historical_triggers": prior,
-        "escalate_to_block": escalate,
         "message": message,
     }
 

@@ -68,7 +68,7 @@ def case_positive():
         assert result["verdict"] == "PASS", f"expected PASS: {result}"
         assert len(result["warns"]) == 1, f"expected one warn: {result}"
         warn = result["warns"][0]
-        assert warn["source"] == "escalate_to_block", warn
+        assert warn["source"] == "routing_signal_escalation", warn
         assert "s3" in warn["detail"], warn
         assert "prior=2" in warn["detail"], warn
         print("D3 POSITIVE PASS")

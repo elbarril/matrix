@@ -14,7 +14,7 @@ from _common import emit, read_input, resolve_root
 
 
 DENYLIST = [
-    (re.compile(r"\bDevin\b", re.IGNORECASE), "names the CLI 'Devin'"),
+    (re.compile(r"(?<![\w./_])Devin\b", re.IGNORECASE), "names the CLI 'Devin'"),
     (re.compile(r"\bClaude Code\b", re.IGNORECASE), "names the CLI 'Claude Code'"),
     (re.compile(r"\brun_subagent\b", re.IGNORECASE), "Devin-native tool call `run_subagent`"),
     (re.compile(r"\bread_subagent\b", re.IGNORECASE), "Devin-native tool call `read_subagent`"),

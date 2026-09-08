@@ -68,10 +68,12 @@ def _derive_steps(entries):
 # What a hook-derived audit can realistically observe. Unlike the LLM
 # self-report default in post_run_audit.py (which expects "load_config" and
 # "resolve_context" — steps no Devin lifecycle event exposes), a session
-# built purely from hook-audit.jsonl can only ever see these three. Passing
+# built purely from hook-audit.jsonl can only ever see these two. Passing
 # the default REQUIRED_STEPS here would make every session report
-# bypass_suspected=true even for a perfectly compliant one.
-SESSION_REQUIRED_STEPS = ["session_start", "pre_activation_check", "session_end"]
+# bypass_suspected=true even for a perfectly compliant one. `session_end` is a
+# lifecycle boundary, not an activation step, and is reported separately as
+# `session_end_seen` so a mid-session close is not a false bypass.
+SESSION_REQUIRED_STEPS = ["session_start", "pre_activation_check"]
 
 
 def _run_post_run_audit(root, session_id, steps, required=None):
@@ -146,14 +148,20 @@ def main():
         required.append("phase_close")
     phase_close_missing = has_mutating_work and "phase_close" not in steps
 
-    post_report = _run_post_run_audit(root, session_id, steps, required)
     validate_routing_signal_report = _run_validate_routing_signal_check(root, session_id)
+    smith_gate_required = has_mutating_work and validate_routing_signal_report.get("triggered") is True
+    if smith_gate_required:
+        required.append("smith_gate")
+
+    post_report = _run_post_run_audit(root, session_id, steps, required)
 
     result = {
         "hook": "session_close",
         "ok": post_report.get("ok", False),
         "session_id": session_id,
         "phase_close_missing": phase_close_missing,
+        "smith_gate_required": smith_gate_required,
+        "session_end_seen": "session_end" in steps,
         "steps_seen": steps,
         "entries_examined": len(filtered),
         "validation": post_report,

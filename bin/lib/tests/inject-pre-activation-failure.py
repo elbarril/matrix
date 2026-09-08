@@ -164,7 +164,10 @@ def case_healthy_fixture():
         result = json_or_die(proc, "case5")
         assert proc.returncode == 0, f"case5 expected exit 0, got {proc.returncode}"
         assert result.get("ok") is True, f"case5 expected ok:true: {result}"
-        assert result.get("boot_warn", {}).get("warns") == [], f"case5 expected empty boot_warn.warns: {result}"
+        # The surface_budget advisory on brain/agents/neo.md is a direct consequence
+        # of the Opción C G2 doctrine clause — advisory only, never flips ok.
+        boot_warns = result.get("boot_warn", {}).get("warns", [])
+        assert set(boot_warns) <= {"surface_budget"}, f"case5 unexpected boot_warn.warns: {result}"
         print("D9-5 PASS")
 
 
