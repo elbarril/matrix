@@ -66,6 +66,7 @@ SMITH_CHECK_RE = re.compile(
     re.IGNORECASE,
 )
 EVAL_ARTIFACT_RE = re.compile(r"brain/output/[^\s]*eval|MATRIX:EVAL", re.IGNORECASE)
+SESSION_ID_RE = re.compile(r"session_id\s*=\s*([^\s|]+)")
 
 
 def _read_jsonl(path):
@@ -205,25 +206,114 @@ def _iter_activity_events(root, start_dt, end_dt):
                 yield ts, rest, line
 
 
-def _find_delegation_evidence(root, start_dt, end_dt):
+def _line_parts(rest):
+    """Return (event, subject, detail) from a window rest string.
+
+    Handles both the ledger format ('event | subject | detail') and the
+    bracketed test format ('| event | subject | detail').
+    """
+    parts = [p.strip() for p in rest.split("|")]
+    if parts and parts[0] == "":
+        parts = parts[1:]
+    event = parts[0] if parts else ""
+    subject = parts[1] if len(parts) > 1 else ""
+    detail = " | ".join(parts[2:]) if len(parts) > 2 else ""
+    return event, subject, detail
+
+
+def _line_session_id(text):
+    """Return the session_id=<sid> value in a line, or None.
+
+    Trailing punctuation is stripped so (session_id=S1) parses as S1.
+    """
+    m = SESSION_ID_RE.search(text)
+    if not m:
+        return None
+    return m.group(1).rstrip("),;.")
+
+
+def _detail_subject(detail):
+    """Extract 'subject=<x>' from a path-decision detail."""
+    m = re.search(r"\bsubject=([^\s|]+)", detail)
+    return m.group(1) if m else None
+
+
+def _activity_in_scope(rest, session_id, project):
+    """Return True when an activity line may belong to the audited session.
+
+    A line that carries an explicit session_id= is attributed only on equality
+    with the current session and never falls back to the project on a
+    mismatch. Project match (or the legacy in-scope default) applies only when
+    the line has no session_id.
+    """
+    line_sid = _line_session_id(rest)
+    if line_sid is not None:
+        return session_id is not None and line_sid == session_id
+    _event, subject, _detail = _line_parts(rest)
+    if project:
+        return subject == project
+    return True
+
+
+def _path_decision_in_scope(rest, session_id, project):
+    """Scope a phase:path-decision line to the session.
+
+    The ledger subject for path decisions is always 'A'; the real project is
+    declared in the detail as subject=<x>. An explicit session_id= is
+    attributed only on equality and never falls back to the project on a
+    mismatch. Legacy sessions without a known project fall back to in-scope.
+    """
+    line_sid = _line_session_id(rest)
+    if line_sid is not None:
+        return session_id is not None and line_sid == session_id
+    if not project:
+        return True
+    _event, _subject, detail = _line_parts(rest)
+    declared = _detail_subject(detail)
+    return declared is not None and declared == project
+
+
+def _session_project(entries, session_id):
+    """Return the non-null project_active recorded for the session, or None."""
+    for entry in entries:
+        if entry.get("session_id") != session_id:
+            continue
+        pa = entry.get("project_active")
+        if pa:
+            return pa
+    return None
+
+
+def _find_delegation_evidence(root, start_dt, end_dt, session_id=None, project=None):
     """Search activity.log for route/handoff entries naming Trinity/Smith/Architect.
 
-    Returns (line, verified): verified is True only when the entry also names a
-    real mechanical check (SMITH_CHECK_TOKENS) or references an eval artifact.
+    Returns (line, verified): searches ALL in-scope entries in the window and
+    prefers a verified one (a real mechanical check token or an eval artifact);
+    if none verifies, returns the first matching entry with verified False.
     """
+    matches = []
     for _ts, rest, line in _iter_activity_events(root, start_dt, end_dt):
         if ROUTE_HANDOFF_RE.search(rest) and DELEGATION_RE.search(rest):
+            if not _activity_in_scope(rest, session_id, project):
+                continue
             verified = bool(SMITH_CHECK_RE.search(rest) or EVAL_ARTIFACT_RE.search(rest))
-            return line, verified
-    return None, False
+            matches.append((line, verified))
+    if not matches:
+        return None, False
+    for line, verified in matches:
+        if verified:
+            return line, True
+    return matches[0][0], False
 
 
-def _find_path_decision(root, start_dt, end_dt):
-    """Return the earliest exact path-decision declaration's timestamp and ref."""
+def _find_path_decision(root, start_dt, end_dt, session_id=None, project=None):
+    """Return the earliest in-scope exact path-decision declaration's ts and ref."""
     earliest = None
     for ts, rest, _line in _iter_activity_events(root, start_dt, end_dt):
-        event = rest.split("|", 1)[0].strip().split(None, 1)[0]
+        event, _subject, _detail = _line_parts(rest)
         if event != PATH_DECISION_EVENT:
+            continue
+        if not _path_decision_in_scope(rest, session_id, project):
             continue
         match = re.search(r"\[([^\]]+)\]", rest)
         candidate = (ts, match.group(1) if match else None)
@@ -338,14 +428,16 @@ def _is_never_small(path, repo, root):
     )
 
 
-def _evaluate_small_path(root, paths, start_dt, end_dt):
+def _evaluate_small_path(root, paths, start_dt, end_dt, session_id=None, project=None):
     result = {
         "declared": False, "ref": None, "declared_at": None,
         "resolvable": False, "exempt": False, "files": None, "lines": None,
         "never_small": [], "reason": "no_declaration",
     }
     try:
-        declaration = _find_path_decision(root, start_dt, end_dt)
+        declaration = _find_path_decision(
+            root, start_dt, end_dt, session_id=session_id, project=project
+        )
         if not declaration:
             return result
         declared_at, ref = declaration
@@ -389,38 +481,61 @@ def _evaluate_small_path(root, paths, start_dt, end_dt):
         return result
 
 
-def _prior_trigger_count(path):
-    """Count how many times this signal has already fired in history."""
+def _last_state_by_session(path):
+    """Return {session_id: last_record} from the append-only history (last wins)."""
+    by_session = {}
     if not os.path.isfile(path):
-        return 0
+        return by_session
+    for record in _read_jsonl(path):
+        sid = record.get("session_id")
+        if not sid:
+            continue
+        by_session[sid] = record
+    return by_session
+
+
+def count_unresolved_sessions(path, exclude_session_id=None):
+    """Count sessions whose last history record is an unresolved trigger.
+
+    Same coherent count used by validate_phase_close's escalation warn: last
+    state per session wins; the current session is excluded. Returns
+    (count, [session_ids]).
+    """
     count = 0
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-            except ValueError:
-                continue
-            if record.get("triggered"):
-                count += 1
-    return count
+    unresolved = []
+    for sid, record in _last_state_by_session(path).items():
+        if exclude_session_id is not None and sid == exclude_session_id:
+            continue
+        if record.get("triggered"):
+            count += 1
+            unresolved.append(sid)
+    return count, unresolved
 
 
-def _session_in_history(path, session_id):
-    """Return True if this session already has an outcome record."""
+def _last_record_for_session(path, session_id):
+    """Return the most recent record for a session, or None."""
+    last = None
     if not os.path.isfile(path):
-        return False
+        return last
     for record in _read_jsonl(path):
         if record.get("session_id") == session_id:
-            return True
-    return False
+            last = record
+    return last
 
 
-def _record_outcome(path, session_id, triggered, resolved, small_path):
-    """Append one compact, deduplicated outcome record for the session."""
-    if _session_in_history(path, session_id):
+def _record_outcome(path, session_id, triggered, resolved, small_path, persist_history=True):
+    """Append one compact outcome record when the session's state transitions.
+
+    History is append-only: the last record for a session wins when counting.
+    A record is written only when (triggered, resolved) differs from the
+    session's previous record, so repeated runs never duplicate the same state.
+    persist_history=False disables all writes.
+    """
+    if not persist_history:
+        return
+    last = _last_record_for_session(path, session_id)
+    state = (bool(triggered), resolved)
+    if last is not None and (bool(last.get("triggered")), last.get("resolved")) == state:
         return
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -437,7 +552,7 @@ def _record_outcome(path, session_id, triggered, resolved, small_path):
         pass
 
 
-def validate(data):
+def validate(data, persist_history=True):
     root = resolve_root()
     session_id = data.get("session_id") if data else None
     if not session_id:
@@ -462,8 +577,11 @@ def validate(data):
 
     delegation_evidence = None
     unverified_delegation = False
+    project = _session_project(entries, session_id)
     if triggered:
-        delegation_evidence, delegation_verified = _find_delegation_evidence(root, start_dt, end_dt)
+        delegation_evidence, delegation_verified = _find_delegation_evidence(
+            root, start_dt, end_dt, session_id=session_id, project=project
+        )
         if delegation_evidence and delegation_verified:
             triggered = False
             resolved = "delegated"
@@ -471,7 +589,9 @@ def validate(data):
             unverified_delegation = True
 
     if triggered:
-        small_path = _evaluate_small_path(root, mutating_paths, start_dt, end_dt)
+        small_path = _evaluate_small_path(
+            root, mutating_paths, start_dt, end_dt, session_id=session_id, project=project
+        )
         if small_path["exempt"]:
             triggered = False
             resolved = "exempted"
@@ -481,9 +601,12 @@ def validate(data):
             resolved = "triggered"
 
     history_path = os.path.join(root, HISTORY_LOG)
-    prior = _prior_trigger_count(history_path) if threshold_triggered else 0
+    prior, _ = count_unresolved_sessions(history_path, exclude_session_id=session_id)
     if threshold_triggered:
-        _record_outcome(history_path, session_id, triggered, resolved, small_path)
+        _record_outcome(
+            history_path, session_id, triggered, resolved, small_path,
+            persist_history=persist_history,
+        )
 
     message = None
     if triggered:

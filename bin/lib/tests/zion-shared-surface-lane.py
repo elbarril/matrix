@@ -96,6 +96,7 @@ def build_fixture(root):
 
 def env_for(fixture_root, home_dir, extra=None):
     env = os.environ.copy()
+    env.update({"MATRIX_GATE_SHARED_SURFACE": "1", "MATRIX_GATE_WRITER_LANE": "1", "MATRIX_GATE_PRE_EXEC_GUARD": "1"})
     env["MATRIX_ROOT"] = str(fixture_root)
     env["HOME"] = str(home_dir)
     env["XDG_CONFIG_HOME"] = str(home_dir / ".config")

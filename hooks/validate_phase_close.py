@@ -8,14 +8,15 @@ win.
 Input JSON:
   {
     "phase": "develop",          # spec | develop | test | eval — closed set; anything else BLOCKs
-    "e2e": true,                 # was an end-to-end happy-path check run?
+    "e2e": true,                 # JSON boolean true only — never 1/"true"/"false"
     "evidence": "ran ./run ... output X",   # concrete proof (command/output/url)
-    "tests": "passed 12/12",     # optional
     "lesson": "<what was captured and where, or an explicit N/A>"  # required when phase == "eval"
+    "session_id": "..."          # optional; used for routing-signal escalation attribution
   }
 
-Exit 0 (PASS) only when e2e is true AND evidence is non-trivial.
-Exit 1 (BLOCK) otherwise.
+Exit 0 (PASS) only when e2e is JSON true AND evidence is non-trivial.
+Exit 1 (BLOCK) otherwise. A non-object payload or wrong field types BLOCK with
+a controlled JSON error, never a traceback.
 
 For phase == "eval", the eval-phase contract (capturing lessons) is mandatory,
 not optional flavor text — a phase cannot close on reality it didn't record. So
@@ -26,12 +27,16 @@ explicit, reasoned "N/A" (reality taught nothing new worth keeping). A missing
 a valid answer to "what did we learn".
 """
 
-import json
 import os
 import re
+import sys
 from collections import Counter
 
-from _common import emit, ledger_tail_events, read_input, resolve_root
+from _common import current_session_id, emit, ledger_tail_events, read_input, resolve_root
+from validate_routing_signal import (
+    count_unresolved_sessions,
+    validate as validate_routing_signal,
+)
 
 # The canonical phase vocabulary (retired brain workflow reference docs;
 # this set is now the single source of truth).
@@ -40,57 +45,7 @@ VALID_PHASES = {"spec", "develop", "test", "eval"}
 NO_RUNTIME_PHASES = {"spec"}
 EVAL_PHASES = {"eval"}
 
-HISTORY_MAX_BYTES = 256 * 1024
 HISTORY_LOG = "brain/state/routing-signal-history.jsonl"
-
-
-def _tail_jsonl(path, max_bytes=HISTORY_MAX_BYTES):
-    """Read the most recent tail of a JSONL file, skipping malformed lines."""
-    records = []
-    if not os.path.isfile(path):
-        return records
-    try:
-        size = os.path.getsize(path)
-        if size > max_bytes:
-            with open(path, "rb") as fh:
-                fh.seek(size - max_bytes)
-                text = fh.read(max_bytes).decode("utf-8", errors="replace")
-            if "\n" in text:
-                text = text.split("\n", 1)[1]
-        else:
-            with open(path, encoding="utf-8", errors="replace") as fh:
-                text = fh.read()
-    except OSError:
-        return records
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except ValueError:
-            continue
-    return records
-
-
-def check_routing_escalate(root):
-    """Return a WARN if the latest routing-signal history entry escalates."""
-    path = os.path.join(root, HISTORY_LOG)
-    records = _tail_jsonl(path)
-    if not records:
-        return None
-    triggered = [r for r in records if r.get("triggered")]
-    if not triggered:
-        return None
-    latest = triggered[-1]
-    prior = len(triggered) - 1
-    if prior < 2:
-        return None
-    session_id = latest.get("session_id") or "unknown"
-    return (
-        f"routing-signal: escalada detectada (sesión {session_id}, "
-        f"prior={prior}) — revisar delegación a Trinity/Smith/Architect."
-    )
 
 
 def check_lesson_violations(root):
@@ -123,40 +78,128 @@ def check_lesson_violations(root):
     return warns
 
 
+def _routing_escalation_warns(root, session_id):
+    """Return routing-signal escalation warns for the CURRENT session only.
+
+    Warns only when the current session is actually triggered (recomputed via
+    validate_routing_signal, which never writes history here) and at least 2
+    prior sessions are unresolved in history (last state per session wins,
+    current excluded). Without a session_id, another session is never accused.
+    """
+    if not session_id:
+        return []
+    try:
+        signal = validate_routing_signal({"session_id": session_id}, persist_history=False)
+        current_triggered = signal.get("triggered") is True
+    except Exception as exc:
+        print(
+            f"[validate_phase_close] routing-signal recompute failed for session "
+            f"{session_id}: {type(exc).__name__}: {exc} — escalation check skipped",
+            file=sys.stderr,
+        )
+        current_triggered = False
+    if not current_triggered:
+        return []
+    prior, _ = count_unresolved_sessions(
+        os.path.join(root, HISTORY_LOG), exclude_session_id=session_id
+    )
+    if prior < 2:
+        return []
+    return [
+        {
+            "source": "routing_signal_escalation",
+            "detail": (
+                f"routing-signal: escalada detectada (sesión {session_id}, "
+                f"prior={prior}) — revisar delegación a Trinity/Smith/Architect."
+            ),
+        }
+    ]
+
+
 def main():
     data = read_input()
-    phase = (data.get("phase") or "").strip().lower()
-    e2e = bool(data.get("e2e"))
-    evidence = (data.get("evidence") or "").strip()
-    lesson = (data.get("lesson") or "").strip()
+    root = resolve_root()
+
+    if not isinstance(data, dict):
+        emit({
+            "hook": "validate_phase_close",
+            "ok": False,
+            "verdict": "BLOCK",
+            "phase": None,
+            "root": root,
+            "errors": ["payload must be a JSON object — see `matrix phase close --help` for the schema"],
+            "warns": [],
+            "note": "Reality decides, not opinions. (Foundation 3.)",
+        })
+        return
+
     errors = []
 
-    if phase not in VALID_PHASES:
+    if "e2e_passed" in data and "e2e" not in data:
+        errors.append("unknown key 'e2e_passed' — use 'e2e' (JSON boolean true/false)")
+
+    phase = ""
+    phase_ok = False
+    phase_raw = data.get("phase")
+    if phase_raw is None:
+        errors.append("missing required field 'phase' (spec|develop|test|eval)")
+    elif not isinstance(phase_raw, str):
+        errors.append(f"'phase' must be a string, got {type(phase_raw).__name__}")
+    else:
+        phase = phase_raw.strip().lower()
+        phase_ok = True
+
+    e2e = False
+    e2e_raw = data.get("e2e")
+    if e2e_raw is not None and not isinstance(e2e_raw, bool):
+        errors.append("'e2e' must be a JSON boolean true/false, never a string or number")
+    else:
+        e2e = e2e_raw is True
+
+    evidence = ""
+    evidence_raw = data.get("evidence")
+    if evidence_raw is not None and not isinstance(evidence_raw, str):
+        errors.append(f"'evidence' must be a string, got {type(evidence_raw).__name__}")
+    else:
+        evidence = (evidence_raw or "").strip()
+
+    lesson = ""
+    lesson_raw = data.get("lesson")
+    if lesson_raw is not None and not isinstance(lesson_raw, str):
+        errors.append(f"'lesson' must be a string, got {type(lesson_raw).__name__}")
+    else:
+        lesson = (lesson_raw or "").strip()
+
+    session_id = None
+    sid_raw = data.get("session_id")
+    if sid_raw is not None and not isinstance(sid_raw, str):
+        errors.append(f"'session_id' must be a string, got {type(sid_raw).__name__}")
+    else:
+        session_id = (sid_raw or "").strip() or None
+    if not session_id:
+        session_id = current_session_id(root)
+
+    if phase_ok and phase not in VALID_PHASES:
         errors.append(
             f"unknown phase '{phase}' — valid phases are spec|develop|test|eval"
         )
-    elif phase in NO_RUNTIME_PHASES:
+    elif phase_ok and phase in NO_RUNTIME_PHASES:
         # Artifact-closing phases close on a concrete artifact, not a runtime check.
         if len(evidence) < 8:
             errors.append("planning phase needs a concrete artifact reference as evidence")
-    else:
-        if not e2e:
-            errors.append("no end-to-end happy-path check was run (e2e=false)")
+    elif phase_ok and phase in VALID_PHASES:
+        if e2e is not True:
+            errors.append("no end-to-end happy-path check was run (e2e must be JSON true)")
         if len(evidence) < 8:
             errors.append("evidence is missing or trivial — provide the command/output/url that proves it real")
 
-    if phase in EVAL_PHASES and len(lesson) < 8:
+    if phase_ok and phase in EVAL_PHASES and len(lesson) < 8:
         errors.append(
             "eval closes the loop by capturing lessons — 'lesson' is missing or trivial; "
             "state what was appended to lessons.md/lessons/<project>.md, or an explicit reasoned N/A"
         )
 
-    root = resolve_root()
-    warns = []
-
-    escalate_msg = check_routing_escalate(root)
-    if escalate_msg:
-        warns.append({"source": "routing_signal_escalation", "detail": escalate_msg})
+    warns = _routing_escalation_warns(root, session_id)
 
     for lesson_msg in check_lesson_violations(root):
         lesson_num = lesson_msg.split("lección ", 1)[-1].split(" —", 1)[0]

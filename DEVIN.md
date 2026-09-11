@@ -45,7 +45,7 @@ Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, reso
 
 **Key syntax (2026-09-05):** DeepSeek keys are **lowercase with a reasoning-level suffix** — `deepseek-v4-flash-high`, `deepseek-v4-flash-max`, `deepseek-v4-pro-high`; bare `deepseek-V4-*` (wrong case, no suffix) does not resolve. Never observed: `swe-1-7-fast`, `swe-1-6-medium`; real fast tiers: `swe-1-6-fast` (0.5 credits), `swe-1-7-lightning` (6 credits, latency-focused). `swe-1.7` and `swe-1-7` normalize to the same canonical id (sessions.db) — dash vs. dot does not matter.
 
-**Time-bound:** SWE-1.7's free preview ended ~2026-08-08 (date time-boxed, not re-verifiable live; consistent with the free tier being gone). Map + `model_template_*` presets (`gratis`/`barato`/`equilibrado`/`caro`/`veloz`) re-verified 2026-09-05 against sessions.db/`config.json`/CLI docs. Re-verify periodically (repeat `--model X -p "OK"` + sessions.db check) after any Devin upgrade.
+**Time-bound:** SWE-1.7's free preview ended ~2026-08-08 (date time-boxed, not re-verifiable live; consistent with the free tier being gone). Map + `model_template_*` presets (`gratis`/`barato`/`equilibrado`/`caro`/`veloz`) re-verified 2026-09-05 against sessions.db/`config.json`/CLI docs. Re-verify periodically after any Devin upgrade.
 
 To move a tier: edit the `model_policy` map in `adapters/devin/adapter.yaml`, then rerun:
 
@@ -83,6 +83,8 @@ Neo's `SKILL.md` deliberately has no `allowed-tools` (`run_subagent`/`ask_user_q
 
 Puntero: mecanismo completo (withholding incondicional + bounce-to-Neo) en "`ask-user` withheld from every subagent (mechanics)" más abajo.
 
+**User-only restriction (observed runtime):** the host's saved sessions carry a system-level restriction — "Do not use subagents unless the user explicitly asks you to." (first observed 2026-09-03 14:01:28 UTC). Host runtime behavior, not a user request, Matrix update, or model change. Ask the user explicitly once before delegating; never override the host.
+
 ## Federated ships and `max-nesting`
 
 Puntero: mecanismo completo del `max-nesting` (fórmula `depth_from_root + subtree_depth`, ejemplo Logos) en "`run-subagent` in nestable artifacts (the `max-nesting` mechanism)" más abajo.
@@ -95,11 +97,11 @@ See [`AGENTS.md`](AGENTS.md) §12.
 
 Reuses `adapters/devin/hooks/session_audit.py` + the `activation.reinject` flag (`hooks/_flags.py`).
 
-- **Wiring.** `session_audit.py` wired to `SessionStart`/`UserPromptSubmit`/`PostToolUse`/`PostCompaction`/`SessionEnd` in `~/.config/devin/config.json` by `adapters/devin/install-hooks.sh` (`install.sh` runs it last, so `install --target=devin` sets it up anywhere).
+- **Wiring.** `session_audit.py` wired to `SessionStart`/`UserPromptSubmit`/`PostToolUse`/`PostCompaction`/`SessionEnd` in `~/.config/devin/config.json` by `adapters/devin/install-hooks.sh`.
 - **Injection.** `activation.reinject: true` (via `adapters/devin/config.yaml#flags`) renders `brain/data/activation-preamble.tmpl` (misma fuente que `matrix_block_tmp()` en `bin/matrix` y el `neo` SKILL.md generado) como `hookSpecificOutput.additionalContext` en `SessionStart`/`UserPromptSubmit`.
 - **`{{ADAPTER_DOC_PATH}}`** → `DEVIN.md` (`binding.doc_path` en `adapters/devin/adapter.yaml`); las tres superficies (`matrix_block_tmp()`, `adapters/_build.py`, `_render_activation_preamble()` de `session_audit.py`) la resuelven a ruta **absoluta**.
-- **Scope.** `_activation_reinject_scope()` (B1-Option 1) aplica en workspace mode y en proyectos resueltos por registry, cada `session_start`/`user_prompt_submit`, via `bin/matrix scope` (wrapper de `resolve_scope()`). No hay binding de filesystem (`_brain`/`AGENTS.local.md`).
-- **Flag state.** `activation.reinject` es `true` (absorbe el legacy `experiment.activation_inject`); afecta workspace mode y project.
+- **Scope.** `_activation_reinject_scope()` (B1-Option 1) aplica en workspace mode y en proyectos resueltos por registry, cada `session_start`/`user_prompt_submit`, via `bin/matrix scope` (wrapper de `resolve_scope()`).
+- **Flag state.** Ver `bin/matrix flags` para el valor efectivo de `activation.reinject`; afecta workspace mode y project.
 
 ### `activation.reinject_full` (throttled since 2026-09-01, Camino 2 Q1-A)
 
@@ -108,7 +110,7 @@ Current value: **`false`** in `adapters/devin/config.yaml#flags` (absorbe el leg
 - **Revert criterion.** Back to `true` only if (a) observed BLOCK ratio > 21% over ≥ 20 phase closes, **or** (b) a contract violation is traced to a throttled turn (the missing full preamble caused it).
 - **Known gap.** No env-var kill-switch — only editing `adapters/devin/config.yaml` directly.
 
-**Verified 2026-07-28**: `hook-audit.jsonl` shows reads of `AGENTS.md` then `neo.md` (audit log, not prose); re-verify on upgrade → `brain/output/research/adapter-lessons-detail.md`.
+**Verified 2026-07-28**: `hook-audit.jsonl` shows reads of `AGENTS.md` then `neo.md`; re-verify on upgrade → `brain/output/research/adapter-lessons-detail.md`.
 
 ## Hardening `permissions.deny` for secret stores
 
@@ -152,7 +154,7 @@ Enforcement = portable `hooks/*.py` (JSON in/out contract), fired by `bin/matrix
 
 ## Relocated from `brain/data/capability-map.md` (Phase 2, `validate_layer2` remediation)
 
-Moved here wholesale from `capability-map.md` (no semantic change) so that file stays CLI-agnostic; this is the concrete companion naming Devin's real tool identifiers.
+Concrete companion naming Devin's real tool identifiers; the brain stays CLI-agnostic.
 
 ### The live `adapter.yaml` binding (concrete, not illustrative)
 
@@ -215,9 +217,11 @@ El hook `PreToolUse` (`adapters/devin/hooks/pre_tool_use_guard.py`) ahora tambi�
 
 ## Feature flags (Devin adapter)
 
-`hooks/_flags.py` es el loader único. Precedencia: env `MATRIX_<NAME>` (`.`→`_`, upper) > `adapters/devin/config.yaml#flags` > `brain/config.yaml#flags` > DEFAULTS. `bin/matrix flags` imprime valor efectivo, fuente, riesgo, estado y `depends_on`; `flags --validate` hace exit 1 si hay flags `dangerous`/`inert`. Env legadas booleanas emiten WARN de deprecación y se mapean: `MATRIX_INJECT_ACTIVATION`→`activation.reinject`, `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`→`hooks.boot_warn`. Los TTLs numéricos (`MATRIX_WRITER_LANE_TTL_S`, `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`) NO son flags.
+`hooks/_flags.py` es el loader único (precedencia: env `MATRIX_<NAME>` > `adapters/devin/config.yaml#flags` > `brain/config.yaml#flags` > DEFAULTS). `bin/matrix flags` muestra el valor efectivo, fuente, riesgo y estado; `flags --validate` hace exit 1 si hay flags `dangerous`/`inert`.
 
-El bloque `flags:` de `adapters/devin/config.yaml` declara `activation.reinject`, `activation.reinject_full` y `gate.secret_deny` (absorben los legacy `experiment.activation_inject`, `experiment.activation_inject_userprompt_full` y `secret_deny.enabled`). `gate.secret_deny` default **off**; para re-habilitar la deny-list: setear la flag en on y correr `bin/matrix harden --target=devin --apply` (el sidecar `~/.config/devin/.matrix-managed-deny.json` se crea ahí).
+Los 11 flags: `activation.reinject`, `activation.reinject_full`, `gate.shared_surface`, `gate.writer_lane`, `gate.pre_exec_guard`, `gate.secret_deny`, `hooks.pre_activation_check`, `hooks.boot_warn`, `memory.tree`, `views.scoped`, `binding.artifacts`. Estado efectivo: ver `bin/matrix flags` — los valores de esta doc no son el estado actual.
+
+Legacy env: `MATRIX_INJECT_ACTIVATION`→`activation.reinject`; `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`→`hooks.boot_warn`. `gate.secret_deny` default off; re-habilitar: flag on + `bin/matrix harden --target=devin --apply` (sidecar `~/.config/devin/.matrix-managed-deny.json`). Los TTLs numéricos (`MATRIX_WRITER_LANE_TTL_S`, `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`) NO son flags.
 
 ## Lessons — detalle de adapter
 

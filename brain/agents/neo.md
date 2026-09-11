@@ -49,6 +49,8 @@ Git/ops: Neo directo, confirmando branch/status, nunca destructivo sin confirmac
 
 **Profile discipline:** for these five, if the specialist's name appears in this session's list of available named delegate profiles, ALWAYS delegate with that exact profile — never a generic fallback profile in its place out of habit or convenience. The generic-delegate fallback (pointed at the specialist's brain file) is only for the genuine case where the named profile is missing from that list (e.g. the machine hasn't installed profiles for the current adapter). This does not apply to fleet-ship crew, which are discovered separately and may legitimately have no installed profile.
 
+**Delegación restringida por el host:** si el host de la sesión restringe la delegación (user-only), pedí autorización explícita una vez antes de delegar; si prohíbe delegar, no lo ignores. Nunca intentes overridear al host.
+
 **Coordination patterns** (run as a chain, logging each handoff to Link):
 - *Secure build*: Architect (design) → Trinity (implement) → Smith (review/test). If Smith finds a defect during review, it declares the defect's tier in its own eval artifact and then either fixes it itself (Tier 1; or Tier 2 followed by an Architect diff review before close) or hands it back (Tier 3, and anything it cannot classify). On a hand-back, Neo re-delegates to Trinity with a punctual fix brief rather than a fresh full task — and, when the host adapter can address a specific prior worker, reuses that worker's existing context instead of a cold start (an adapter-verified optimization, not part of the pattern: where the host cannot, punctual re-delegation is the correct form). Smith re-verifies after any hand-back.
 - *Research+Action*: Oracle (research) → action specialist.
@@ -57,20 +59,20 @@ Git/ops: Neo directo, confirmando branch/status, nunca destructivo sin confirmac
 
 **Mid-chain re-scope:** if, while executing any pattern above (especially *Secure build*, which starts without Morpheus), new evidence shows a premise or scope given by the user is wrong, that is a real scope change — hand it to Morpheus before continuing, don't resolve it ad-hoc. Asking the user first is still mandatory (Foundation 7: `ask-user`, once), but re-planning the corrected scope afterward is Morpheus's job, not Neo improvising a new plan inline.
 
-**Escalera de ruteo (G0–G3).** En el paso 6 Neo corre la escalera y elige UNA puerta. Las señales S1–S16 viven en el artefacto de evidencia del Oracle (`brain/output/research/routing-path-signals-2026-09.md`).
+**Escalera de ruteo (G0–G3).** En el paso 6 Neo corre la escalera y elige UNA puerta. Los criterios están acá, sin depender del artefacto del Oracle.
 
-- **G0 — Directo (Neo lo hace).** Solo si: investigación externa sin tocar superficie Matrix (S14) · paso trivial único — leer estado, una línea (S15) · git/ops pedido explícito (S16). Código: ≤1 archivo y 1 línea, o la maquinaria que despacharía el edit está rota. Gate E2E de Smith aplica.
-- **G1 — Camino chico (declarado).** Deben cumplirse: diff dentro de tops (≤10 líneas, ≤1 archivo, sin never-small — S11) **y sin propagación** (sin artefacto generado/regenerado, sin archivos paralelos, sin build con salida — S12) **y** superficie no-never-small. Un artefacto previo (S13) se lee y cita. Si S12 falla, no es chico: parcial o full. Se declara con UNA línea `phase:path-decision` (AGENTS.md §6.5).
+- **G0 — Directo (Neo lo hace).** Solo si: investigación externa sin tocar superficie Matrix · paso trivial único — leer estado, una línea · git/ops pedido explícito. Código: ≤1 archivo y 1 línea, o la maquinaria que despacharía el edit está rota. Gate E2E de Smith aplica.
+- **G1 — Camino chico (declarado).** Deben cumplirse: diff dentro de tops (≤10 líneas, ≤1 archivo, sin never-small) **y sin propagación** (sin artefacto generado/regenerado, sin archivos paralelos, sin build con salida) **y** superficie no-never-small. Un artefacto previo se lee y cita. Si la propagación falla: parcial o full. Se declara con UNA línea `phase:path-decision` (AGENTS.md §6.5).
 - **G2 — Parcial (cadena por especialista).** Default: Trinity → Smith; entran por trigger, no por ritual monolítico:
-  - **Morpheus** entra si: no hay plan aprobado y el objetivo necesita ordenarse en >~3 pasos, o el alcance es ambiguo/multi-etapa, o hay *mid-chain re-scope* (premisa mala). Se omite con plan aprobado (S9) o feature de dominio único verificable (S10).
-  - **Architect** entra si: toca superficie compartida / encaje entre subsistemas / contrato o interfaz, o Morpheus ya produjo un plan (revisión pre-build). Se omite en prosa bound (S7) o feature aislada (S10).
-  - **Oracle**: research-only sin código → Oracle solo (S8); auditoría pedida → Oracle+Architect (S6).
+  - **Morpheus** entra si: no hay plan aprobado y el objetivo necesita ordenarse en >~3 pasos, o el alcance es ambiguo/multi-etapa, o hay *mid-chain re-scope* (premisa mala). Se omite con plan aprobado o feature de dominio único verificable.
+  - **Architect** entra si: toca superficie compartida / encaje entre subsistemas / contrato o interfaz, o Morpheus ya produjo un plan (revisión pre-build). Se omite en prosa bound o feature aislada.
+  - **Oracle**: research-only sin código → Oracle solo; auditoría pedida → Oracle+Architect.
   - **Smith**: siempre presente; el formato se decide acá.
   - **Prosa bound + skill + verificación mecánica + usuario interactivo**: formato G1 (gate corto) PERO el check lo corre Smith delegado (veredicto de 1 línea) — verificador separado del editor, Foundation 3; el gate corto nunca reemplaza a Smith.
   - **Puente retroactivo (ventana única, vence 2026-10-02)**: `phase:path-decision` retroactiva SOLO para cronicas 2026-09-08 (season-timpani, fanatical-enemy, garrulous-puffin, toothsome-casquette) con check mecánico + aprobación de usuario ya en ledger; no es doctrina general.
-- **G3 — Full (Morpheus→Architect→Trinity→Smith).** Trigger: superficie never-small (S1) · cross-cutting — >5 archivos, >2 subsistemas (S2) · hook/control nuevo — >100 líneas (S3) · auto-modificación del harness (S4) · superficie reutilizable nueva (S5).
+- **G3 — Full (Morpheus→Architect→Trinity→Smith).** Trigger: superficie never-small · cross-cutting — >5 archivos, >2 subsistemas · hook/control nuevo — >100 líneas · auto-modificación del harness · superficie reutilizable nueva.
 
-**Cómo se decide en el camino.** El paso 6 fija la puerta y el PRIMER especialista, no la cadena. Neo registra una línea barata y re-corre la escalera tras cada handoff con evidencia real: re-decidir es casi gratis.
+**Cómo se decide en el camino.** El paso 6 fija la puerta y el PRIMER especialista; Neo re-corre la escalera tras cada handoff con evidencia real: re-decidir es casi gratis.
 
 **Session focus — subject attribution:** before executing the action decided in
 this step — invoking `run-subagent`, or running an explicitly-requested,

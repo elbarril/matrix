@@ -44,12 +44,15 @@ def fixture_env(fixture_root):
     return env
 
 
-def write_audit(fixture_root, session_id):
+def write_audit(fixture_root, session_id, project=None):
     log = fixture_root / "brain" / "state" / "hook-audit.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
+    start = {"event": "session_start", "session_id": session_id,
+             "pre_activation_check_ok": True, "timestamp": "2026-01-01T00:00:00+00:00"}
+    if project:
+        start["project_active"] = project
     entries = [
-        {"event": "session_start", "session_id": session_id,
-         "pre_activation_check_ok": True, "timestamp": "2026-01-01T00:00:00+00:00"},
+        start,
         {"event": "post_tool_use", "session_id": session_id,
          "tool_name": "edit", "tool_paths": ["docs/a.md"],
          "timestamp": "2026-01-01T00:00:01+00:00"},
@@ -125,11 +128,277 @@ def case_no_delegation():
         print("C NO DELEGATION PASS")
 
 
+def case_prefers_verified_route():
+    with tempfile.TemporaryDirectory(prefix="rs-verified-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "rs-verified")
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:01+00:00] | route | cronicas | Trinity -> Smith\n'
+            '[2026-01-01T00:00:02+00:00] | handoff | cronicas | Trinity -> Smith con fidelity_check',
+        )
+        proc = run_hook(fixture_root, env, "rs-verified")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is False, f"expected triggered:false: {result}"
+        assert result["resolved"] == "delegated", f"expected resolved=delegated: {result}"
+        assert result["unverified_delegation"] is False, f"expected unverified:false: {result}"
+        assert "fidelity_check" in result["delegation_evidence"], result["delegation_evidence"]
+        print("C PREFERS VERIFIED ROUTE PASS")
+
+
+def case_history_transitions():
+    with tempfile.TemporaryDirectory(prefix="rs-transitions-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "rs-tx")
+        hist_path = fixture_root / "brain" / "state" / "routing-signal-history.jsonl"
+
+        def records_for(sid):
+            if not hist_path.is_file():
+                return []
+            return [json.loads(l) for l in hist_path.read_text(encoding="utf-8").splitlines()
+                    if l.strip() and json.loads(l).get("session_id") == sid]
+
+        proc = run_hook(fixture_root, env, "rs-tx")
+        result = json.loads(proc.stdout)
+        assert result["triggered"] is True, f"expected triggered:true: {result}"
+        assert len(records_for("rs-tx")) == 1, records_for("rs-tx")
+        run_hook(fixture_root, env, "rs-tx")
+        assert len(records_for("rs-tx")) == 1, f"same state must not duplicate: {records_for('rs-tx')}"
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:01+00:00] | route | cronicas | Trinity -> Smith con fidelity_check',
+        )
+        proc = run_hook(fixture_root, env, "rs-tx")
+        result = json.loads(proc.stdout)
+        assert result["triggered"] is False, f"expected triggered:false: {result}"
+        assert result["resolved"] == "delegated", result
+        tx = records_for("rs-tx")
+        assert len(tx) == 2, f"expected transition record: {tx}"
+        assert tx[-1]["triggered"] is False and tx[-1]["resolved"] == "delegated", tx
+        run_hook(fixture_root, env, "rs-tx")
+        assert len(records_for("rs-tx")) == 2, f"no duplicate after resolved: {records_for('rs-tx')}"
+        print("C HISTORY TRANSITIONS PASS")
+
+
+def case_count_unresolved_last_state_wins():
+    with tempfile.TemporaryDirectory(prefix="rs-count-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sys.path.insert(0, str(REPO_ROOT / "hooks"))
+        from validate_routing_signal import count_unresolved_sessions
+        hist = fixture_root / "brain" / "state" / "routing-signal-history.jsonl"
+        hist.parent.mkdir(parents=True, exist_ok=True)
+        records = [
+            {"session_id": "s1", "triggered": True, "resolved": "triggered"},
+            {"session_id": "s2", "triggered": True, "resolved": "triggered"},
+            {"session_id": "s1", "triggered": False, "resolved": "delegated"},
+            {"session_id": "s1", "triggered": True, "resolved": "triggered"},
+        ]
+        hist.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
+        count, unresolved = count_unresolved_sessions(str(hist))
+        assert count == 2, f"expected 2 unresolved (s1 last triggered, s2): {unresolved}"
+        count, unresolved = count_unresolved_sessions(str(hist), exclude_session_id="s1")
+        assert count == 1 and unresolved == ["s2"], (count, unresolved)
+        print("C COUNT LAST-STATE-WINS PASS")
+
+
+def case_foreign_project_handoff_does_not_resolve():
+    with tempfile.TemporaryDirectory(prefix="rs-foreign-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "rs-foreign", project="matrix")
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:01+00:00] | handoff | cronicas | Trinity -> Smith con fidelity_check',
+        )
+        proc = run_hook(fixture_root, env, "rs-foreign")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is True, f"foreign handoff must not resolve: {result}"
+        assert result["resolved"] == "triggered", result
+        assert result["unverified_delegation"] is False, result
+        print("C FOREIGN PROJECT HANDOFF NO-RESOLVE PASS")
+
+
+def case_own_project_handoff_resolves():
+    with tempfile.TemporaryDirectory(prefix="rs-own-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "rs-own", project="matrix")
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:01+00:00] | handoff | cronicas | Trinity -> Smith con fidelity_check\n'
+            '[2026-01-01T00:00:02+00:00] | handoff | matrix | Trinity -> Smith con fidelity_check',
+        )
+        proc = run_hook(fixture_root, env, "rs-own")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is False, f"own-project handoff must resolve: {result}"
+        assert result["resolved"] == "delegated", result
+        assert "fidelity_check" in result["delegation_evidence"], result["delegation_evidence"]
+        assert "cronicas" not in result["delegation_evidence"], result["delegation_evidence"]
+        print("C OWN PROJECT HANDOFF RESOLVES PASS")
+
+
+def case_path_decision_not_borrowed():
+    with tempfile.TemporaryDirectory(prefix="rs-pathscope-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "rs-path", project="matrix")
+        write_activity(
+            fixture_root,
+            '2026-01-01T00:00:01+00:00 | phase:path-decision | A | [ref-path] | subject=cronicas | motivo=x | sin-prop=si',
+        )
+        proc = run_hook(fixture_root, env, "rs-path")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is True, f"foreign path-decision must not exempt: {result}"
+        assert result["small_path"]["declared"] is False, result["small_path"]
+        print("C PATH DECISION NOT BORROWED PASS")
+
+
+def case_legacy_no_project_fallback():
+    with tempfile.TemporaryDirectory(prefix="rs-legacy-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "rs-legacy")
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:01+00:00] | handoff | cronicas | Trinity -> Smith con fidelity_check',
+        )
+        proc = run_hook(fixture_root, env, "rs-legacy")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is False, f"legacy session must fall back to in-scope: {result}"
+        assert result["resolved"] == "delegated", result
+        print("C LEGACY NO-PROJECT FALLBACK PASS")
+
+
+def case_scope_sid_attribution_rules():
+    with tempfile.TemporaryDirectory(prefix="rs-scoperules-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sys.path.insert(0, str(REPO_ROOT / "hooks"))
+        import validate_routing_signal as r
+        # explicit foreign sid never falls back to the project
+        assert r._activity_in_scope(
+            "handoff | matrix | Smith smoke session_id=other-session", "this-session", "matrix"
+        ) is False
+        # own explicit sid resolves even with parens around it
+        assert r._activity_in_scope(
+            "handoff | matrix | Smith smoke (session_id=this-session)", "this-session", "matrix"
+        ) is True
+        assert r._activity_in_scope(
+            "handoff | matrix | Smith smoke session_id=this-session", "this-session", "matrix"
+        ) is True
+        # no sid -> project match still applies
+        assert r._activity_in_scope(
+            "handoff | matrix | Smith smoke", "this-session", "matrix"
+        ) is True
+        # path decisions: explicit foreign sid excludes; own sid includes
+        assert r._path_decision_in_scope(
+            "phase:path-decision | A | [ref] | subject=matrix | session_id=other-session",
+            "this-session", "matrix",
+        ) is False
+        assert r._path_decision_in_scope(
+            "phase:path-decision | A | [ref] | subject=matrix | session_id=this-session",
+            "this-session", "matrix",
+        ) is True
+        print("C SCOPE SID ATTRIBUTION RULES PASS")
+
+
+def case_foreign_sid_same_project_no_resolve():
+    with tempfile.TemporaryDirectory(prefix="rs-foreignsid-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "S1", project="matrix")
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:01+00:00] | handoff | matrix | Trinity -> Smith con fidelity_check session_id=S2',
+        )
+        proc = run_hook(fixture_root, env, "S1")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is True, f"S2-attributed handoff must not delegate S1: {result}"
+        assert result["resolved"] == "triggered", result
+        print("C FOREIGN SID SAME PROJECT NO-RESOLVE PASS")
+
+
+def case_own_sid_same_project_resolves():
+    with tempfile.TemporaryDirectory(prefix="rs-ownsid-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "S1", project="matrix")
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:01+00:00] | handoff | matrix | Trinity -> Smith con fidelity_check (session_id=S1)',
+        )
+        proc = run_hook(fixture_root, env, "S1")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is False, f"own-sid handoff must resolve S1: {result}"
+        assert result["resolved"] == "delegated", result
+        print("C OWN SID SAME PROJECT RESOLVES PASS")
+
+
+def case_path_decision_foreign_sid_not_borrowed():
+    with tempfile.TemporaryDirectory(prefix="rs-pathsid-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "S1", project="matrix")
+        write_activity(
+            fixture_root,
+            '2026-01-01T00:00:01+00:00 | phase:path-decision | A | [ref] | subject=matrix | session_id=S2 | motivo=x | sin-prop=si',
+        )
+        proc = run_hook(fixture_root, env, "S1")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is True, f"foreign-sid path-decision must not exempt S1: {result}"
+        assert result["small_path"]["declared"] is False, result["small_path"]
+        print("C PATH DECISION FOREIGN SID NOT BORROWED PASS")
+
+
 def main():
     assert REPO_ROOT != Path("/tmp").resolve(), "repo root must not be /tmp"
     case_delegated_with_check()
     case_delegated_without_check()
     case_no_delegation()
+    case_prefers_verified_route()
+    case_history_transitions()
+    case_count_unresolved_last_state_wins()
+    case_foreign_project_handoff_does_not_resolve()
+    case_own_project_handoff_resolves()
+    case_path_decision_not_borrowed()
+    case_legacy_no_project_fallback()
+    case_scope_sid_attribution_rules()
+    case_foreign_sid_same_project_no_resolve()
+    case_own_sid_same_project_resolves()
+    case_path_decision_foreign_sid_not_borrowed()
     print("C DELEGATION ALL PASS")
     return 0
 

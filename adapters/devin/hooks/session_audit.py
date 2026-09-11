@@ -805,6 +805,8 @@ def main():
     if event == "session_start":
         if _flag_value("hooks.pre_activation_check"):
             pre_result = _run_pre_activation_check()
+        else:
+            pre_result = {"ok": None, "status": "disabled", "payload": {}}
         orphan_session_id = _run_detect_orphan_session(project_active)
         if orphan_session_id:
             _run_session_close_async(orphan_session_id)

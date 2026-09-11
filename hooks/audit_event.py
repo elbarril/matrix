@@ -127,6 +127,15 @@ BOOT_WARN_IDS = {
 def main():
     data = read_input()
     root = resolve_root()
+
+    if not isinstance(data, dict) or not isinstance(data.get("event"), str) or not data.get("event").strip():
+        emit({
+            "hook": "audit_event",
+            "ok": False,
+            "errors": ["payload must be a JSON object with a non-empty 'event' string — see `matrix hooks audit_event --help`"],
+        })
+        return
+
     state_dir = os.path.join(root, "brain", "state")
     os.makedirs(state_dir, exist_ok=True)
 

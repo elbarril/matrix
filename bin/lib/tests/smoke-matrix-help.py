@@ -54,10 +54,11 @@ def build_fixture(repo_root, fixture_root):
         pdir.mkdir(parents=True, exist_ok=True)
         (pdir / "README.md").write_text(f"# {pname}\n")
         subprocess.run(["git", "init"], cwd=pdir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=pdir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test"], cwd=pdir, check=True, capture_output=True)
         subprocess.run(["git", "add", "."], cwd=pdir, check=True, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=pdir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+            cwd=pdir, check=True, capture_output=True,
+        )
     fake = fixture_root / "bin" / "fake-devin"
     fake.write_text('#!/bin/bash\nif [[ "$1" == "list" && "$2" == "--format" && "$3" == "json" ]]; then echo "[]"; exit 0; fi\necho "Hardline completed"\nexit 0\n')
     fake.chmod(0o755)
@@ -205,7 +206,7 @@ def run_smoke(repo_root, matrix_rel="bin/matrix"):
             ("install", ["install", "--target=devin"], fixture_root, None),
             ("harden", ["harden", "--target=devin"], fixture_root, None),
             ("flags", ["flags"], fixture_root, None),
-            ("flags --get", ["flags", "--get", "views.scoped"], fixture_root, None),
+            ("flags --get", ["flags", "--get=views.scoped"], fixture_root, None),
             ("migrate-nobind --all --dry-run", ["migrate-nobind", "--all", "--dry-run"], fixture_root, None),
             ("phase precheck pass", ["phase", "precheck", '{"phase":"develop","e2e":true,"evidence":"smoke-test-evidence","plan":"brain/output/plans/smoke.md","step":"3.2"}'], fixture_root, None),
             ("phase precheck block", ["phase", "precheck", '{"phase":"unknown","e2e":true,"evidence":"smoke-test-evidence"}'], fixture_root, None),

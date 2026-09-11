@@ -1,10 +1,172 @@
 # Matrix CLI — hooks module (sourced by bin/matrix)
 
 run_hook() {
-    local name="$1"; shift || true
+    local name="${1:-}"
+    if [[ -z "$name" || "$name" == "--help" || "$name" == "-h" ]]; then
+        hooks_help
+        [[ -n "$name" ]] && return 0 || return 1
+    fi
+    shift || true
+    if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+        hook_help "$name"
+        return 0
+    fi
     local hook="$HOOKS_DIR/$name.py"
-    [[ -f "$hook" ]] || { log_error "Hook '$name' not found at $hook"; return 1; }
+    [[ -f "$hook" ]] || {
+        log_error "Hook '$name' not found at $hook — see 'matrix hooks --help' or docs/SYSTEM_TRUTH.md."
+        return 1
+    }
+    if [[ -z "${1:-}" ]] && [[ -t 0 ]] && hook_requires_payload "$name"; then
+        hook_help "$name"
+        return 1
+    fi
     MATRIX_ROOT="$MATRIX_DIR" python3 "$hook" "$@"
+}
+
+hook_requires_payload() {
+    case "$1" in
+        validate_phase_close|validate_routing_signal|session_close|post_run_audit|audit_event)
+            return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+phase_schema_help() {
+    cat <<'EOF'
+Copyable JSON payload (phase develop):
+{"phase":"develop","e2e":true,"evidence":"ran ./suite.sh; 12/12 passed","session_id":"<sid>"}
+
+Field rules (outside the JSON):
+  phase      spec|develop|test|eval  (required)
+  e2e        JSON boolean true; required for develop/test/eval (spec may omit)
+  evidence   string; non-trivial proof
+  lesson     required when phase == eval (or reasoned N/A)
+  session_id optional string; audit attribution
+  plan, step optional strings; advisory only (precheck)
+EOF
+}
+
+phase_help() {
+    echo "Usage: matrix phase {close|precheck} '<json>'"
+    echo "  close     reality gate; persists PASS/BLOCK to the Link ledger"
+    echo "  precheck  dry-run; does NOT persist phase:close"
+    echo "Schema and examples:  matrix phase close --help   (or precheck --help)"
+}
+
+phase_examples_help() {
+    cat <<'EOF'
+
+Examples (precheck accepts the same payloads; dry-run):
+  matrix phase close '{"phase":"develop","e2e":true,"evidence":"ran ./suite.sh; 12/12 passed"}'
+  matrix phase close '{"phase":"spec","evidence":"brain/output/plans/myplan.md"}'
+  matrix phase close '{"phase":"eval","e2e":true,"evidence":"e2e suite + gate Smith PASS","lesson":"N/A - no new lesson"}'
+EOF
+}
+
+phase_close_help() {
+    echo "Usage: matrix phase close '<json>' — reality gate; persists PASS/BLOCK to the Link ledger."
+    phase_schema_help
+    phase_examples_help
+}
+
+phase_precheck_help() {
+    echo "Usage: matrix phase precheck '<json>' — dry-run; does NOT persist phase:close."
+    phase_schema_help
+    phase_examples_help
+}
+
+session_close_help() {
+    cat <<'EOF'
+Usage: matrix session close '[<json>]'
+
+Audits the session protocol (session_start, pre_activation_check, phase_close,
+smith_gate) and appends a session:close ledger entry. Audits the PROCESS; it
+does NOT replace 'phase close' (reality gate).
+
+Copyable JSON payload: {"session_id":"<sid>"}
+session_id is optional; falls back to the current session marker.
+
+Examples:
+  matrix session close '{"session_id":"vine-pastry"}'
+  matrix session close
+EOF
+}
+
+hooks_help() {
+    cat <<'EOF'
+Usage: matrix hooks <name> [json]
+
+Runs a Seraph hook directly (low-level). It does NOT register phase:close or
+session:close ledger entries. For the normal workflow use:
+  matrix phase close / phase precheck
+  matrix session close
+
+Per-hook help:  matrix hooks <name> --help
+
+Available hooks:
+EOF
+    local f
+    for f in "$HOOKS_DIR"/*.py; do
+        [[ -f "$f" ]] || continue
+        local hname; hname="$(basename "$f" .py)"
+        [[ "$hname" == _* ]] && continue
+        echo "  $hname"
+    done
+}
+
+hook_help() {
+    local name="$1"
+    echo "Usage: matrix hooks $name [json] — low-level; does NOT register phase:close/session:close."
+    case "$name" in
+        validate_phase_close|precheck_phase_close)
+            phase_schema_help
+            ;;
+        validate_routing_signal|session_close)
+            echo 'Payload: {"session_id":"<sid>"}  (optional; falls back to the current session marker)'
+            ;;
+        post_run_audit)
+            echo 'Payload: {"agent":"<name>","session_id":"<sid>","steps":["session_start"],"required":["session_start"]}'
+            ;;
+        pre_activation_check)
+            echo 'Payload: {"project":"<name>"}  (optional)'
+            ;;
+        audit_event)
+            cat <<'EOF'
+Payload: {"event":"post_tool_use","session_id":"<sid>"}   (event is required)
+Side effect: appends to brain/state/hook-audit.jsonl. Invalid/empty payload BLOCKs without writing.
+EOF
+            ;;
+        pre_exec_guard)
+            echo 'Payload: {"tool_name":"<name>","tool_input":{...},"session_id":"<sid>"}'
+            ;;
+        validate_ship)
+            echo 'Payload: {"ship":"<name>","project":"<name>"}'
+            ;;
+        detect_orphan_session)
+            echo 'Payload: {"project_active":"<project>"}'
+            ;;
+        the_source)
+            cat <<'EOF'
+Payload: {"check":true}  (read-only validation)
+WARNING: without a payload this hook GENERATES docs/SYSTEM_TRUTH.md.
+EOF
+            ;;
+        *)
+            if [[ -f "$HOOKS_DIR/$name.py" ]]; then
+                echo "No payload required (noargs). See docs/SYSTEM_TRUTH.md."
+            else
+                log_error "Hook '$name' not found at $HOOKS_DIR/$name.py. Available hooks:"
+                local f
+                for f in "$HOOKS_DIR"/*.py; do
+                    [[ -f "$f" ]] || continue
+                    local hname; hname="$(basename "$f" .py)"
+                    [[ "$hname" == _* ]] && continue
+                    echo "  $hname"
+                done
+                return 1
+            fi
+            ;;
+    esac
 }
 
 # Gate: Layer-2 CLI-neutrality must pass before any Trainman build/install.
@@ -64,9 +226,17 @@ check_artifact_summary_warn() {
 # BLOCK), echoes the hook's JSON, and exits with the hook's exit code.
 phase_close() {
     local payload="${1:-}"
-    [[ -z "$payload" ]] && { log_error "Usage: matrix phase close '<json>'"; return 1; }
+    if [[ "$payload" == "--help" || "$payload" == "-h" ]]; then
+        phase_close_help
+        return 0
+    fi
+    [[ -z "$payload" ]] && { phase_close_help; return 1; }
     printf '%s' "$payload" | jq empty 2>/dev/null || {
-        log_error "Invalid JSON payload. Usage: matrix phase close '<json>'"; return 1; }
+        log_error "Invalid JSON payload. See 'matrix phase close --help' for the schema."; return 1; }
+    if [[ "$(printf '%s' "$payload" | jq -r 'type' 2>/dev/null || true)" != "object" ]]; then
+        log_error "Payload must be a JSON object. See 'matrix phase close --help' for the schema."
+        return 1
+    fi
 
     local out="" rc=0
     out="$(run_hook validate_phase_close "$payload")" || rc=$?
@@ -95,15 +265,22 @@ phase_close() {
     subject="${subject:-matrix}"
     link_append "phase:close" "$subject" "$verdict | phase=${phase} | ${detail}"
 
-    local sid; sid="$(current_session_id || true)"
+    local sid="" sid_kind
+    sid_kind="$(printf '%s' "$payload" | jq -r 'if has("session_id") then (.session_id | type) else "absent" end' 2>/dev/null || echo absent)"
+    if [[ "$sid_kind" == "string" ]]; then
+        sid="$(printf '%s' "$payload" | jq -r '.session_id' 2>/dev/null || true)"
+    elif [[ "$sid_kind" == "absent" ]]; then
+        sid="$(current_session_id || true)"
+    fi
     if [[ -n "$sid" ]]; then
-        local audit_event_name
+        local audit_event_name audit_json
         if [[ "$verdict" == "PASS" ]]; then
             audit_event_name="phase_close"
         else
             audit_event_name="phase_close_blocked"
         fi
-        run_hook audit_event "{\"event\":\"$audit_event_name\",\"session_id\":\"$sid\"}" >/dev/null || true
+        audit_json="$(jq -n --arg event "$audit_event_name" --arg sid "$sid" '{event:$event, session_id:$sid}' 2>/dev/null || true)"
+        [[ -n "$audit_json" ]] && run_hook audit_event "$audit_json" >/dev/null || true
     fi
 
     printf '%s\n' "$out"
@@ -112,9 +289,17 @@ phase_close() {
 
 phase_precheck() {
     local payload="${1:-}"
-    [[ -z "$payload" ]] && { log_error "Usage: matrix phase precheck '<json>'"; return 1; }
+    if [[ "$payload" == "--help" || "$payload" == "-h" ]]; then
+        phase_precheck_help
+        return 0
+    fi
+    [[ -z "$payload" ]] && { phase_precheck_help; return 1; }
     printf '%s' "$payload" | jq empty 2>/dev/null || {
-        log_error "Invalid JSON payload. Usage: matrix phase precheck '<json>'"; return 1; }
+        log_error "Invalid JSON payload. See 'matrix phase precheck --help' for the schema."; return 1; }
+    if [[ "$(printf '%s' "$payload" | jq -r 'type' 2>/dev/null || true)" != "object" ]]; then
+        log_error "Payload must be a JSON object. See 'matrix phase precheck --help' for the schema."
+        return 1
+    fi
 
     local layer_a="" layer_a_rc=0
     layer_a="$(run_hook validate_phase_close "$payload")" || layer_a_rc=$?
@@ -140,9 +325,11 @@ phase_precheck() {
 
 phase_cmd() {
     case "${1:-}" in
+        --help|-h) phase_help ;;
         close)    shift; phase_close "${1:-}" ;;
         precheck) shift; phase_precheck "${1:-}" ;;
-        *)        log_error "Usage: matrix phase {close|precheck} '<json>'"; return 1 ;;
+        "")       phase_help; return 1 ;;
+        *)        log_error "Usage: matrix phase {close|precheck} '<json>' — see 'matrix phase close --help'"; return 1 ;;
     esac
 }
 
@@ -152,9 +339,17 @@ phase_cmd() {
 # echoes the hook's JSON, and exits with the hook's exit code.
 session_close() {
     local payload="${1:-}"
+    if [[ "$payload" == "--help" || "$payload" == "-h" ]]; then
+        session_close_help
+        return 0
+    fi
     if [[ -n "$payload" ]]; then
         printf '%s' "$payload" | jq empty 2>/dev/null || {
             log_error "Invalid JSON payload. Usage: matrix session close '[<json>]'"; return 1; }
+        if [[ "$(printf '%s' "$payload" | jq -r 'type' 2>/dev/null || true)" != "object" ]]; then
+            log_error "Payload must be a JSON object. Usage: matrix session close '[<json>]'"
+            return 1
+        fi
     fi
 
     local out="" rc=0
@@ -179,6 +374,8 @@ session_close() {
 session_cmd() {
     case "${1:-}" in
         close) shift; session_close "${1:-}" ;;
+        --help|-h) session_close_help ;;
+        "") session_close_help; return 1 ;;
         *)     log_error "Usage: matrix session close '[<json>]'"; return 1 ;;
     esac
 }

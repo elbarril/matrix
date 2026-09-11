@@ -65,6 +65,18 @@ def _derive_steps(entries):
     return steps
 
 
+def _session_start_status(entries):
+    """Return the pre_activation_check_status of the session's session_start.
+
+    Judged from the session's own audit record, never from the current global
+    flag. Legacy entries without a status return None (still required).
+    """
+    for entry in entries:
+        if entry.get("event") == "session_start":
+            return entry.get("pre_activation_check_status")
+    return None
+
+
 # What a hook-derived audit can realistically observe. Unlike the LLM
 # self-report default in post_run_audit.py (which expects "load_config" and
 # "resolve_context" — steps no Devin lifecycle event exposes), a session
@@ -143,6 +155,9 @@ def main():
     steps = _derive_steps(filtered)
 
     required = list(SESSION_REQUIRED_STEPS)
+    start_status = _session_start_status(filtered)
+    if start_status == "disabled":
+        required = [s for s in required if s != "pre_activation_check"]
     has_mutating_work = _has_mutating_work(filtered, root)
     if has_mutating_work:
         required.append("phase_close")

@@ -158,7 +158,7 @@ State & telemetry:
 Flags:
   flags                   Show the effective feature-flag table (value, source, risk, state, depends_on)
   flags --json            JSON array of all flags
-  flags --get <name>      JSON of one flag
+  flags --get=<name>      JSON of one flag
   flags --validate        List dangerous/inert flags; exit 1 if any
 
 Link ledger & fleet:
@@ -195,6 +195,9 @@ Enforcement & adapters:
   harden --target=<cli>   Reconcile permissions.deny with secret-deny config (dry-run;
                           use --apply to write, --revert to undo Matrix-managed entries)
   help                    Show this help
+
+Sub-command help (no side effects): matrix phase --help, phase close --help,
+  phase precheck --help, session close --help, hooks --help, hooks <name> --help
 EOF
 }
 
@@ -242,6 +245,25 @@ main() {
         "")
             log_error "No command. Use 'matrix help'."
             exit 1
+            ;;
+        phase)
+            if [[ "${2:-}" == "--help" || "${2:-}" == "-h" ]]; then phase_help; exit 0; fi
+            if [[ "${2:-}" == "close" && ( "${3:-}" == "--help" || "${3:-}" == "-h" ) ]]; then phase_close_help; exit 0; fi
+            if [[ "${2:-}" == "precheck" && ( "${3:-}" == "--help" || "${3:-}" == "-h" ) ]]; then phase_precheck_help; exit 0; fi
+            acquire_lock; shift; phase_cmd "$@"
+            ;;
+        session)
+            if [[ "${2:-}" == "--help" || "${2:-}" == "-h" ]]; then session_close_help; exit 0; fi
+            if [[ "${2:-}" == "close" && ( "${3:-}" == "--help" || "${3:-}" == "-h" ) ]]; then session_close_help; exit 0; fi
+            acquire_lock; shift; session_cmd "$@"
+            ;;
+        hooks)
+            if [[ "${2:-}" == "--help" || "${2:-}" == "-h" ]]; then hooks_help; exit 0; fi
+            if [[ -n "${2:-}" && ( "${3:-}" == "--help" || "${3:-}" == "-h" ) ]]; then
+                if hook_help "$2"; then exit 0; fi
+                exit 1
+            fi
+            acquire_lock; shift; run_hook "$@"
             ;;
         *)
             # Hardline owns dedicated queue/project locks; the global command

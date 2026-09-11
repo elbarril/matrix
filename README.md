@@ -234,6 +234,31 @@ Ahora podés abrir Devin CLI dentro de `sitio-web/` y dentro de `api-backend/` (
 # (then invoke Neo via `/neo` in Devin CLI, from any project; the user always talks to Neo first)
 ```
 
+## Runbook (comandos comunes, copiables)
+
+```bash
+# Contexto y estado
+./bin/matrix scope --tree            # modo/proyecto + cadena de memoria
+./bin/matrix status                  # checkpoints y Link del proyecto en scope
+./bin/matrix checkpoint "qué hice y qué falta"
+
+# Ruteo: cada route/handoff va al ledger; distinguí el dispatch del resultado verificado
+./bin/matrix link route   mi-proyecto "plan+execute: Morpheus -> Architect -> Trinity -> Smith (session_id=<sid>)"
+./bin/matrix link handoff mi-proyecto "Trinity -> Smith despachado; verificar con su gate E2E (session_id=<sid>)"
+
+# Cierre de fase: el gate real es phase close; precheck es opcional (dry-run)
+./bin/matrix phase close   '{"phase":"develop","e2e":true,"evidence":"ran ./suite.sh; 12/12 passed","session_id":"<sid>"}'
+./bin/matrix phase close   '{"phase":"eval","e2e":true,"evidence":"gate Smith PASS","lesson":"N/A - no new lesson","session_id":"<sid>"}'
+./bin/matrix phase precheck '{"phase":"develop","e2e":true,"evidence":"ran ./suite.sh; 12/12 passed","session_id":"<sid>"}'  # opcional
+# Schema copiable sin efectos:  ./bin/matrix phase close --help
+
+# Cierre de sesión (audita el protocolo; no reemplaza phase close)
+./bin/matrix session close '{"session_id":"<sid>"}'
+
+# Desde la raíz o sin cwd en el proyecto: ruta absoluta + MATRIX_PROJECT registrado
+MATRIX_PROJECT=mi-proyecto /home/vos/matrix/bin/matrix phase close '{"phase":"spec","evidence":"brain/output/plans/myplan.md"}'
+```
+
 ## Uso diario típico
 
 - **Un solo proyecto, uso normal:** registralo (`matrix add <proyecto> <ruta>`) y activalo (`matrix select <proyecto>`) una vez; después simplemente abrís Devin CLI dentro de esa carpeta cuando quieras trabajar — Neo se activa solo. No hace falta re-seleccionar nada en cada sesión.
