@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Devin CLI Stop hook — best-effort Telegram notification for long
-unattended turns on Matrix-bound projects.
+unattended turns on Matrix project sessions.
 
 HARD INVARIANT: never writes to stdout, always exits 0. A Stop hook that
 writes {"decision": "block", ...} to stdout or exits nonzero/2 forces the

@@ -73,7 +73,7 @@ model_policy: <cheap|reasoning|auto>   # The Construct uses this
 ---
 
 <activation>
-1. Load configuration (_brain-aware: try `_brain/config.yaml`, fallback `brain/config.yaml`).
+1. Load configuration (`brain/config.yaml`).
 2. Determine the active project (or Matrix workspace mode).
 3. Read the last checkpoints + relevant lessons.
 4. ... agent-specific steps ...
@@ -94,9 +94,9 @@ model_policy: <cheap|reasoning|auto>   # The Construct uses this
 ## State & persistence — topology examples (from AGENTS.md §7)
 
 Examples of `innermost-root-wins` topologies that the single scope-resolution rule handles without special cases:
-- the Matrix repo living inside a bound project (`emi ⊃ matrix`);
-- a bound project living inside the Matrix repo (`clients/<name>`, type `remote`);
-- a bound project inside another bound project (`emi ⊃ deseo`).
+- the Matrix repo living inside a registered project (`emi ⊃ matrix`);
+- a registered project living inside the Matrix repo (`clients/<name>`, type `remote`);
+- a registered project inside another registered project (`emi ⊃ deseo`).
 
-- **Root resolution (robust).** Scripts resolve `MATRIX_ROOT` by: (1) following a `_brain` symlink up one level if present; else (2) walking up from the script location until `brain/` + `AGENTS.md` are found. Works from any subdirectory or active project.
+- **Root resolution (robust).** Scripts resolve `MATRIX_ROOT` by walking up from the script location until `brain/` + `AGENTS.md` are found (the `_brain` symlink bootstrap is a vestigial legacy path, no longer needed). Works from any subdirectory or registered project.
 

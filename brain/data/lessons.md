@@ -52,7 +52,7 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 35. **Antes de construir un mecanismo nuevo de coordinación, buscá si `adapters/<target>/` ya tiene un lever para eso.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
 
-37. **Cuando agregás una entrada a `gitignore_entries`, auditá los proyectos ya bindeados.** Detalle: `brain/output/research/adapter-lessons-detail.md`.
+37. **Cuando agregás una entrada a `gitignore_entries`, auditá los proyectos ya bindeados.** Detalle: `brain/output/research/adapter-lessons-detail.md`. — **MECANISMO RETIRADO 2026-09-11** (rework no-binding): ya no se escriben `_brain`/`AGENTS.local.md`/exclude dentro de los proyectos; la lección queda como registro histórico del incidente original.
 
 38. **Al reparar SQLite con `.dump`, inspeccioná la última línea: puede cerrar en `ROLLBACK`.** Detalle: `brain/output/research/devin-sessions-db-corruption-incidents.md`. <!-- adapter-note: filename contains adapter name, pointer to existing research artifact -->
 

@@ -31,9 +31,6 @@ work_project() {
     [[ -z "$name" ]] && { log_error "Usage: matrix work <name>"; return 1; }
     local path; path="$(resolve_project_path "$name")" || { log_error "Project '$name' not found"; return 1; }
     warm_project_entry "$name" "$path"
-    local target; target="$(registry_bound_target "$name")"
-    [[ -n "$target" && "$target" != "null" ]] || target="devin"
-    update_exclude "$path" "$target" 2>/dev/null || true
 }
 
 is_project_warm() {
@@ -56,7 +53,6 @@ unwork_project() {
     local name="$1"
     [[ -z "$name" ]] && { log_error "Usage: matrix unwork <name>"; return 1; }
     init_state
-    is_bound "$name" && deselect_project "$name"
     if ! is_project_warm "$name"; then
         log_warning "'$name' is not in the active set"
         return 0
@@ -76,20 +72,20 @@ unwork_all_projects() {
         esac
     done
     init_state
-    local deselected=0 unworked=0 untouched=0
+    local migrated=0 unworked=0 untouched=0
     local projects; projects="$(read_registry)"
     while IFS=$'\t' read -r name path type; do
         [[ -z "$name" ]] && continue
-        local bound=false warm=false
-        is_bound "$name" && bound=true
+        local legacy=false warm=false
+        has_legacy_binding_artifacts "$name" >/dev/null 2>&1 && legacy=true
         is_project_warm "$name" && warm=true
-        if ! $bound && ! $warm; then untouched=$((untouched+1)); continue; fi
+        if ! $legacy && ! $warm; then untouched=$((untouched+1)); continue; fi
         if $dry_run; then
-            $bound && { echo "  deselect: $name"; deselected=$((deselected+1)); }
+            $legacy && { echo "  migrate-nobind: $name"; migrated=$((migrated+1)); }
             $warm  && { echo "  unwork:   $name"; unworked=$((unworked+1)); }
             continue
         fi
-        if $bound; then deselect_project "$name" || true; deselected=$((deselected+1)); fi
+        if $legacy; then migrate_nobind_one "$name" false || true; migrated=$((migrated+1)); fi
         if $warm; then
             remove_warm_entry "$name"
             link_append "project:unwork" "$name" ""
@@ -97,10 +93,10 @@ unwork_all_projects() {
         fi
     done <<< "$projects"
     if ! $dry_run; then
-        link_append "projects:unwork-all" "-" "deselected=$deselected unworked=$unworked"
+        link_append "projects:unwork-all" "-" "migrated=$migrated unworked=$unworked"
     fi
     echo
-    log_info "Deselected: $deselected | Unworked: $unworked | Untouched: $untouched"
+    log_info "Migrated: $migrated | Unworked: $unworked | Untouched: $untouched"
 }
 
 unwork_dispatch() {
@@ -133,9 +129,7 @@ show_workspace() {
     fi
     while IFS= read -r n; do
         [[ -z "$n" ]] && continue
-        local mark=""
-        is_bound "$n" && mark=" [bound]"
-        echo "   • $n$mark"
+        echo "   • $n"
     done <<< "$names"
 }
 

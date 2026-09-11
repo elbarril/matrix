@@ -691,7 +691,7 @@
 <div class="channel-inner tv-frame">
   <h1>Matrix</h1>
   <span class="subtitle" style="color:var(--text);font-weight:300;font-size:1rem;display:block;margin-top:0.3rem;">Personal Intelligence Engine &mdash; construido para Devin CLI</span>
-  <p style="margin-top:0.6rem;max-width:62ch;">Un cerebro que vive en un repo y se conecta a tus proyectos por symlink. Está escrito para ser CLI-agnóstico (habla en capacidades, nunca en herramientas de un CLI puntual), pero hoy el único adaptador implementado y mantenido es Devin. Elegí un canal de la pared de TVs o usá el tour guiado.</p>
+  <p style="margin-top:0.6rem;max-width:62ch;">Un cerebro que vive en un repo y se conecta a tus proyectos por registro (no escribe nada dentro de ellos). Está escrito para ser CLI-agnóstico (habla en capacidades, nunca en herramientas de un CLI puntual), pero hoy el único adaptador implementado y mantenido es Devin. Elegí un canal de la pared de TVs o usá el tour guiado.</p>
   <nav class="home-grid" id="homeGrid" aria-label="Pared de canales">
     <!-- populated by JS from CHANNELS in JS mode; static fallback list below for no-js -->
     <a class="tv-thumb" href="#ch-que-es"><span class="tv-num">1</span><span class="tv-name">Qué es Matrix</span></a>
@@ -718,7 +718,7 @@
 <div class="channel-kicker">Canal 1 / 12 (tour)</div>
 <h2>Qué es Matrix</h2>
 <div class="level1">
-<p>Matrix es tu capa de inteligencia personal: un repositorio raíz con el cerebro, conectado a cada proyecto por un symlink <code>_brain</code>. Se organiza en <strong>tres capas</strong> (adaptador, cerebro agnóstico, orquestación) y nunca copia inteligencia al proyecto.</p>
+<p>Matrix es tu capa de inteligencia personal: un repositorio raíz con el cerebro, conectado a cada proyecto por registro de ruta (sin symlinks, sin archivos dentro del proyecto). Se organiza en <strong>tres capas</strong> (adaptador, cerebro agnóstico, orquestación) y nunca copia inteligencia al proyecto.</p>
 </div>
 <div class="level2" data-steps="3">
   <ol class="step-list" style="list-style:none;">
@@ -861,7 +861,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <div class="grid">
   <div class="card">
     <h3><span class="tag tag-infra">HOOKS</span> Seraph</h3>
-    <p>Enforcement portable: 16 hooks en Python con contrato JSON in/out. <!-- verified: hooks/*.py listing (16 archivos .py excluyendo _common.py), esta sesión --> Detectan bypass y validan compliance. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista canónica.</p>
+    <p>Enforcement portable: 17 hooks en Python con contrato JSON in/out. <!-- verified: hooks/*.py listing (17 archivos .py excluyendo _common.py), esta sesión --> Detectan bypass y validan compliance. Ver <a href="#ch-enforcement">canal 6, Enforcement</a> para la lista canónica.</p>
   </div>
   <div class="card">
     <h3><span class="tag tag-infra">LEDGER</span> Link</h3>
@@ -918,10 +918,10 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 </div>
 <div class="cmd-terminal">
   <div class="cmd-chip-row">
-    <button type="button" class="cmd-chip" data-out="matrix\tproject\tmck (bound)">matrix status</button>
-    <button type="button" class="cmd-chip" data-out="workspace\tmatrix\t(sin proyecto bindeado)">matrix scope</button>
+    <button type="button" class="cmd-chip" data-out="matrix\tproject\tmck">matrix status</button>
+    <button type="button" class="cmd-chip" data-out="workspace\tmatrix\t(sin proyecto en scope)">matrix scope</button>
     <button type="button" class="cmd-chip" data-out="focus persistido para esta sesion: mi-proyecto">matrix focus &lt;project&gt;</button>
-    <button type="button" class="cmd-chip" data-out="mi-proyecto  bound  warm">matrix bindings --warm-only</button>
+    <button type="button" class="cmd-chip" data-out="mi-proyecto  known  warm">matrix bindings --warm-only</button>
   </div>
   <div class="cmd-out" aria-live="polite"></div>
 </div>
@@ -934,9 +934,10 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
     <tr><th>Comando</th><th>Que hace</th></tr>
     <tr><td><code>matrix list</code></td><td>Lista todos los proyectos registrados</td></tr>
     <tr><td><code>matrix add &lt;name&gt; [path] [--replace]</code></td><td>Registra un proyecto (sin path usa el dir actual; <code>--replace</code> actualiza uno existente)</td></tr>
-    <tr><td><code>matrix select &lt;name&gt;</code></td><td>Crea el binding: symlink <code>_brain</code> + bloque <code>AGENTS.local.md</code></td></tr>
-    <tr><td><code>matrix deselect &lt;name&gt;</code></td><td>Quita el binding del proyecto nombrado; otros proyectos bound quedan intactos</td></tr>
-    <tr><td><code>matrix bindings [--warm-only]</code></td><td>Lista los proyectos bound, verificando el estado real de su symlink <code>_brain</code> y bloque <code>AGENTS.local.md</code>. <code>--warm-only</code> muestra solo el set caliente</td></tr>
+    <tr><td><code>matrix select &lt;name&gt;</code></td><td>Warmea + setea el target del adaptador + crea los output dirs (+ clone si es remote). No crea binding de filesystem (<code>_brain</code>/<code>AGENTS.local.md</code>)</td></tr>
+    <tr><td><code>matrix deselect &lt;name&gt;</code></td><td>Limpia artefactos de binding legados + saca el proyecto del set caliente</td></tr>
+    <tr><td><code>matrix migrate-nobind [&lt;name&gt;|--all] [--dry-run]</code></td><td>Quita artefactos legados <code>_brain</code>/<code>AGENTS.local.md</code>/bloque exclude (idempotente; <code>--dry-run</code> no escribe)</td></tr>
+    <tr><td><code>matrix bindings [--warm-only]</code></td><td>Lista los proyectos conocidos/calientes (known = registrados; warm = en el set activo). <code>--warm-only</code> muestra solo el set caliente</td></tr>
   </table>
 </details>
 
@@ -953,9 +954,9 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <summary>Estado y telemetria</summary>
   <table>
     <tr><th>Comando</th><th>Que hace</th></tr>
-    <tr><td><code>matrix status [--all]</code></td><td>Muestra el estado del sistema (proyecto, link, set caliente, checkpoints, ledger). Por default, checkpoints/eventos Link salen filtrados al proyecto resuelto (symlink <code>_brain</code> del cwd o foco de sesión); <code>--all</code> muestra la vista global sin filtrar</td></tr>
+    <tr><td><code>matrix status [--all]</code></td><td>Muestra el estado del sistema (proyecto, known/warm, checkpoints, ledger). Por default, checkpoints/eventos Link salen filtrados a la cadena de proyectos resuelta (registry walk-up o foco de sesión); <code>--all</code> muestra la vista global sin filtrar</td></tr>
     <tr><td><code>matrix checkpoint "&lt;nota&gt;"</code></td><td>Escribe un checkpoint timestamped (+ entrada en Link)</td></tr>
-    <tr><td><code>matrix activity [n] [--all] [--project=&lt;name&gt;]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20), filtrados al proyecto resuelto por default; <code>--all</code> para todos los proyectos, <code>--project=</code> para consultar otro proyecto sin cambiar de directorio</td></tr>
+    <tr><td><code>matrix activity [n] [--all] [--project=&lt;name&gt;]</code></td><td>Muestra los ultimos <em>n</em> eventos del ledger Link (default 20), filtrados a la cadena resuelta por default; <code>--all</code> para todos los proyectos, <code>--project=</code> para consultar otro proyecto sin cambiar de directorio</td></tr>
   </table>
   <p>Motivo del filtro: <code>checkpoints.jsonl</code> y <code>activity.log</code> son archivos <em>compartidos</em> entre todos los proyectos. Una vista global mezcla el historial de todos, y el de tu proyecto puede quedar enterrado apenas trabajes en otro (ver <a href="#ch-foundation">canal 12, Sacred Foundation</a>).</p>
 </details>
@@ -964,7 +965,8 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
   <summary>Scope y foco de sesión</summary>
   <table>
     <tr><th>Comando</th><th>Que hace</th></tr>
-    <tr><td><code>matrix scope</code></td><td>Imprime <code>&lt;mode&gt;\t&lt;project&gt;\t&lt;detail&gt;</code> para el cwd actual (<code>resolve_scope</code>; lo usan los adaptadores)</td></tr>
+    <tr><td><code>matrix scope</code></td><td>Imprime <code>&lt;mode&gt;\t&lt;project&gt;\t&lt;detail&gt;</code> para el cwd actual (<code>resolve_scope</code>; lo usan los adaptadores). <code>scope --tree [--json]</code> imprime la cadena de ancestros registrados (innermost primero)</td></tr>
+    <tr><td><code>matrix flags [--json|--get &lt;name&gt;|--validate]</code></td><td>Muestra la tabla efectiva de feature flags (valor, fuente, riesgo, estado, depends_on); <code>--validate</code> hace exit 1 si hay flags dangerous/inert</td></tr>
     <tr><td><code>matrix focus &lt;name&gt;</code></td><td>Persiste un foco scoped a la sesión (<code>brain/state/sessions/&lt;sid&gt;.json</code>) que gana por sobre el cwd solo para esa sesión; requiere sesión activa y falla cerrado si el proyecto no está registrado</td></tr>
     <tr><td><code>matrix adapter-doc-path [&lt;cli&gt;]</code></td><td>Imprime la ruta absoluta al doc de referencia del adaptador target (<code>binding.doc_path</code>)</td></tr>
   </table>
@@ -1016,13 +1018,13 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <div class="channel-head">
 <div class="channel-kicker">Canal 5 / 12 (tour)</div>
 <h2>Quick Start</h2>
-<div class="level1"><p>El flujo end-to-end completo: registrar un proyecto, bindearlo, verificar, y empezar a invocar a Neo.</p></div>
+<div class="level1"><p>El flujo end-to-end completo: registrar un proyecto, activarlo, verificar, y empezar a invocar a Neo.</p></div>
 <div class="level2" data-steps="4">
   <ol class="step-list" style="list-style:none;">
     <li class="step is-current" data-step="1"><div class="step-bubble"><span class="who">Usuario</span><code>./bin/matrix add mi-proyecto /ruta/al/proyecto</code> y <code>./bin/matrix select mi-proyecto</code>.</div></li>
-    <li class="step" data-step="2"><div class="step-bubble"><span class="who">Harness</span>Capa 1 crea el symlink <code>_brain</code> dentro de <code>mi-proyecto/</code> apuntando a este repo.</div></li>
+    <li class="step" data-step="2"><div class="step-bubble"><span class="who">Harness</span>Capa 1 registra <code>mi-proyecto/</code> en el registry y crea sus carpetas de artefactos en el brain — sin escribir nada dentro del proyecto.</div></li>
     <li class="step" data-step="3"><div class="step-bubble"><span class="who">Usuario</span>abre Devin CLI en <code>mi-proyecto/</code> e invoca <code>/neo</code>.</div></li>
-    <li class="step" data-step="4"><div class="step-bubble"><span class="who">Neo</span>detecta el symlink, carga el contrato y checkpoints recientes, y saluda listo para trabajar.</div></li>
+    <li class="step" data-step="4"><div class="step-bubble"><span class="who">Neo</span>resuelve el proyecto por registry (walk-up desde tu carpeta), carga el contrato y checkpoints recientes, y saluda listo para trabajar.</div></li>
   </ol>
   <div class="step-controls">
     <button type="button" class="step-prev" aria-label="Paso anterior del ejemplo">&larr; Paso anterior del ejemplo</button>
@@ -1037,7 +1039,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 <pre><code># 1. Registrar un proyecto
 ./bin/matrix add mi-proyecto /ruta/al/proyecto
 
-# 2. Seleccionarlo (crea el symlink _brain)
+# 2. Activarlo (warm + outputs; no escribe nada en el proyecto)
 ./bin/matrix select mi-proyecto
 
 # 3. Verificar
@@ -1088,7 +1090,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 
 </div><!-- /.channel-head -->
 <details class="level3" id="l3-enforcement">
-  <summary>Tabla de hooks (16 hooks)</summary>
+  <summary>Tabla de hooks (17 hooks)</summary>
   <!-- verified: ls hooks/*.py (excluyendo _common.py), esta sesión -->
   <table>
     <tr><th>Hook</th><th>Que hace</th><th>Cuando</th></tr>
@@ -1163,6 +1165,11 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
       <td>Mantenimiento</td>
     </tr>
     <tr>
+      <td><code>_flags</code></td>
+      <td>Loader único de feature flags (DEFAULTS + brain/config.yaml + adapters/&lt;target&gt;/config.yaml + env MATRIX_&lt;NAME&gt;). Expone <code>bin/matrix flags</code> y el estado active/inert/dangerous con <code>depends_on</code></td>
+      <td>En cada lectura de flag (sesión, gates, vistas)</td>
+    </tr>
+    <tr>
       <td><code>_writer_lane</code></td>
       <td>Lane per-file de escritor sobre la superficie compartida (AGENTS.md, DEVIN.md, brain/agents/, lessons, hooks/, bin/, adapters/) &mdash; un lane tomado bloquea el segundo escritor</td>
       <td>Antes/después de cada edit de la superficie</td>
@@ -1222,7 +1229,7 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 ./bin/matrix hooks the_source '{"check":true}'
 </code></pre>
 <div class="warn">
-  <p><strong>Drift histórico, resuelto (D5, esta sesión regeneró <code>docs/SYSTEM_TRUTH.md</code>):</strong> antes de D5, <code>docs/SYSTEM_TRUTH.md</code> listaba menos hooks que el árbol vivo (<code>hooks/*.py</code>, excluyendo <code>_common.py</code>); hoy ambos coinciden en <strong>16</strong> (<code>bin/matrix hooks the_source '{"check":true}'</code> reporta <code>in_sync:true</code>). <!-- verified: hooks/*.py listing + bin/matrix hooks the_source check, esta sesión --> Este onboarding usa 16 en todo su cuerpo.</p>
+  <p><strong>Drift histórico, resuelto (D5, esta sesión regeneró <code>docs/SYSTEM_TRUTH.md</code>):</strong> antes de D5, <code>docs/SYSTEM_TRUTH.md</code> listaba menos hooks que el árbol vivo (<code>hooks/*.py</code>, excluyendo <code>_common.py</code>); hoy ambos coinciden en <strong>17</strong> (<code>bin/matrix hooks the_source '{"check":true}'</code> reporta <code>in_sync:true</code>). <!-- verified: hooks/*.py listing + bin/matrix hooks the_source check, esta sesión --> Este onboarding usa 17 en todo su cuerpo.</p>
 </div>
 </details>
 </div>
@@ -1519,9 +1526,11 @@ LAYER 1 &mdash; Orquestacion &amp; infraestructura
 # Los artefactos de trabajo de un PROYECTO (reports, planes, etc.) van a
 # brain/output/&lt;proyecto&gt;/{architecture,plans,research,eval}/, en ESTE repo,
 # nunca dentro del repo del proyecto &mdash; ver AGENTS.md &sect;1.
-# matrix select agrega automaticamente AGENTS.local.md + _brain al
-# .git/info/exclude de ESE proyecto (local, nunca versionado, no ensucia
-# el repo del proyecto), as&iacute; que nunca quedan trackeados ni se cuelan
+# matrix select NO escribe nada dentro del proyecto: el sistema viejo
+# agregaba AGENTS.local.md + _brain al .git/info/exclude de ESE proyecto
+# (local, nunca versionado, no ensucia el repo); eso qued&oacute; retirado.
+# Si quedan restos de antes, se limpian con matrix migrate-nobind, y as&iacute;
+# nunca quedan trackeados ni se cuelan
 # en su historial de git.
 </code></pre>
 </details>
@@ -1595,9 +1604,9 @@ model_policy:
 <div class="ref-panel" id="panel-faq" role="tabpanel" aria-labelledby="tab-faq" hidden>
 <h3 style="font-size:1rem;">FAQ / Troubleshooting</h3>
 <details>
-  <summary>El symlink <code>_brain</code> está roto</summary>
-  <pre><code>./bin/matrix deselect &lt;nombre&gt;
-./bin/matrix select &lt;nombre&gt;
+  <summary>Quedaron restos del sistema viejo (<code>_brain</code> / <code>AGENTS.local.md</code>)</summary>
+  <pre><code>./bin/matrix migrate-nobind &lt;nombre&gt; --dry-run   # qué limpiaría
+./bin/matrix migrate-nobind &lt;nombre&gt;              # limpiar
 </code></pre>
 </details>
 
@@ -1652,7 +1661,7 @@ model_policy:
 
 <details>
   <summary>Mi checkpoint reciente no aparece en <code>matrix status</code>/<code>matrix activity</code></summary>
-  <p>Ambos comandos filtran por default al proyecto resuelto (foco de sesión con <code>matrix focus</code> &gt; symlink <code>_brain</code> del directorio donde estás parado). Si tu checkpoint es de otro proyecto, no lo vas a ver salvo que pidas la vista global: <code>matrix status --all</code> o <code>matrix activity --project=&lt;nombre&gt;</code>.</p>
+  <p>Ambos comandos filtran por default al proyecto resuelto (foco de sesión con <code>matrix focus</code> &gt; proyecto registrado más cercano a tu carpeta, con su cadena de ancestros si hay proyectos anidados). Si tu checkpoint es de otro proyecto, no lo vas a ver salvo que pidas la vista global: <code>matrix status --all</code> o <code>matrix activity --project=&lt;nombre&gt;</code>.</p>
 </details>
 
 <details>

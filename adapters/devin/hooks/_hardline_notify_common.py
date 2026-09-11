@@ -79,22 +79,29 @@ def is_hardline_dispatched():
 
 
 def is_brain_linked(project_dir):
-    """Tier 1: os.path.islink(os.path.join(project_dir, '_brain')).
-    No subprocess. The near-zero-cost fast path for the common case."""
-    return os.path.islink(os.path.join(project_dir, "_brain"))
+    """Registry-first check: run `<bin_matrix> scope` (5s timeout) from
+    project_dir and return True when the resolved mode is `project` (the
+    directory is inside a registered project). No filesystem `_brain`
+    symlink is consulted anymore."""
+    root = common.resolve_root()
+    return _scope_project_name(root, project_dir) is not None
 
 
 def bound_project_name(root, project_dir, bin_matrix=None):
-    """Tier 2: run `<bin_matrix> bindings --json` (5s timeout), longest-
-    prefix-match project_dir against bound==true entries, return
-    entry['name'] or None. Identical logic to the existing
-    _bound_project_name; bin_matrix defaults to <root>/bin/matrix."""
+    """Return the resolved subject (field 2 of `bin/matrix scope`) from
+    project_dir, or None. Identical role to the old bound_project_name but
+    registry-first: no `bindings --json` / bound==true filtering anymore."""
+    return _scope_project_name(root, project_dir, bin_matrix=bin_matrix)
+
+
+def _scope_project_name(root, project_dir, bin_matrix=None):
     if bin_matrix is None:
         bin_matrix = os.path.join(root, "bin", "matrix")
     try:
         env = {**os.environ, "MATRIX_ROOT": root}
         proc = subprocess.run(
-            [bin_matrix, "bindings", "--json"],
+            [bin_matrix, "scope"],
+            cwd=project_dir,
             env=env,
             capture_output=True,
             text=True,
@@ -103,22 +110,13 @@ def bound_project_name(root, project_dir, bin_matrix=None):
         )
         if proc.returncode != 0:
             return None
-        data = json.loads(proc.stdout or "[]")
-        if not isinstance(data, list):
-            return None
-        project_dir = os.path.abspath(project_dir)
-        best = None
-        for entry in data:
-            if not isinstance(entry, dict) or entry.get("bound") is not True:
-                continue
-            path = entry.get("path")
-            if not isinstance(path, str):
-                continue
-            path = os.path.abspath(path)
-            if project_dir == path or project_dir.startswith(path + os.sep):
-                if best is None or len(path) > len(best["path"]):
-                    best = entry
-        return best.get("name") if best else None
+        line = (proc.stdout or "").splitlines()[0].strip() if proc.stdout else ""
+        fields = line.split("\t")
+        mode = fields[0].strip() if fields else ""
+        project = fields[1].strip() if len(fields) > 1 else ""
+        if mode == "project":
+            return project or None
+        return None
     except Exception:
         return None
 

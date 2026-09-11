@@ -8,12 +8,12 @@ payloads and verifies the exit code + JSON decision + produced lane / audit /
 activity.log files of the fixture.
 
 Cases (spec 4.a / 4.b):
-  (i)     bound + edit AGENTS.md                  → exit 2, audit shared_surface_block:AGENTS.md
-  (ii)    bound + write lessons.md (promotion)    → exit 0, lane held by sid
+  (i)     project + edit AGENTS.md                → exit 2, audit shared_surface_block:AGENTS.md
+  (ii)    project + write lessons.md (promotion)  → exit 0, lane held by sid
   release-1  PostToolUse of the same tool+paths   → lane released
   (iii)   workspace + edit brain/agents/neo.md    → exit 0, lane held by sid
   release-2  SessionEnd of that session           → all lanes of sid released
-  (iv)    bound + write normal project file       → exit 0, no lane file, no scope subprocess
+  (iv)    project + write normal project file     → exit 0, no lane file, no scope subprocess
   (v)     lane held by another sid (fresh)        → exit 2, writer_lane_busy, exactly 1 incident
   (vi)    stale lane (> TTL)                      → exit 0, lane reclaimed by new holder
 """
@@ -73,7 +73,8 @@ def clear_lanes(fixture_root):
 def build_fixture(root):
     """Build a Q2-D fixture tree rooted at `root` (a Path). Returns home_dir."""
     home_dir = smoke.build_fixture(REPO_ROOT, root)
-    # Register one real bound project "demo" (local).
+    # Register one real project "demo" (local). No filesystem binding
+    # (_brain/AGENTS.local.md) exists anymore — scope resolves by registry path.
     registry = {
         "projects": [
             {
@@ -90,15 +91,6 @@ def build_fixture(root):
     demo.mkdir(parents=True, exist_ok=True)
     (demo / "src").mkdir(parents=True, exist_ok=True)
     (demo / "src" / "app.py").write_text("print('x')\n", encoding="utf-8")
-    brain_link = demo / "_brain"
-    if brain_link.exists() or brain_link.is_symlink():
-        brain_link.unlink()
-    os.symlink(str(root / "brain"), str(brain_link))
-    agents_local = demo / "AGENTS.local.md"
-    agents_local.write_text(
-        f"# demo local\n{MATRIX_BEGIN}\ndemo bound block\n{MATRIX_END}\n",
-        encoding="utf-8",
-    )
     return home_dir
 
 
@@ -193,7 +185,7 @@ def case_bound_block_agents(fixture_root, home_dir):
     assert last["session_id"] == "sid-i", last
     assert last["guard_decision"] == "block", last
     assert last["guard_reason"] == "shared_surface_block:AGENTS.md", last
-    print("(i) PASS bound edit AGENTS.md → exit 2, shared_surface_block:AGENTS.md")
+    print("(i) PASS project edit AGENTS.md → exit 2, shared_surface_block:AGENTS.md")
 
 
 def case_bound_promote_lessons(fixture_root, home_dir):
@@ -214,7 +206,7 @@ def case_bound_promote_lessons(fixture_root, home_dir):
     assert lp.is_file(), f"(ii) lane file missing: {lp}"
     data = json.loads(lp.read_text(encoding="utf-8"))
     assert data["session_id"] == "sid-ii", data
-    print("(ii) PASS bound promote lessons.md → allow + lane held by sid-ii")
+    print("(ii) PASS project promote lessons.md → allow + lane held by sid-ii")
 
 
 def case_release_post_tool_use(fixture_root, home_dir):
@@ -300,7 +292,7 @@ def case_bound_edit_non_surface(fixture_root, home_dir):
         lanes_dir = fixture_root / "brain" / "state" / "lanes"
         leftovers = [p for p in lanes_dir.iterdir() if p.suffix == ".json"] if lanes_dir.is_dir() else []
         assert not leftovers, f"(iv) unexpected lane files: {leftovers}"
-        print("(iv) PASS bound non-surface write → allow, no lane, no scope subprocess")
+        print("(iv) PASS project non-surface write → allow, no lane, no scope subprocess")
     finally:
         shutil.copy2(backup, matrix_bin)
         matrix_bin.chmod(0o755)
@@ -366,7 +358,7 @@ def case_extras(fixture_root, home_dir):
     """Extra checks beyond the spec 4.a cases (spec 1.d/1.e + kill-switch)."""
     cwd = fixture_root / "projects" / "demo"
 
-    # x1: bound edit its own project lesson file → allow + lane.
+    # x1: project edit its own project lesson file → allow + lane.
     clear_lanes(fixture_root)
     payload = {
         "tool_name": "write",
@@ -376,9 +368,9 @@ def case_extras(fixture_root, home_dir):
     proc = run_guard(fixture_root, home_dir, cwd, payload)
     assert proc.returncode == 0, f"(x1) expected allow: {proc.stdout} {proc.stderr}"
     assert lane_for(fixture_root, "brain/data/lessons/demo.md").is_file(), "(x1) lane missing"
-    print("x1 PASS bound edit own project lesson → allow + lane")
+    print("x1 PASS project edit own project lesson → allow + lane")
 
-    # x2: bound edit ANOTHER project lesson → block.
+    # x2: project edit ANOTHER project lesson → block.
     clear_lanes(fixture_root)
     payload2 = {
         "tool_name": "write",
@@ -390,9 +382,9 @@ def case_extras(fixture_root, home_dir):
     r2 = json.loads(proc2.stdout)
     assert "brain/data/lessons/other.md" in r2["reason"], r2
     assert audit_entries(fixture_root)[-1]["guard_reason"] == "shared_surface_block:brain/data/lessons/other.md"
-    print("x2 PASS bound edit other project lesson → block")
+    print("x2 PASS project edit other project lesson → block")
 
-    # x3: kill-switch bypasses the bound block but NOT the lane.
+    # x3: kill-switch bypasses the project block but NOT the lane.
     clear_lanes(fixture_root)
     write_lane_file(fixture_root, "AGENTS.md", "holder-kill", age_s=0)
     payload3 = {
@@ -405,9 +397,9 @@ def case_extras(fixture_root, home_dir):
     r3 = json.loads(proc3.stdout)
     assert "writer lane busy" in r3["reason"], r3
     assert audit_entries(fixture_root)[-1]["guard_reason"] == "writer_lane_busy:AGENTS.md"
-    print("x3 PASS kill-switch bypasses bound block but NOT the lane")
+    print("x3 PASS kill-switch bypasses project block but NOT the lane")
 
-    # x4: kill-switch allows a blocked bound write when the lane is free.
+    # x4: kill-switch allows a blocked project write when the lane is free.
     clear_lanes(fixture_root)
     payload4 = {
         "tool_name": "edit",
@@ -417,40 +409,35 @@ def case_extras(fixture_root, home_dir):
     proc4 = run_guard(fixture_root, home_dir, cwd, payload4, env_extra={"MATRIX_SHARED_SURFACE_ALLOW": "true"})
     assert proc4.returncode == 0, f"(x4) kill-switch should allow: {proc4.stdout} {proc4.stderr}"
     assert lane_for(fixture_root, "AGENTS.md").is_file(), "(x4) lane missing"
-    print("x4 PASS kill-switch allows blocked bound write under lane")
+    print("x4 PASS kill-switch allows blocked project write under lane")
 
-    # x5: bound-unregistered edit project lesson → block (no project name to match).
+    # x5: an unregistered cwd inside a registered ancestor falls back to the
+    # ancestor as subject — it is still a `project` session, so core surface
+    # stays blocked (the old bound-unregistered mode is gone).
     clear_lanes(fixture_root)
-    unreg = fixture_root / "projects" / "unreg"
-    unreg.mkdir(parents=True, exist_ok=True)
-    ulink = unreg / "_brain"
-    if ulink.exists() or ulink.is_symlink():
-        ulink.unlink()
-    os.symlink(str(fixture_root / "brain"), str(ulink))
-    (unreg / "AGENTS.local.md").write_text(
-        f"# unreg\n{MATRIX_BEGIN}\nblock\n{MATRIX_END}\n", encoding="utf-8"
-    )
+    sub = fixture_root / "projects" / "demo" / "sub"
+    sub.mkdir(parents=True, exist_ok=True)
     payload5 = {
         "tool_name": "write",
         "tool_input": {"file_path": str(fixture_root / "brain" / "data" / "lessons" / "whatever.md"), "content": "x"},
         "session_id": "sid-x5",
     }
-    proc5 = run_guard(fixture_root, home_dir, unreg, payload5)
-    assert proc5.returncode == 2, f"(x5) bound-unregistered project lesson should block: {proc5.stdout} {proc5.stderr}"
+    proc5 = run_guard(fixture_root, home_dir, sub, payload5)
+    assert proc5.returncode == 2, f"(x5) unregistered-subdir project lesson should block: {proc5.stdout} {proc5.stderr}"
     r5 = json.loads(proc5.stdout)
     assert "brain/data/lessons/whatever.md" in r5["reason"], r5
-    print("x5 PASS bound-unregistered edit project lesson → block")
+    print("x5 PASS unregistered-subdir edit project lesson → block (ancestor subject)")
 
-    # x5b: bound-unregistered promote core lessons.md → allow.
+    # x5b: unregistered-subdir promote core lessons.md → allow (still project mode).
     clear_lanes(fixture_root)
     payload5b = {
         "tool_name": "write",
         "tool_input": {"file_path": str(fixture_root / "brain" / "data" / "lessons.md"), "content": "x"},
         "session_id": "sid-x5b",
     }
-    proc5b = run_guard(fixture_root, home_dir, unreg, payload5b)
-    assert proc5b.returncode == 0, f"(x5b) bound-unregistered core lessons.md should allow: {proc5b.stdout} {proc5b.stderr}"
-    print("x5b PASS bound-unregistered promote core lessons.md → allow")
+    proc5b = run_guard(fixture_root, home_dir, sub, payload5b)
+    assert proc5b.returncode == 0, f"(x5b) unregistered-subdir core lessons.md should allow: {proc5b.stdout} {proc5b.stderr}"
+    print("x5b PASS unregistered-subdir promote core lessons.md → allow")
 
 
 def case_latency(fixture_root, home_dir):

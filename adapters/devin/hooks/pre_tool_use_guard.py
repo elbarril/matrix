@@ -21,6 +21,7 @@ for _ in range(3):
     _candidate = os.path.dirname(_candidate)
 sys.path.insert(0, os.path.join(_candidate, "hooks"))
 import _common as common  # noqa: E402
+import _flags  # noqa: E402
 import _writer_lane as lane  # noqa: E402
 import pre_exec_guard  # noqa: E402
 
@@ -261,6 +262,19 @@ def _classify_surface(rel_path):
     return None
 
 
+def _flag_value(name):
+    """Effective boolean of a feature flag via hooks/_flags.py (best-effort).
+
+    On loader failure, fall back to the flag's declared default — security
+    gates with default on (gate.shared_surface, gate.writer_lane,
+    gate.pre_exec_guard) must never fail open silently.
+    """
+    try:
+        return bool(_flags.get_flag(name)["value"])
+    except Exception:
+        return bool(_flags.DEFAULTS.get(name, False))
+
+
 def _kill_switch_active():
     value = os.environ.get("MATRIX_SHARED_SURFACE_ALLOW", "").strip().lower()
     return value in ("1", "true")
@@ -269,8 +283,10 @@ def _kill_switch_active():
 def _resolve_mode():
     """Run `bin/matrix scope` (subprocess, timeout 10) and return (mode, project).
 
-    Returns (None, None) on any failure or unexpected output; the caller
-    treats that as fail-closed BLOCK for shared-surface writes.
+    Accepts only `workspace` and `project` (registry-path walk-up; there is no
+    filesystem binding). Returns (None, None) on any failure or unexpected
+    output; the caller treats that as fail-closed BLOCK for shared-surface
+    writes.
     """
     try:
         proc = subprocess.run(
@@ -289,7 +305,7 @@ def _resolve_mode():
     parts = line.split("\t")
     mode = parts[0].strip() if parts else ""
     project = parts[1].strip() if len(parts) > 1 else ""
-    if mode in ("workspace", "bound", "bound-unregistered"):
+    if mode in ("workspace", "project"):
         return mode, project
     return None, None
 
@@ -363,9 +379,9 @@ def _run_shared_surface_guard(tool_name, tool_input, session_id):
     """Gate native edit tools (edit/write/multi_edit) against the shared
     surface (spec Q2-D section 1). Fast path: if no target path is shared
     surface, allow with 0 subprocess. Slow path (≥1 surface path): resolve
-    mode via `bin/matrix scope`, apply the bound-session restriction with the
-    proactive lessons promotion exception and the kill-switch, then take the
-    per-file writer lane for every surface target (all-or-nothing).
+    mode via `bin/matrix scope`, apply the project-session restriction with
+    the proactive lessons promotion exception and the kill-switch, then take
+    the per-file writer lane for every surface target (all-or-nothing).
     """
     if session_id is None:
         session_id = common.current_session_id(ROOT)
@@ -386,11 +402,17 @@ def _run_shared_surface_guard(tool_name, tool_input, session_id):
         print(json.dumps({"decision": "allow"}, ensure_ascii=False))
         sys.exit(0)
 
+    # Flag gate.shared_surface off → project sessions edit the core surface;
+    # the writer lane is inert while this flag is off (it depends on it).
+    if not _flag_value("gate.shared_surface"):
+        print(json.dumps({"decision": "allow"}, ensure_ascii=False))
+        sys.exit(0)
+
     mode, project = _resolve_mode()
     if mode is None:
         _block(
-            "shared-surface write blocked: cannot resolve workspace/bound mode "
-            "(scope failed)",
+            "shared-surface write blocked: cannot resolve workspace/project "
+            "mode (scope failed)",
             "guard invocation failed",
             session_id,
             tool_name,
@@ -404,23 +426,20 @@ def _run_shared_surface_guard(tool_name, tool_input, session_id):
             break
         if _classify_surface(rel) == "project":
             lesson_name = rel[len(PROJECT_LESSON_PREFIX):-len(".md")]
-            if mode == "bound-unregistered":
-                blocked_rel = rel
-                break
             if lesson_name != project:
                 blocked_rel = rel
                 break
             continue
         if rel == "brain/data/lessons.md":
             # Proactive promotion exception (rule neo.md 123): core lessons.md
-            # stays writable from bound, under the lane.
+            # stays writable from a project session, under the lane.
             continue
         blocked_rel = rel
         break
 
     if blocked_rel is not None and not kill_switch:
         _block(
-            f"shared-surface write blocked in bound session: {blocked_rel} "
+            f"shared-surface write blocked in project session: {blocked_rel} "
             "(use workspace mode or MATRIX_SHARED_SURFACE_ALLOW=1)",
             f"shared_surface_block:{blocked_rel}",
             session_id,
@@ -433,26 +452,28 @@ def _run_shared_surface_guard(tool_name, tool_input, session_id):
     except ValueError:
         pass
 
-    acquired = []
-    try:
-        for rel in sorted(surface_paths):
-            result = lane.acquire(ROOT, rel, session_id, ttl_s)
-            if result.get("ok"):
-                acquired.append(rel)
-                continue
-            holder = result.get("holder")
-            since = result.get("since")
-            _incident_writer_collision(rel, holder)
+    # Flag gate.writer_lane off → no per-file lane (parallel edits possible).
+    if _flag_value("gate.writer_lane"):
+        acquired = []
+        try:
+            for rel in sorted(surface_paths):
+                result = lane.acquire(ROOT, rel, session_id, ttl_s)
+                if result.get("ok"):
+                    acquired.append(rel)
+                    continue
+                holder = result.get("holder")
+                since = result.get("since")
+                _incident_writer_collision(rel, holder)
+                for acquired_rel in acquired:
+                    lane.release(ROOT, acquired_rel, session_id)
+                reason = f"writer lane busy: {rel}"
+                if holder is not None and since:
+                    reason += f" (held by {holder} since {since})"
+                _block(reason, f"writer_lane_busy:{rel}", session_id, tool_name)
+        except Exception:
             for acquired_rel in acquired:
                 lane.release(ROOT, acquired_rel, session_id)
-            reason = f"writer lane busy: {rel}"
-            if holder is not None and since:
-                reason += f" (held by {holder} since {since})"
-            _block(reason, f"writer_lane_busy:{rel}", session_id, tool_name)
-    except Exception:
-        for acquired_rel in acquired:
-            lane.release(ROOT, acquired_rel, session_id)
-        _block("guard invocation failed", "guard invocation failed", session_id, tool_name)
+            _block("guard invocation failed", "guard invocation failed", session_id, tool_name)
 
     _audit_decision(session_id, tool_name, "allow", None)
     print(json.dumps({"decision": "allow"}, ensure_ascii=False))
@@ -467,12 +488,12 @@ def main():
     if not isinstance(tool_input, dict):
         tool_input = {}
 
-    # Shell tools → secret-deny read guidance first, then pre_exec_guard
-    # (Layer-1). The secret-deny check only blocks with guidance; everything
-    # else continues the unchanged flow.
+    # Shell tools → secret-deny read guidance first (flag-gated), then
+    # pre_exec_guard (Layer-1, flag-gated). The secret-deny check only blocks
+    # with guidance; everything else continues the unchanged flow.
     if tool_name in SHELL_TOOLS:
         command = tool_input.get("command")
-        if isinstance(command, str):
+        if _flag_value("gate.secret_deny") and isinstance(command, str):
             block = _secret_deny_read_block(command)
             if block:
                 verb, pattern, rel_hint = block
@@ -482,7 +503,10 @@ def main():
                     session_id,
                     tool_name,
                 )
-        _run_shell_guard(tool_name, tool_input, session_id)
+        if _flag_value("gate.pre_exec_guard"):
+            _run_shell_guard(tool_name, tool_input, session_id)
+        print(json.dumps({"decision": "allow"}, ensure_ascii=False))
+        sys.exit(0)
 
     # Native edit tools → shared-surface gate + writer lane (Q2-D).
     if tool_name in NATIVE_EDIT_TOOLS:

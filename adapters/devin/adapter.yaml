@@ -86,9 +86,6 @@ binding:
   end_marker: "<!-- MATRIX:END -->"
   doc_path: "DEVIN.md"          # root-relative path to this adapter's own reference doc,
                                  # resolved into {{ADAPTER_DOC_PATH}} by matrix_block_tmp()/_build.py/session_audit.py
-  exclude_entries:
-    - "AGENTS.local.md"
-    - "_brain"
 
 # Model templates: 5 cost/quality presets selectable at build time via
 # `bin/matrix build --target=devin --template=<name>`. The default is

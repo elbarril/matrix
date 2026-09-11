@@ -6,7 +6,6 @@ code is 0 on PASS, 1 on BLOCK/FAIL. No third-party dependencies.
 """
 
 import datetime
-import fnmatch
 import json
 import os
 import re
@@ -132,7 +131,10 @@ def _load_yaml(path):
 
 
 def resolve_bound_target(project_name, root=None):
-    """Resolve the bound_target for a project from .registry.json.
+    """Resolve the adapter target for a project from .registry.json.
+
+    bound_target is a registry fact (the adapter target a project was selected
+    with), not a filesystem binding — the field name is conserved unchanged.
 
     Esta lectura de bound_target desde .registry.json es una segunda implementación
     en paralelo a la resolución equivalente en bash dentro de bin/matrix (jq sobre
@@ -152,175 +154,6 @@ def resolve_bound_target(project_name, root=None):
     if not target or target == "null":
         target = "devin"
     return target
-
-
-def adapter_exclude_entries(target, root=None):
-    """Return the exclude_entries list declared for an adapter target.
-
-    Reads adapters/<target>/adapter.yaml and extracts binding.exclude_entries.
-    Returns None if the file is missing or the value is not a non-empty list
-    of strings.
-    """
-    if root is None:
-        root = resolve_root()
-    path = os.path.join(root, "adapters", target, "adapter.yaml")
-    cfg = _load_yaml(path)
-    if not isinstance(cfg, dict):
-        return None
-    binding = cfg.get("binding")
-    if not isinstance(binding, dict):
-        return None
-    entries = binding.get("exclude_entries")
-    if not isinstance(entries, list) or not all(
-        isinstance(item, str) and item for item in entries
-    ):
-        return None
-    return entries
-
-
-def entry_covered(entry, gitignore_lines):
-    """Return True if an adapter gitignore entry is covered by real .gitignore lines.
-
-    Ignores blank lines and comments, parses positive and negative rules,
-    and matches the entry with fnmatch (including a trailing-slash variant for
-    directory rules).
-    """
-    positives, negatives = [], []
-    for ln in gitignore_lines:
-        raw = (ln.split("#", 1)[0]).strip()
-        if not raw:
-            continue
-        if raw.startswith("!"):
-            negatives.append(raw[1:])
-        else:
-            positives.append(raw)
-
-    def matches(pat):
-        return fnmatch.fnmatch(entry, pat) or fnmatch.fnmatch(entry + "/", pat)
-
-    for pat in positives:
-        if matches(pat):
-            # Re-inclusion cancels the positive match.
-            for neg in negatives:
-                if matches(neg):
-                    return False
-            return True
-    return False
-
-
-def _tracked_leak_via_audit(project_name, root=None):
-    """Run `bin/matrix exclude audit <project>` and parse tracked leaks.
-
-    Returns a list of leaked entry names (e.g. ["_brain", "AGENTS.local.md"]),
-    or an empty list if the audit reports clean or fails. Same subprocess
-    pattern used by session_close.py for invoking bin/matrix from Python.
-    """
-    if root is None:
-        root = resolve_root()
-    bin_matrix = os.path.join(root, "bin", "matrix")
-    if not os.path.isfile(bin_matrix):
-        return []
-    try:
-        env = {**os.environ, "MATRIX_ROOT": root}
-        proc = subprocess.run(
-            [bin_matrix, "exclude", "audit", project_name],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            stdin=subprocess.DEVNULL,
-        )
-        stdout = proc.stdout.strip()
-    except Exception:
-        return []
-    if not stdout or stdout == "clean":
-        return []
-    leaked = []
-    for line in stdout.splitlines():
-        if "tracked leak" in line:
-            # Format: "tracked leak on current branch: _brain AGENTS.local.md"
-            parts = line.split(":", 1)
-            if len(parts) == 2:
-                leaked.extend(parts[1].strip().split())
-    return leaked
-
-
-def exclude_drift(project_name, root=None):
-    """Compare adapter exclude_entries against the real .git/info/exclude of a project.
-
-    Returns a dict when the project exists and its adapter binding can be read:
-        {
-            "applicable": True,
-            "project": project_name,
-            "project_path": "...",
-            "target": "...",
-            "entries": [...],   # adapter-declared entries
-            "missing": [...],  # entries not covered by the real .git/info/exclude
-            "ok": True/False,
-        }
-
-    Returns None when the project is not in .registry.json, its path does not
-    exist, or the adapter binding cannot be read. A missing .git/info/exclude
-    file is treated as the limiting case of "all adapter entries missing" (every
-    entry appears in missing).
-    """
-    if root is None:
-        root = resolve_root()
-    registry = _load_registry(root)
-    proj = _registry_project(registry, project_name)
-    if not proj:
-        return None
-    project_path = proj.get("path")
-    if not project_path or not os.path.isdir(project_path):
-        return None
-    target = resolve_bound_target(project_name, root=root)
-    if not target:
-        return None
-    entries = adapter_exclude_entries(target, root=root)
-    if entries is None:
-        return None
-
-    inside = subprocess.run(
-        ["git", "-C", project_path, "rev-parse", "--is-inside-work-tree"],
-        capture_output=True,
-        text=True,
-    )
-    if inside.returncode != 0 or inside.stdout.strip() != "true":
-        return None
-    proc = subprocess.run(
-        ["git", "-C", project_path, "rev-parse", "--git-path", "info/exclude"],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        return None
-    exclude_relpath = proc.stdout.strip()
-    if not os.path.isabs(exclude_relpath):
-        exclude_path = os.path.join(project_path, exclude_relpath)
-    else:
-        exclude_path = exclude_relpath
-    lines = []
-    if os.path.isfile(exclude_path):
-        try:
-            with open(exclude_path, encoding="utf-8") as fh:
-                lines = fh.read().splitlines()
-        except OSError:
-            lines = []
-
-    missing = [e for e in entries if not entry_covered(e, lines)]
-
-    tracked_leak = _tracked_leak_via_audit(project_name, root)
-
-    return {
-        "applicable": True,
-        "project": project_name,
-        "project_path": project_path,
-        "target": target,
-        "entries": entries,
-        "missing": missing,
-        "tracked_leak": tracked_leak,
-        "ok": not missing and not tracked_leak,
-    }
 
 
 MUTATING_TOOLS = {"write", "edit", "multi_edit"}

@@ -10,9 +10,9 @@ This is the document of record. Every session, every agent invocation operates u
 
 ## 1. What Matrix is
 
-Matrix is a personal intelligence layer. One root repo (this one) holds the brain. Project repos live separately and get pulled in on demand. A symlink `_brain` inside any active project points back to this root, giving the project access to the intelligence without contaminating its codebase.
+Matrix is a personal intelligence layer. One root repo (this one) holds the brain. Project repos live separately and get pulled in on demand. Matrix resolves a project by its registry path — no filesystem binding (`_brain` symlink, `AGENTS.local.md`) ships into the project. The global Neo skill (absolute paths) is the single activation path; the intelligence never ships into project code.
 
-The intelligence never ships into project code. The brain stays here. **The reverse also holds: project work never ships into the brain's shared surface.** Work artifacts go to `brain/output/<project>/{architecture,plans,research,eval}/` in **this repo** — one subtree per bound project. Isolation is by convention, not by filesystem boundary — a residual risk, accepted. Only when working on Matrix itself (Matrix workspace mode, no project bound) do outputs go directly to this repo's own `brain/output/<sub>/` (no project subfolder; `matrix` is reserved and cannot be registered).
+The intelligence never ships into project code. The brain stays here. **The reverse also holds: project work never ships into the brain's shared surface.** Work artifacts go to `brain/output/<project>/{architecture,plans,research,eval}/` in **this repo** — one subtree per registered project. Isolation is by convention, not by filesystem boundary — a residual risk, accepted. Only when working on Matrix itself (Matrix workspace mode, no project in scope) do outputs go directly to this repo's own `brain/output/<sub>/` (no project subfolder; `matrix` is reserved and cannot be registered).
 
 **Core thesis:** the brain is written once in abstract capabilities; a thin adapter (**The Trainman**) maps them to the host CLI. The current adapter reference doc lives at the repo root.
 
@@ -82,15 +82,15 @@ These are not rules. They are who the system *is*. Every routing call, every pus
 
 ## 6. Activation pattern (every agent)
 
-0. **Matrix workspace mode is not optional to enter.** If cwd resolves to the Matrix root with no external project bound, becoming Neo is mandatory — before judging whether the request looks Matrix-related and regardless of explicit invocation. The harness modifies itself here; no other codebase is in scope. Delivery uses the same `brain/data/activation-preamble.tmpl` source as bound projects; the adapter doc at the repo root names the exact mechanism.
-1. **Load configuration** — `_brain`-aware: `_brain/config.yaml` first, fallback `brain/config.yaml`.
-2. **Resolve root & mode** — if cwd is the Matrix root, enter **Matrix workspace mode** (skip project context; route system work). Otherwise read the active project.
-3. **Review state** — last 3 checkpoints + `brain/data/lessons.md` (+ scoped lessons if a project is bound).
+0. **Matrix workspace mode is not optional to enter.** If cwd resolves to the Matrix root with no project in scope, becoming Neo is mandatory — before judging whether the request looks Matrix-related and regardless of explicit invocation. The harness modifies itself here; no other codebase is in scope. Delivery uses the same `brain/data/activation-preamble.tmpl` source as project sessions; the adapter doc at the repo root names the exact mechanism.
+1. **Load configuration** — `brain/config.yaml`.
+2. **Resolve root & mode** — if cwd is the Matrix root, enter **Matrix workspace mode** (skip project context; route system work). Otherwise resolve the active project.
+3. **Review state** — last 3 checkpoints + `brain/data/lessons.md` + `lessons/<name>.md` for each project in the memory chain, innermost last.
 4. **Greet** (master only) — Spanish, coloquial, no menus.
 5. **Understand** — if unclear, ask once; if clear, proceed.
 6. **Execute or route** — do the work or route to a specialist.
 6.5. **Proportionality (C1) — declare, don't prove.** The small path is entered with ONE ledger line BEFORE build: `bin/matrix link phase:path-decision A "| subject=<x> | motivo=<frase> | sin-prop=si"`. No oracle checklist at declaration time. Smith verifies that line at the gate against the real `git diff --stat`: outside the declared tops (≤10 lines, 1 file, no never-small path per `hooks/validate_routing_signal.py`), or with propagation side-effects (S12 — a generated/regenerated artifact, a parallel file like index/ficha/generated site, or a build step that emits output), the exemption is void and the misdeclaration is itself a reportable finding. The small path scales the FORMAT of the phases, it never skips them: Morpheus/Architect answer inline (≤15 lines, no subagent session, no persisted artifact) and Smith closes with a gate corto (real E2E + one-line verdict); full format stays for the full path. A prior artifact on the same path/topic must be read and cited, but no longer forces the full ritual. Never the Smith gate, pre-registration, or E2E verification. El formato del camino chico escala, el gate Smith nunca se saltea: el check lo corre Smith delegado (ver neo.md <routing> G2). Expiry: if `phase:path-decision` still has 0 real uses 4 weeks after adoption, §6.5 is repealed — enforced mechanically by the `until=` TTL channel once it ships, by calendar check until then.
-6.6. **No parallel edits on the same repo.** A per-file writer lane in the shared-surface gate now enforces this mechanically on the shared surface (`AGENTS.md`, `DEVIN.md`, `brain/agents/`, `brain/data/lessons*`, `hooks/`, `bin/`, `adapters/`): a held lane blocks the next writer with a clear message; bound sessions are blocked from the core surface except the proactive `lessons.md` promotion. Collisions are logged as `bin/matrix link incident:writer-collision | detail=<...>`. <!-- adapter-note: DEVIN.md -->
+6.6. **No parallel edits on the same repo.** A per-file writer lane in the shared-surface gate now enforces this mechanically on the shared surface (`AGENTS.md`, `DEVIN.md`, `brain/agents/`, `brain/data/lessons*`, `hooks/`, `bin/`, `adapters/`): a held lane blocks the next writer with a clear message; `project` sessions are blocked from the core surface except the proactive `lessons.md` promotion. Collisions are logged as `bin/matrix link incident:writer-collision | detail=<...>`. <!-- adapter-note: DEVIN.md -->
 7. **Verify reality** — nothing is "done" without an E2E happy-path check (Foundation 3). Smith + `validate_phase_close` (Seraph) gate the close.
 8. **Update state** — write a checkpoint and a `Link` ledger entry when something matters.
 
@@ -110,13 +110,13 @@ brain/state/
 ```
 
 - **Two states, one file.**
-  - `workspace.yaml` holds the *warm* set: projects of interest, with their resolved paths. Warm does not imply a live `_brain` symlink is present.
-  - *Bound* is a filesystem/runtime fact, not a separate state flag: a project is bound when its path contains a valid `_brain` symlink to this brain **and** an `AGENTS.local.md` block managed by `bin/matrix`. `select` always warms the project first, so every bound project is also warm (`bound ⊆ warm`).
-- **Session resolution.** A session binds to one project at a time via `--project <name>`, `$MATRIX_PROJECT`, or the `_brain` symlink in cwd. If none of those resolve, the session has **no subject** (neutral).
+  - `workspace.yaml` holds the *warm* set: projects of interest, with their resolved paths.
+  - *Known* = registered in `.registry.json`; *warm* = in `workspace.yaml`. `warm ⊆ known` (you can only warm a registered project). There is no `bound`: a project is in scope when its registry path is the innermost registered ancestor of cwd.
+- **Session resolution.** A session resolves its subject via `$MATRIX_PROJECT` (env) > session focus > registry-path walk-up. If none resolve, the session has **no subject** (neutral).
 - **Root resolution (robust).** See `brain/data/contract-catalog.md`.
-- **Scope resolution (innermost-root-wins).** When `bin/matrix` (or an agent) needs to know "which project is this directory working on?", it walks up from cwd. The first directory that is either the Matrix root or a project root wins. This single rule handles all real topologies without special cases (see examples in `brain/data/contract-catalog.md`).
+- **Scope resolution (innermost-root-wins).** When `bin/matrix` needs to know "which project is this directory working on?", it walks up from cwd matching registered registry paths. The innermost match is the subject; its registered ancestors form the memory tree.
 - **Ledger (Link).** Append-only events: `session:start`, `route`, `decision`, `handoff`, `phase:close`. Both the core and any federated ship read and write it. Shared state without coupling.
-- **Never committed.** Everything under `brain/state/` and `brain/output/` is gitignored — it is per-machine, changes every session, and would otherwise turn every checkpoint into a noisy commit. Work *deliverables* for a bound project belong in this repo's `brain/output/<project>/` (see §1), not inside the project's own repo.
+- **Never committed.** Everything under `brain/state/` and `brain/output/` is gitignored — it is per-machine, changes every session, and would otherwise turn every checkpoint into a noisy commit. Work *deliverables* for a registered project belong in this repo's `brain/output/<project>/` (see §1), not inside the project's own repo.
 
 ---
 
@@ -162,7 +162,7 @@ The canonical command list is `bin/matrix help` (or `bin/matrix` with no args).
 
 - Not a database. State is files.
 - Not a web app. The CLI may emit static, self-contained, read-only HTML. A UI that writes state or needs a server is not allowed.
-- Not multi-user. One user, one session per binding; a single user may keep several projects bound simultaneously.
+- Not multi-user. One user, one session; a single user may keep several projects registered and warm simultaneously.
 - Not CLI-coupled. If a feature only works under one CLI, it belongs in an adapter, not in the brain.
 
 ---

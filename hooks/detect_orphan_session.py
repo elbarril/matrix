@@ -155,9 +155,9 @@ def main():
             continue
 
         # Sessions with a null scope never close each other: a session_start in
-        # a neutral/broken/bound-unregistered location must not async-close an
-        # idle session from another null-scoped location. Only sessions with a
-        # real project_active (bound/workspace) can close each other.
+        # a neutral location must not async-close an idle session from another
+        # null-scoped location. Only sessions with a real project_active
+        # (project/workspace) can close each other.
         if session_project is None or project_active is None:
             continue
 

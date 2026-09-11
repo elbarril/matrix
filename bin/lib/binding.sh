@@ -27,25 +27,39 @@ adapter_doc_path() {
     printf '%s\n' "$MATRIX_DIR/$ADB_DOC_PATH"
 }
 
-path_is_bound() {
-    local pp="$1" target="${2:-devin}"
-    [[ -n "$pp" ]] || return 1
-    local link="$pp/_brain"
-    [[ -L "$link" ]] || return 1
-    local rl; rl="$(readlink -f "$link" 2>/dev/null || true)"
-    [[ "$rl" == "$BRAIN_DIR" ]] || return 1
-    adapter_binding "$target" || return 1
-    [[ -f "$pp/$ADB_FILE" ]] || return 1
-    grep -qF "$ADB_BEGIN" "$pp/$ADB_FILE" && grep -qxF "$ADB_END" "$pp/$ADB_FILE"
-}
-
-is_bound() {
+# has_legacy_binding_artifacts <name>: print each legacy binding artifact path
+# for a registered project (one per line). Legacy artifacts are the pre-
+# no-binding filesystem leftovers that `migrate-nobind` removes:
+#   - _brain symlink pointing at this brain
+#   - AGENTS.local.md containing the adapter's managed begin marker
+#   - .git/info/exclude containing the MATRIX:EXCLUDE managed block
+# Returns 0 always; exit 1 only if the project path cannot be resolved.
+has_legacy_binding_artifacts() {
     local name="$1"
     local pp; pp="$(get_project_path "$name" 2>/dev/null)" || return 1
-    [[ -z "$pp" ]] && return 1
+    [[ -n "$pp" && -d "$pp" ]] || return 1
     local target; target="$(registry_bound_target "$name")"
     [[ -n "$target" && "$target" != "null" ]] || target="devin"
-    path_is_bound "$pp" "$target"
+    adapter_binding "$target" || return 1
+    local found=0
+    if [[ -L "$pp/_brain" ]]; then
+        local rl; rl="$(readlink -f "$pp/_brain" 2>/dev/null || true)"
+        if [[ "$rl" == "$BRAIN_DIR" ]]; then
+            printf '%s\n' "$pp/_brain"; found=1
+        fi
+    fi
+    if [[ -f "$pp/$ADB_FILE" ]] && grep -qF "$ADB_BEGIN" "$pp/$ADB_FILE"; then
+        printf '%s\n' "$pp/$ADB_FILE"; found=1
+    fi
+    local exf=""
+    if git -C "$pp" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        exf="$(git -C "$pp" rev-parse --git-path info/exclude 2>/dev/null || true)"
+        [[ "$exf" != /* ]] && exf="$pp/$exf"
+        if [[ -n "$exf" && -f "$exf" ]] && grep -qxF "$MATRIX_EXCLUDE_BEGIN" "$exf"; then
+            printf '%s\n' "$exf"; found=1
+        fi
+    fi
+    return 0
 }
 
 # --- Adapter-declared binding (non-probabilistic Neo activation) -----------
@@ -192,112 +206,10 @@ cleanup_exclude() {
     return 0
 }
 
-# exclude_leak_check <pp> <target> [ref]
-# For each entry in ADB_EXCLUDE, checks if it is tracked in the given ref
-# (default HEAD). Prints leaked entries one per line. Exit 0 always.
-exclude_leak_check() {
-    local pp="$1" target="$2" ref="${3:-HEAD}"
-    adapter_binding "$target" || return 0
-    git -C "$pp" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
-    local entry
-    for entry in "${ADB_EXCLUDE[@]}"; do
-        if git -C "$pp" ls-tree -r --name-only "$ref" -- "$entry" 2>/dev/null | grep -q .; then
-            printf '%s\n' "$entry"
-        fi
-    done
-    return 0
-}
-
-exclude_audit() {
-    local name="" all_branches=false arg
-    for arg in "$@"; do
-        case "$arg" in
-            --all-branches) all_branches=true ;;
-            --*) log_error "Unknown flag '$arg'"; return 1 ;;
-            *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
-        esac
-    done
-    [[ -n "$name" ]] || { log_error "Usage: matrix exclude audit <name> [--all-branches]"; return 1; }
-    local pp; pp="$(get_project_path "$name" 2>/dev/null)" || { log_error "Project '$name' not found"; return 1; }
-    [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
-    local target; target="$(registry_bound_target "$name")"
-    [[ -n "$target" && "$target" != "null" ]] || target="devin"
-    adapter_binding "$target" || { log_error "Cannot resolve adapter binding for target '$target'"; return 1; }
-
-    if $all_branches; then
-        local any_leak=false branch
-        while IFS= read -r branch; do
-            [[ -n "$branch" ]] || continue
-            local leaked
-            leaked="$(exclude_leak_check "$pp" "$target" "$branch")"
-            if [[ -n "$leaked" ]]; then
-                any_leak=true
-                echo "[$branch] tracked leak: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
-            fi
-        done < <(git -C "$pp" for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null)
-        $any_leak || echo "clean"
-    else
-        local leaked
-        leaked="$(exclude_leak_check "$pp" "$target" HEAD)"
-        if [[ -n "$leaked" ]]; then
-            echo "tracked leak on current branch: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
-        else
-            echo "clean"
-        fi
-    fi
-}
-
-exclude_fix() {
-    local name="" do_fix=false arg
-    for arg in "$@"; do
-        case "$arg" in
-            --fix) do_fix=true ;;
-            --*) log_error "Unknown flag '$arg'"; return 1 ;;
-            *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
-        esac
-    done
-    [[ -n "$name" ]] || { log_error "Usage: matrix exclude fix <name> [--fix]"; return 1; }
-    local pp; pp="$(get_project_path "$name" 2>/dev/null)" || { log_error "Project '$name' not found"; return 1; }
-    [[ -d "$pp" ]] || { log_error "Path '$pp' does not exist"; return 1; }
-    local target; target="$(registry_bound_target "$name")"
-    [[ -n "$target" && "$target" != "null" ]] || target="devin"
-    adapter_binding "$target" || { log_error "Cannot resolve adapter binding for target '$target'"; return 1; }
-
-    local leaked
-    leaked="$(exclude_leak_check "$pp" "$target" HEAD)"
-    if [[ -z "$leaked" ]]; then
-        log_success "No tracked leaks found for '$name'"
-        return 0
-    fi
-
-    if ! $do_fix; then
-        echo "tracked leak on current branch: $(echo "$leaked" | tr '\n' ' ' | sed 's/ $//')"
-        log_warning "Usá 'matrix exclude fix $name --fix' para destrackear (staged, sin commit)"
-        return 0
-    fi
-
-    local entry
-    while IFS= read -r entry; do
-        [[ -n "$entry" ]] || continue
-        git -C "$pp" rm -r --cached -- "$entry" 2>/dev/null || true
-        log_info "Destrackeado: $entry"
-    done <<< "$leaked"
-    update_exclude "$pp" "$target"
-    log_success "Destrackeado + bloque exclude sincronizado. NO se comiteó nada."
-}
-
-exclude_cmd() {
-    case "${1:-}" in
-        audit) shift; exclude_audit "$@" ;;
-        fix)   shift; exclude_fix "$@" ;;
-        *)     log_error "Usage: matrix exclude audit <name> [--all-branches] | fix <name> [--fix]"; return 1 ;;
-    esac
-}
-
 # ensure_project_output_dirs <name>
-# Creates this bound project's own artifact subtree under this repo's
+# Creates this project's own artifact subtree under this repo's
 # brain/output/<name>/{architecture,plans,research,eval}/, if missing.
-# Idempotent — same pattern as update_agents_local()/update_exclude().
+# Idempotent.
 ensure_project_output_dirs() {
     local name="$1"
     [[ -n "$name" ]] || return 1
@@ -340,52 +252,133 @@ select_project() {
     local pp_real; pp_real="$(readlink -f "$pp" 2>/dev/null || true)"
     local matrix_real; matrix_real="$(readlink -f "$MATRIX_DIR" 2>/dev/null || true)"
     [[ "$pp_real" == "$matrix_real" ]] && { log_error "Cannot bind the Matrix root itself as a project"; return 1; }
-    local link="$pp/_brain"
-    if [[ -L "$link" ]]; then
-        local current; current="$(readlink -f "$link" 2>/dev/null || true)"
-        if [[ "$current" != "$BRAIN_DIR" ]]; then
-            rm "$link"
+    # binding.artifacts=on (default off): emit the legacy filesystem artifacts
+    # for external consumers. Matrix never READS them — activation is always
+    # the global Neo skill, and the resolver never consults this flag.
+    if [[ "$(flag_value binding.artifacts)" == "true" ]]; then
+        local link="$pp/_brain"
+        if [[ -L "$link" ]]; then
+            local current; current="$(readlink -f "$link" 2>/dev/null || true)"
+            if [[ "$current" != "$BRAIN_DIR" ]]; then
+                rm "$link"
+            fi
         fi
+        [[ -e "$link" && ! -L "$link" ]] && { log_error "'_brain' exists and is not a symlink"; return 1; }
+        [[ -L "$link" ]] || ln -sf "$BRAIN_DIR" "$link"
+        update_agents_local "$pp" "$target"
+        update_exclude "$pp" "$target"
     fi
-    [[ -e "$link" && ! -L "$link" ]] && { log_error "'_brain' exists and is not a symlink"; return 1; }
-    [[ -L "$link" ]] || ln -sf "$BRAIN_DIR" "$link"
-    update_agents_local "$pp" "$target"
-    update_exclude "$pp" "$target"
     ensure_project_output_dirs "$name"
     set_registry_bound_target "$name" "$target"
     warm_project_entry "$name" "$pp" "quiet"
     link_append "project:select" "$name" "$pp"
-    log_success "Selected project '$name' (symlink: $link)"
+    log_success "Selected project '$name'"
 }
 
 deselect_project() {
-    local name="" target="" arg
+    local name="${1:-}"
+    [[ $# -ge 1 && -n "$name" ]] || { log_error "Usage: matrix deselect <name>"; return 1; }
+    migrate_nobind_one "$name" false || true
+    unwork_project "$name" || true
+    link_append "project:deselect" "$name" ""
+    log_success "Deselected '$name'"
+}
+
+# migrate_nobind_one <name> [dry-run]
+# Idempotent legacy-artifact removal for one project. Removes:
+#   - _brain symlink → this brain
+#   - managed AGENTS.local.md block (file removed if empty afterwards)
+#   - managed MATRIX:EXCLUDE block from .git/info/exclude (file never deleted)
+# Never touches registry, warm set, brain/output/<name>/, or the ledger
+# (the caller appends project:migrate-nobind).
+migrate_nobind_one() {
+    local name="$1" dry_run="${2:-false}"
+    local pp; pp="$(get_project_path "$name" 2>/dev/null || true)"
+    if [[ -z "$pp" || ! -d "$pp" ]]; then
+        log_warning "Project '$name' path missing ($pp); nothing to clean"
+        return 0
+    fi
+    local target; target="$(registry_bound_target "$name")"
+    [[ -n "$target" && "$target" != "null" ]] || target="devin"
+    adapter_binding "$target" || { log_warning "Trainman: no adapter binding for '$target'; cannot resolve managed markers"; return 1; }
+    local found=0
+    # 1. _brain symlink to this brain
+    if [[ -L "$pp/_brain" ]]; then
+        local rl; rl="$(readlink -f "$pp/_brain" 2>/dev/null || true)"
+        if [[ "$rl" == "$BRAIN_DIR" ]]; then
+            found=1
+            if $dry_run; then echo "would remove $pp/_brain"
+            else rm "$pp/_brain"; log_success "Removed $pp/_brain"; fi
+        else
+            log_warning "$pp/_brain is a symlink to another location; leaving untouched"
+        fi
+    elif [[ -e "$pp/_brain" ]]; then
+        log_warning "$pp/_brain exists and is not a symlink; leaving untouched"
+    fi
+    # 2. Managed AGENTS.local.md block
+    local file="$pp/$ADB_FILE"
+    if [[ -f "$file" ]]; then
+        if grep -qF "$ADB_BEGIN" "$file"; then
+            found=1
+            if $dry_run; then echo "would clean $file (managed block)"
+            else cleanup_agents_local "$pp" "$target"; fi
+        else
+            log_warning "$file has no Matrix block; leaving untouched"
+        fi
+    fi
+    # 3. Managed MATRIX:EXCLUDE block (never delete the exclude file)
+    if git -C "$pp" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        local exf; exf="$(git -C "$pp" rev-parse --git-path info/exclude 2>/dev/null || true)"
+        [[ "$exf" != /* ]] && exf="$pp/$exf"
+        if [[ -n "$exf" && -f "$exf" ]] && grep -qxF "$MATRIX_EXCLUDE_BEGIN" "$exf"; then
+            found=1
+            if $dry_run; then echo "would clean $exf (managed block)"
+            else cleanup_exclude "$pp" "$target"; fi
+        fi
+    fi
+    if $dry_run && [[ $found -eq 0 ]]; then
+        echo "clean (no legacy artifacts)"
+    fi
+    return 0
+}
+
+# migrate_nobind_cmd [<name>|--all] [--dry-run]
+migrate_nobind_cmd() {
+    local name="" all=false dry_run=false arg
     for arg in "$@"; do
         case "$arg" in
-            --target=*) target="${arg#*=}" ;;
+            --all) all=true ;;
+            --dry-run) dry_run=true ;;
             --*) log_error "Unknown flag '$arg'"; return 1 ;;
             *) if [[ -z "$name" ]]; then name="$arg"; else log_error "Unexpected argument '$arg'"; return 1; fi ;;
         esac
     done
-    if [[ -z "$name" ]]; then
-        log_error "Usage: matrix deselect <name> [--target=<cli>]"
-        return 1
+    if [[ -n "$name" && "$all" == true ]]; then
+        log_error "migrate-nobind: --all does not take a project name"; return 1
     fi
-    if [[ -z "$target" ]]; then
-        target="$(registry_bound_target "$name")"
-        [[ -n "$target" && "$target" != "null" ]] || target="devin"
-    fi
-    adapter_binding "$target" || { log_warning "Trainman: no adapter binding (not implemented yet for '$target')."; return 1; }
-    local ap; ap="$(get_project_path "$name" 2>/dev/null)" || { log_warning "Project '$name' not found"; return 0; }
-    if ! path_is_bound "$ap" "$target"; then
-        log_warning "Project '$name' is not bound"
+    if [[ "$(flag_value binding.artifacts)" == "true" ]]; then
+        log_info "binding.artifacts is on — legacy artifacts are expected; migrate-nobind is a no-op. Use 'matrix deselect <name>' or set binding.artifacts=off."
         return 0
     fi
-    cleanup_agents_local "$ap" "$target"
-    cleanup_exclude "$ap" "$target"
-    [[ -n "$ap" && -L "$ap/_brain" ]] && rm "$ap/_brain"
-    link_append "project:deselect" "$name" ""
-    log_success "Deselected '$name'"
+    local targets=()
+    if [[ -n "$name" ]]; then
+        targets+=("$name")
+    elif $all; then
+        while IFS=$'\t' read -r n _ _; do [[ -n "$n" ]] && targets+=("$n"); done <<< "$(read_registry)"
+    else
+        log_error "Usage: matrix migrate-nobind [<name>|--all] [--dry-run]"
+        return 1
+    fi
+    if [[ ${#targets[@]} -eq 0 ]]; then
+        log_info "No registered projects to migrate"
+        return 0
+    fi
+    for t in "${targets[@]}"; do
+        migrate_nobind_one "$t" "$dry_run" || true
+    done
+    if [[ "$dry_run" != true ]]; then
+        link_append "project:migrate-nobind" "$(IFS=,; echo "${targets[*]}")" "removed=_brain,AGENTS.local.md,exclude"
+    fi
 }
 
 # --- Multi-project warm set -------------------------------------------------

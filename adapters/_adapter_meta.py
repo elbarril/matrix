@@ -35,16 +35,18 @@ def binding(target):
     doc_path = value.get("doc_path")
     if not all(isinstance(item, str) and item for item in (file_name, begin_marker, end_marker)):
         return None
-    if not isinstance(exclude_entries, list) or not all(
-        isinstance(item, str) and item for item in exclude_entries
-    ):
-        return None
     result = {
         "file": file_name,
         "begin_marker": begin_marker,
         "end_marker": end_marker,
-        "exclude_entries": exclude_entries,
     }
+    # exclude_entries is optional since the no-binding rework (devin adapter no
+    # longer declares it). Keep the field when a target still provides it so
+    # adapter_binding() in bin/lib/binding.sh keeps parsing it uniformly.
+    if isinstance(exclude_entries, list) and all(
+        isinstance(item, str) and item for item in exclude_entries
+    ):
+        result["exclude_entries"] = exclude_entries
     if isinstance(doc_path, str) and doc_path:
         result["doc_path"] = doc_path
     return result

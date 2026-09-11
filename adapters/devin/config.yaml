@@ -1,16 +1,11 @@
-experiment:
-  # 2026-07-28: enabled. Extended by B1-Option 1 (post-audit backlog, see
-  # brain/output/architecture/matrix-system-health-audit.md): reinjection now
-  # fires in Matrix workspace mode AND for a real bound external project (see
-  # adapters/devin/hooks/session_audit.py's _activation_reinject_scope()),
-  # not workspace-only — the one-shot AGENTS.local.md block written by
-  # `bin/matrix select` is not enough on its own once the session's context
-  # window moves past it.
-  activation_inject: true
-  # 2026-09-01: changed to false per Camino 2 decision. Revert if BLOCK ratio
-  # exceeds 21% over >=20 phase:close events, or if any contract violation is
-  # traced to a throttled turn without recent full reinjection.
-  activation_inject_userprompt_full: false
+# Feature flags for the Devin adapter — canonical values above the DEFAULTS in
+# hooks/_flags.py and below env MATRIX_<NAME>. This section absorbs the legacy
+# experiment.activation_inject*, experiment.activation_inject_userprompt_full
+# and secret_deny.enabled knobs; hooks read flags exclusively via _flags.py.
+flags:
+  activation.reinject: true          # absorbe experiment.activation_inject
+  activation.reinject_full: false    # absorbe experiment.activation_inject_userprompt_full
+  gate.secret_deny: false            # absorbe secret_deny.enabled
 
 secret_deny:
   # DESHABILITADA por decisión del usuario el 2026-09-07 (incidente

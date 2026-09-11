@@ -302,9 +302,9 @@ def render_devin(outdir):
                 f"    MATRIX_ROOT = {ROOT}\n"
                 f"    orchestrator = {os.path.join(ROOT, 'bin', 'matrix')}\n"
                 f"    config       = {os.path.join(brain, 'config.yaml')}\n\n"
-                f"If the current project has a `_brain` symlink (created by "
-                f"`matrix select`), prefer it for project binding; otherwise fall "
-                f"back to the absolute paths above.\n\n"
+                f"Resolve the project binding with `bin/matrix scope` "
+                f"(registry-path walk-up, no filesystem symlink). All Matrix "
+                f"paths below are absolute and cwd-independent.\n\n"
                 f"{_compose_routing_doctrine(roster, fleet_block, 'devin')}"
             )
         else:

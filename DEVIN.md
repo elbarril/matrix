@@ -8,9 +8,9 @@ Prime directives: AGENTS.md §1-§4 + §8 son el contrato; lo único Devin-espec
 
 ## Capability → Devin tool mapping (the Trainman table)
 
-Puntero: la fuente es `adapters/devin/adapter.yaml` (`capabilities:` + `render:`), transcripto en "The live `adapter.yaml` binding" al final. No se mantiene una tabla manual paralela para no duplicar la fuente.
+Puntero: la fuente es `adapters/devin/adapter.yaml`, transcripta en "The live `adapter.yaml` binding" al final; no se duplica en tabla manual.
 
-Every generated `AGENT.md` also gets a Devin-native `allowed-tools:` grant from the same `capabilities:` list via the `allowed_tools:` map in `adapters/devin/adapter.yaml` — see "Least-privilege" below. Neo's `SKILL.md` deliberately has none.
+Every generated `AGENT.md` also gets a Devin-native `allowed-tools:` grant from the same `capabilities:` list via the `allowed_tools:` map in `adapters/devin/adapter.yaml` — see "Least-privilege" below.
 
 The Trainman is a **two-step** flow for Devin:
 
@@ -29,7 +29,7 @@ bin/matrix install --target=devin   # 2. deploy them into Devin's global discove
 | Neo (master) | `~/.config/devin/skills/neo/SKILL.md` | `/neo` and autonomous invocation in **every** project |
 | Specialists | `~/.config/devin/agents/<name>/AGENT.md` | Subagent profiles available in **every** project |
 
-Global install is deliberate: Neo must be reachable from any repo (Matrix, `clients/`, or unrelated). The installer also removes stale Matrix-owned symlinks left by older ad-hoc wiring (never touches non-Matrix entries).
+Global install is deliberate: Neo must be reachable from any repo (Matrix, `clients/`, or unrelated). The installer also prunes stale Matrix-owned legacy symlinks (never touches non-Matrix entries).
 
 **Native mapping:** Master → Devin Skill (`SKILL.md`), specialists → Devin Subagents (`AGENT.md`), routed via `run_subagent` (incl. Matrix workspace mode); enforcement → portable `hooks/*.py` via `bin/matrix hooks <name>` or skill pre/post steps.
 
@@ -45,7 +45,7 @@ Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, reso
 
 **Key syntax (2026-09-05):** DeepSeek keys are **lowercase with a reasoning-level suffix** — `deepseek-v4-flash-high`, `deepseek-v4-flash-max`, `deepseek-v4-pro-high`; bare `deepseek-V4-*` (wrong case, no suffix) does not resolve. Never observed: `swe-1-7-fast`, `swe-1-6-medium`; real fast tiers: `swe-1-6-fast` (0.5 credits), `swe-1-7-lightning` (6 credits, latency-focused). `swe-1.7` and `swe-1-7` normalize to the same canonical id (sessions.db) — dash vs. dot does not matter.
 
-**Time-bound:** SWE-1.7's free preview ended ~2026-08-08 (date time-boxed, not re-verifiable live; consistent with the free tier being gone). Map + `model_template_*` presets (`gratis`/`barato`/`equilibrado`/`caro`/`veloz`) re-verified 2026-09-05 against sessions.db/`config.json`/CLI docs. Re-verify periodically (repeat `--model X -p "OK"` + sessions.db check, or watch `/model`'s selector), especially after any Devin upgrade — update the map if needed.
+**Time-bound:** SWE-1.7's free preview ended ~2026-08-08 (date time-boxed, not re-verifiable live; consistent with the free tier being gone). Map + `model_template_*` presets (`gratis`/`barato`/`equilibrado`/`caro`/`veloz`) re-verified 2026-09-05 against sessions.db/`config.json`/CLI docs. Re-verify periodically (repeat `--model X -p "OK"` + sessions.db check) after any Devin upgrade.
 
 To move a tier: edit the `model_policy` map in `adapters/devin/adapter.yaml`, then rerun:
 
@@ -63,7 +63,7 @@ No agent file changes — tier assignment is separate from its backing model.
 | `browser` | `chrome-browser` | `mcp__chrome-browser` | user (`~/.config/devin/config.json`) | pre-existing | Smith |
 | `docs-lookup` | `context7` | `mcp__context7` | user (`~/.config/devin/config.json`) | 2026-07-15, `devin mcp add context7 --url https://mcp.context7.com/mcp --scope user` | Oracle |
 
-Both are **user-scope**, so they follow Neo/the specialists globally rather than needing per-project setup. Neither is required for the roster to function — the corresponding capability (`browser`, `docs-lookup`) is simply unavailable if the server isn't configured on a given machine, and the agent should say so rather than fake the check (Foundation 3). context7 works unauthenticated (rate-limited, verified live); running `devin mcp add ...` again prints an OAuth URL for higher rate limits — optional, not required.
+Both are **user-scope**, so they follow Neo/the specialists globally rather than needing per-project setup. Neither is required for the roster: the capability is simply unavailable if the server isn't configured, and the agent should say so (Foundation 3). context7 works unauthenticated (rate-limited, verified live).
 
 **Binding note:** `mcp__<server>__<tool>` es la convención de naming MCP de Devin, no un concepto del capability-map — el binding de otro adapter usaría su propia convención MCP (o no-MCP).
 
@@ -77,7 +77,7 @@ Grant-resolution timing status: `brain/output/research/devin-tool-grant-resoluti
 - `pre_exec_guard.py` token-match false-positive fix → `brain/output/eval/pre-exec-guard-false-positive-fix.md`.
 - Logos-Sparks `run-command` removal + exec allowlist for subagents (`permissions.allow`/`PreToolUse` guard) → `brain/output/eval/devin-subagent-exec-hardening.md`.
 
-Neo's `SKILL.md` deliberately has no `allowed-tools` (`run_subagent`/`ask_user_question` aren't nameable entries); blast radius is lower — foreground, user-approved, not an unattended subagent.
+Neo's `SKILL.md` deliberately has no `allowed-tools` (`run_subagent`/`ask_user_question` aren't nameable entries).
 
 ## Subagents can never ask the user directly
 
@@ -93,22 +93,22 @@ See [`AGENTS.md`](AGENTS.md) §12.
 
 ## Matrix workspace mode auto-bootstrap (AGENTS.md §6 step 0)
 
-Reuses `adapters/devin/hooks/session_audit.py` + `experiment.activation_inject` (`lessons.md:35`).
+Reuses `adapters/devin/hooks/session_audit.py` + the `activation.reinject` flag (`hooks/_flags.py`).
 
 - **Wiring.** `session_audit.py` wired to `SessionStart`/`UserPromptSubmit`/`PostToolUse`/`PostCompaction`/`SessionEnd` in `~/.config/devin/config.json` by `adapters/devin/install-hooks.sh` (`install.sh` runs it last, so `install --target=devin` sets it up anywhere).
-- **Injection.** `experiment.activation_inject: true` renders `brain/data/activation-preamble.tmpl` (misma fuente que `matrix_block_tmp()` en `bin/matrix` y el `neo` SKILL.md generado) como `hookSpecificOutput.additionalContext` en `SessionStart`/`UserPromptSubmit`.
+- **Injection.** `activation.reinject: true` (via `adapters/devin/config.yaml#flags`) renders `brain/data/activation-preamble.tmpl` (misma fuente que `matrix_block_tmp()` en `bin/matrix` y el `neo` SKILL.md generado) como `hookSpecificOutput.additionalContext` en `SessionStart`/`UserPromptSubmit`.
 - **`{{ADAPTER_DOC_PATH}}`** → `DEVIN.md` (`binding.doc_path` en `adapters/devin/adapter.yaml`); las tres superficies (`matrix_block_tmp()`, `adapters/_build.py`, `_render_activation_preamble()` de `session_audit.py`) la resuelven a ruta **absoluta**.
-- **Scope.** `_activation_reinject_scope()` (B1-Option 1) aplica en workspace mode y en proyectos bound (`_brain` symlink + `AGENTS.local.md`), cada `session_start`/`user_prompt_submit`, via `bin/matrix scope` (wrapper de `resolve_scope()`).
-- **Flag state.** `activation_inject` es `true` (fue `false` desde 2026-07-17, nunca encendido); afecta workspace mode y bound.
+- **Scope.** `_activation_reinject_scope()` (B1-Option 1) aplica en workspace mode y en proyectos resueltos por registry, cada `session_start`/`user_prompt_submit`, via `bin/matrix scope` (wrapper de `resolve_scope()`). No hay binding de filesystem (`_brain`/`AGENTS.local.md`).
+- **Flag state.** `activation.reinject` es `true` (absorbe el legacy `experiment.activation_inject`); afecta workspace mode y project.
 
-### `activation_inject_userprompt_full` (throttled since 2026-09-01, Camino 2 Q1-A)
+### `activation.reinject_full` (throttled since 2026-09-01, Camino 2 Q1-A)
 
-Current value: **`false`** in `adapters/devin/config.yaml` — full preamble on turn 1, again roughly every 10 turns; sentinel preamble between.
+Current value: **`false`** in `adapters/devin/config.yaml#flags` (absorbe el legacy `experiment.activation_inject_userprompt_full`) — full preamble on turn 1, again roughly every 10 turns; sentinel preamble between.
 
 - **Revert criterion.** Back to `true` only if (a) observed BLOCK ratio > 21% over ≥ 20 phase closes, **or** (b) a contract violation is traced to a throttled turn (the missing full preamble caused it).
 - **Known gap.** No env-var kill-switch — only editing `adapters/devin/config.yaml` directly.
 
-**Verified 2026-07-28**: model replied `OK` but `hook-audit.jsonl` shows reads of `AGENTS.md` then `neo.md` — audit log, not prose; re-verify on upgrade. → `brain/output/research/adapter-lessons-detail.md`.
+**Verified 2026-07-28**: `hook-audit.jsonl` shows reads of `AGENTS.md` then `neo.md` (audit log, not prose); re-verify on upgrade → `brain/output/research/adapter-lessons-detail.md`.
 
 ## Hardening `permissions.deny` for secret stores
 
@@ -192,9 +192,9 @@ The Trainman resolves each agent's `model_policy` tier (`cheap`/`reasoning`/`aut
 `pre_activation_check` now runs a `boot_warn` channel with seven information-only emitters (`surface_budget`, `the_source`, `validate_layer2`, `validate_lessons`, `model_drift`, `ttl_expired`, `snapshot_due`). The channel never blocks activation and never writes to `errors`/`checks`; it populates `boot_warn.warns` in the JSON and the `additionalContext` reinjected on `session_start` when the session is in scope.
 
 - `surface_budget` token: size budget for the shared document surface (`AGENTS.md` warn 15,500 B / fail 16,200 B; `DEVIN.md` warn 20 KiB / fail 24 KiB; `brain/agents/neo.md` warn 18 KiB / fail 22 KiB). `ok:false` only if a surface exceeds its `fail`; a `warn` state never flips `ok` and never feeds the hook's global `ok`. Fix: slim the offending doc. Raising a threshold is the full-chain case, not a routine fix.
-- `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`: `0`/`false`/`off` disables the channel.
+- `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`: legacy aliases of `hooks.boot_warn` (deprecated).
 - `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`: internal deadline, default `6.0`.
-- `PRE_ACTIVATION_TIMEOUT_S`: external `session_audit` timeout raised to `20` s; an internal `pre_activation_check_status` of `timeout` is now distinguishable from `ok`/`failed`/`error`.
+- The `session_audit` pre-check timeout is hardcoded at 20 s; a `pre_activation_check_status` of `timeout` is distinguishable from `ok`/`failed`/`error`.
 
 Two new manual mechanisms are supported by `bin/matrix link`:
 
@@ -207,11 +207,17 @@ bin/matrix link ttl:path-decision-reform matrix until=YYYY-MM-DD motivo=fallback
 
 ## Shared-surface gate & writer lane (Q2-D)
 
-El hook `PreToolUse` (`adapters/devin/hooks/pre_tool_use_guard.py`) ahora también cubre las tools nativas de edición (`edit`, `write`, `multi_edit`), pero **solo contra la superficie compartida del harness**: `AGENTS.md`, `DEVIN.md`, `brain/agents/*`, `brain/data/lessons.md`, `brain/data/capability-map.md`, `hooks/`, `bin/`, `adapters/`. Una sesión bound a un proyecto externo queda **bloqueada** para editar esa superficie — salvo la promoción proactiva de lessons, que solo permite `brain/data/lessons.md` (core) y `brain/data/lessons/<proyecto-actual>.md`, ambas bajo un lane de escritor per-file. Matrix workspace mode conserva acceso completo (también bajo lane).
+El hook `PreToolUse` (`adapters/devin/hooks/pre_tool_use_guard.py`) ahora también cubre las tools nativas de edición (`edit`, `write`, `multi_edit`), pero **solo contra la superficie compartida del harness**: `AGENTS.md`, `DEVIN.md`, `brain/agents/*`, `brain/data/lessons.md`, `brain/data/capability-map.md`, `hooks/`, `bin/`, `adapters/`. Una sesión `project` (cwd en un proyecto resuelto por registry) queda **bloqueada** para editar esa superficie — salvo la promoción proactiva de lessons, que solo permite `brain/data/lessons.md` (core) y `brain/data/lessons/<proyecto-actual>.md` (subject = innermost), ambas bajo un lane de escritor per-file. Matrix workspace mode conserva acceso completo (también bajo lane). Los flags `gate.shared_surface` y `gate.writer_lane` (default on) gatean el aislamiento y el lane; `gate.pre_exec_guard` gatea el guard de comandos shell.
 
-- **Excepción / kill-switch:** relanzar la sesión con `MATRIX_SHARED_SURFACE_ALLOW=1` (o `true`) para bypassar el bloqueo de modo-bound durante toda la sesión (solo emergencias; la decisión queda auditada). El kill-switch NO bypassa el lane.
+- **Excepción / kill-switch:** relanzar la sesión con `MATRIX_SHARED_SURFACE_ALLOW=1` (o `true`) para bypassar el bloqueo de sesión `project` durante toda la sesión (solo emergencias; la decisión queda auditada). El kill-switch NO bypassa el lane.
 - **Lane de escritor:** `brain/state/lanes/<sha1(rel_path)[:16]>.json` — adquirido en `PreToolUse`, liberado en `PostToolUse`/`SessionEnd`, reclamado tras `MATRIX_WRITER_LANE_TTL_S` (default `120`). Un lane tomado bloquea el edit y loguea `bin/matrix link incident:writer-collision`.
 - **Wireado:** `adapters/devin/install-hooks.sh` registra matchers `PreToolUse` para `edit`/`write`/`multi_edit` → `pre_tool_use_guard.py`. Re-correr `bin/matrix install --target=devin` tras este cambio.
+
+## Feature flags (Devin adapter)
+
+`hooks/_flags.py` es el loader único. Precedencia: env `MATRIX_<NAME>` (`.`→`_`, upper) > `adapters/devin/config.yaml#flags` > `brain/config.yaml#flags` > DEFAULTS. `bin/matrix flags` imprime valor efectivo, fuente, riesgo, estado y `depends_on`; `flags --validate` hace exit 1 si hay flags `dangerous`/`inert`. Env legadas booleanas emiten WARN de deprecación y se mapean: `MATRIX_INJECT_ACTIVATION`→`activation.reinject`, `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`→`hooks.boot_warn`. Los TTLs numéricos (`MATRIX_WRITER_LANE_TTL_S`, `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`) NO son flags.
+
+El bloque `flags:` de `adapters/devin/config.yaml` declara `activation.reinject`, `activation.reinject_full` y `gate.secret_deny` (absorben los legacy `experiment.activation_inject`, `experiment.activation_inject_userprompt_full` y `secret_deny.enabled`). `gate.secret_deny` default **off**; para re-habilitar la deny-list: setear la flag en on y correr `bin/matrix harden --target=devin --apply` (el sidecar `~/.config/devin/.matrix-managed-deny.json` se crea ahí).
 
 ## Lessons — detalle de adapter
 

@@ -5,20 +5,18 @@ read_registry() { init_registry; jq -r '.projects[] | "\(.name)\t\(.path)\t\(.ty
 # --- Single source of truth: mode + subject resolution ----------------------
 # resolve_scope: answers "where am I?" exactly once, for every call-site.
 # Prints: <mode>\t<project>\t<detail>
-#   workspace           matrix   <matrix root>   cwd is the Matrix repo itself
-#   bound               <name>   <project root>  cwd is inside a registered, bound project
-#   bound-unregistered  (empty)  <project root>  bound _brain, not in the registry
-#   broken              (empty)  <dir>           _brain present but not a valid binding
-#   none                (empty)  (empty)         no root found walking up
+#   workspace           matrix   <matrix root>   cwd is inside the Matrix repo itself
+#   project             <name>   <project root>  cwd is inside a registered project (registry-path walk-up)
+#   none                (empty)  (empty)         no registered project found walking up
 #
 # THE RULE: innermost root wins. Walking up from cwd, the first directory that
-# is either the Matrix root or a project root decides. This is what makes all
-# three real topologies work with one rule and no special cases:
-#   (a) the Matrix repo living inside a bound project  (emi ⊃ matrix)
-#   (b) a bound project living inside the Matrix repo  (clients/<name>, type:remote)
-#   (c) a bound project inside another bound project   (pas ⊃ sandisk)
-# The pre-fix code asked (b)-style questions at every level and the Matrix-root
-# question at none of them, so a bound *ancestor* always beat the Matrix root.
+# is either the Matrix root or a registered project root decides. There is no
+# filesystem binding (`_brain`) anymore: a project is in scope when its registry
+# path is an ancestor of cwd. This handles all real topologies with one rule and
+# no special cases:
+#   (a) the Matrix repo living inside a registered project (emi ⊃ matrix) → workspace
+#   (b) a registered project living inside the Matrix repo (clients/<name>, type:remote)
+#   (c) a registered project inside another registered project (pas ⊃ sandisk) → project, innermost wins
 resolve_scope() {
     local matrix_real; matrix_real="$(readlink -f "$MATRIX_DIR" 2>/dev/null || echo "$MATRIX_DIR")"
     local dir;         dir="$(readlink -f "$PWD" 2>/dev/null || echo "$PWD")"
@@ -27,19 +25,10 @@ resolve_scope() {
             printf '%s\t%s\t%s\n' "workspace" "$MATRIX_WORKSPACE_PROJECT" "$matrix_real"
             return 0
         fi
-        if [[ -L "$dir/_brain" || -e "$dir/_brain" ]]; then
-            local n; n="$(registry_name_for_path "$dir" || true)"
-            local target="devin"
-            if [[ -n "$n" ]]; then
-                target="$(registry_bound_target "$n")"
-                [[ -n "$target" && "$target" != "null" ]] || target="devin"
-            fi
-            if path_is_bound "$dir" "$target"; then
-                if [[ -n "$n" ]]; then printf '%s\t%s\t%s\n' "bound" "$n" "$dir"
-                else                   printf '%s\t\t%s\n'   "bound-unregistered" "$dir"; fi
-            else
-                printf '%s\t\t%s\n' "broken" "$dir"
-            fi
+        local n; n="$(registry_name_for_path "$dir" 2>/dev/null || true)"
+        if [[ -n "$n" ]]; then
+            local p; p="$(get_project_path "$n")"
+            printf '%s\t%s\t%s\n' "project" "$n" "$(readlink -f "$p" 2>/dev/null || echo "$p")"
             return 0
         fi
         [[ "$dir" == "/" ]] && break
@@ -73,28 +62,43 @@ session_focused_project() {
     return 0
 }
 
+# scope_subject_from_name <name>: prints <name> iff it is still registered.
+# Defends the env/focus subject resolution from ghost names — the same
+# read-time check session_focused_project() does for its own value.
+scope_subject_from_name() {
+    local name="$1"
+    [[ -n "$name" ]] || return 0
+    local p; p="$(registry_path "$name" 2>/dev/null || true)"
+    [[ -n "$p" && "$p" != "null" ]] || return 0
+    printf '%s\n' "$name"
+    return 0
+}
+
 # resolve_scope_project: the *filter subject* for checkpoints/ledger views.
-# Same fallback chain as before the fix — only the workspace case is new.
-# A session-level focus (set via `matrix focus <project>`) takes full
-# priority over the cwd-derived chain below, but only within the same
-# session and only while the focused project remains registered — see
-# session_focused_project(). Always returns 0 (callers use it inside `&&`
-# lists under `set -e`).
+# Priority: $MATRIX_PROJECT (env, explicit) > session focus > registry walk-up
+# (chain[0], innermost). Workspace resolves to the reserved "matrix" name.
+# Always returns 0 (callers use it inside `&&` lists under `set -e`).
 resolve_scope_project() {
-    local focused; focused="$(session_focused_project 2>/dev/null || true)"
-    if [[ -n "$focused" ]]; then
-        printf '%s\n' "$focused"
+    local subject=""
+    local envp; envp="$(scope_subject_from_name "${MATRIX_PROJECT:-}" 2>/dev/null || true)"
+    [[ -n "$envp" ]] && subject="$envp"
+    if [[ -z "$subject" ]]; then
+        local focused; focused="$(session_focused_project 2>/dev/null || true)"
+        [[ -n "$focused" ]] && subject="$focused"
+    fi
+    if [[ -z "$subject" ]]; then
+        local line mode project
+        IFS=$'\n' read -r line < <(resolve_scope)
+        mode="$(printf '%s\n' "$line" | cut -f1)"
+        project="$(printf '%s\n' "$line" | cut -f2)"
+        case "$mode" in
+            workspace) printf '%s\n' "$MATRIX_WORKSPACE_PROJECT" ;;
+            project)   printf '%s\n' "$project" ;;
+            *)         ;;
+        esac
         return 0
     fi
-    local line mode project
-    IFS=$'\n' read -r line < <(resolve_scope)
-    mode="$(printf '%s\n' "$line" | cut -f1)"
-    project="$(printf '%s\n' "$line" | cut -f2)"
-    case "$mode" in
-        workspace) printf '%s\n' "$MATRIX_WORKSPACE_PROJECT" ;;
-        bound)     printf '%s\n' "$project" ;;
-        *)         ;;
-    esac
+    printf '%s\n' "$subject"
     return 0
 }
 
@@ -115,6 +119,78 @@ registry_name_for_path() {
         [[ "$(readlink -f "$CLIENTS_DIR/$n" 2>/dev/null || true)" == "$target" ]] && { printf '%s\n' "$n"; return 0; }
     done < <(jq -r '.projects[] | select(.type=="remote") | .name' "$REGISTRY_FILE" 2>/dev/null)
     return 1
+}
+
+# registry_names_for_path <path>: print every registered project whose
+# canonical path is an ancestor of <path> (or equal), innermost first.
+# The Matrix root is excluded (it is context, not a node). Returns 0 always.
+registry_names_for_path() {
+    local target; target="$(readlink -f "$1" 2>/dev/null || true)"
+    [[ -n "$target" ]] || return 0
+    init_registry
+    local matrix_real; matrix_real="$(readlink -f "$MATRIX_DIR" 2>/dev/null || echo "$MATRIX_DIR")"
+    local dir n
+    dir="$target"
+    while :; do
+        [[ "$dir" == "$matrix_real" ]] && break
+        n="$(registry_name_for_path "$dir" 2>/dev/null || true)"
+        [[ -n "$n" ]] && printf '%s\n' "$n"
+        [[ "$dir" == "/" ]] && break
+        dir="$(dirname "$dir")"
+    done
+    return 0
+}
+
+# resolve_scope_chain: the memory tree for cwd. One registered project name
+# per line, innermost first; workspace and none print nothing. Returns 0
+# always (contract: usable inside `&&` lists under `set -e`).
+resolve_scope_chain() {
+    registry_names_for_path "$PWD"
+}
+
+# resolve_scope_chain_effective: the memory tree for this session, honoring
+# $MATRIX_PROJECT > session focus > cwd walk-up. When the subject is a named
+# project, the chain recomputes from that project's registered path (its
+# ancestors); workspace/none fall back to the cwd walk (workspace → empty).
+resolve_scope_chain_effective() {
+    local subject; subject="$(resolve_scope_project)"
+    if [[ -z "$subject" || "$subject" == "$MATRIX_WORKSPACE_PROJECT" ]]; then
+        registry_names_for_path "$PWD"
+        return 0
+    fi
+    local p; p="$(get_project_path "$subject" 2>/dev/null || true)"
+    if [[ -n "$p" ]]; then
+        registry_names_for_path "$p"
+    else
+        registry_names_for_path "$PWD"
+    fi
+    return 0
+}
+
+# scope_tree [--json]: print the session memory chain (one name per line) or,
+# with --json, {"mode":..., "subject":..., "chain":[...]} for machines.
+scope_tree() {
+    local json=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --json) json=true ;;
+            --*) log_error "Unknown flag '$arg'"; return 1 ;;
+            *) log_error "Unknown argument '$arg'"; return 1 ;;
+        esac
+    done
+    local line mode subject
+    IFS=$'\n' read -r line < <(resolve_scope)
+    mode="$(printf '%s\n' "$line" | cut -f1)"
+    subject="$(resolve_scope_project)"
+    if $json; then
+        local chain_json
+        chain_json="$(resolve_scope_chain_effective | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')"
+        jq -n -c --arg mode "$mode" --arg subject "$subject" --argjson chain "$chain_json" \
+            '{mode:$mode, subject:$subject, chain:$chain}'
+        return 0
+    fi
+    resolve_scope_chain_effective
+    return 0
 }
 
 # --- Project registry -------------------------------------------------------
@@ -158,9 +234,8 @@ add_project() {
             log_error "Project '$name' already exists — use 'matrix add <name> <path> --replace' to update it"
             return 1
         fi
-        if is_bound "$name"; then
-            log_info "Project '$name' is bound; removing old binding before replacing..."
-            deselect_project "$name"
+        if has_legacy_binding_artifacts "$name" >/dev/null 2>&1; then
+            log_warning "Project '$name' has legacy binding artifacts (_brain/AGENTS.local.md/exclude) — run 'matrix migrate-nobind $name' to clean them"
         fi
         local tmp; tmp="$(mktemp)"
         jq --arg n "$name" --arg p "$path_or_url" --arg t "$type" \
@@ -184,10 +259,6 @@ remove_project() {
     init_registry
     jq -e --arg n "$name" '.projects[] | select(.name==$n)' "$REGISTRY_FILE" >/dev/null 2>&1 \
         || { log_error "Project '$name' not found"; return 1; }
-    if is_bound "$name"; then
-        log_error "Project '$name' is bound — run 'matrix deselect $name' before removing it"
-        return 1
-    fi
     if grep -qxF "  - name: $name" "$WORKSPACE_FILE" 2>/dev/null; then
         log_error "Project '$name' is warm — run 'matrix unwork $name' before removing it"
         return 1
@@ -220,7 +291,7 @@ list_projects() {
     [[ -z "$projects" ]] && { echo "  No projects registered"; return; }
     while IFS=$'\t' read -r name path type; do
         local marks=""
-        is_bound "$name" && marks+="[bound]"
+        is_project_warm "$name" && marks+="[warm]"
         if [[ -n "$marks" ]]; then
             echo "  ✓ $name ($type) - $path $marks"
         else

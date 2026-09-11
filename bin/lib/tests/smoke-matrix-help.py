@@ -117,14 +117,6 @@ def state_snapshot(fixture_root, home_dir, projects):
     collect_dir(snapshot, fixture_root / "brain" / "state" / "hardline" / "events", "FIXTURE_ROOT/brain/state/hardline/events", fixture_root)
     collect_dir(snapshot, fixture_root / "adapters" / "devin" / "generated", "FIXTURE_ROOT/adapters/devin/generated", fixture_root)
     collect_dir(snapshot, home_dir / ".config" / "devin", "FIXTURE_HOME/.config/devin", fixture_root)
-    for proj in projects:
-        for rel in [f"projects/{proj}/AGENTS.local.md", f"projects/{proj}/.git/info/exclude"]:
-            path = fixture_root / rel
-            if path.is_file():
-                snapshot[f"FIXTURE_ROOT/{rel}"] = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        link = fixture_root / "projects" / proj / "_brain"
-        if link.is_symlink():
-            snapshot[f"FIXTURE_ROOT/projects/{proj}/_brain"] = [f"-> {os.readlink(link)}"]
     return snapshot
 
 
@@ -186,10 +178,12 @@ def run_smoke(repo_root, matrix_rel="bin/matrix"):
             ("status --all", ["status", "--all"], fixture_root, None),
             ("bindings", ["bindings"], fixture_root, None),
             ("scope workspace", ["scope"], fixture_root, None),
+            ("scope --tree workspace", ["scope", "--tree", "--json"], fixture_root, None),
             ("select alpha", ["select", "alpha"], fixture_root, None),
             ("status after select", ["status"], fixture_root, None),
             ("bindings after select", ["bindings"], fixture_root, None),
-            ("scope bound", ["scope"], fixture_root / "projects" / "alpha", None),
+            ("scope project", ["scope"], fixture_root / "projects" / "alpha", None),
+            ("scope --tree project", ["scope", "--tree", "--json"], fixture_root / "projects" / "alpha", None),
             ("focus beta", ["focus", "beta"], fixture_root, None),
             ("status after focus", ["status"], fixture_root, None),
             ("adapter-doc-path", ["adapter-doc-path"], fixture_root, None),
@@ -210,8 +204,9 @@ def run_smoke(repo_root, matrix_rel="bin/matrix"):
             ("build", ["build", "--target=devin"], fixture_root, None),
             ("install", ["install", "--target=devin"], fixture_root, None),
             ("harden", ["harden", "--target=devin"], fixture_root, None),
-            ("exclude audit", ["exclude", "audit", "beta"], fixture_root, None),
-            ("exclude fix", ["exclude", "fix", "beta", "--fix"], fixture_root, None),
+            ("flags", ["flags"], fixture_root, None),
+            ("flags --get", ["flags", "--get", "views.scoped"], fixture_root, None),
+            ("migrate-nobind --all --dry-run", ["migrate-nobind", "--all", "--dry-run"], fixture_root, None),
             ("phase precheck pass", ["phase", "precheck", '{"phase":"develop","e2e":true,"evidence":"smoke-test-evidence","plan":"brain/output/plans/smoke.md","step":"3.2"}'], fixture_root, None),
             ("phase precheck block", ["phase", "precheck", '{"phase":"unknown","e2e":true,"evidence":"smoke-test-evidence"}'], fixture_root, None),
             ("phase precheck warn", ["phase", "precheck", '{"phase":"develop","e2e":true,"evidence":"brain/output/eval/missing-smoke.md","plan":"brain/output/plans/smoke.md","step":"3.2"}'], fixture_root, None),

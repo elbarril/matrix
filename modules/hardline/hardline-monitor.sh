@@ -1,7 +1,7 @@
 #!/bin/bash
 # The Hardline — persistent event monitor. Blocks on tail -F (zero tokens idle),
 # wakes on each external event, validates it, logs it to the Link ledger, and
-# dispatches to the bound project via bin/matrix hardline dispatch. One poller,
+# dispatches to the project via bin/matrix hardline dispatch. One poller,
 # no busy-loop. Synchronous per-event processing: never cancels an in-flight
 # event (D7.c).
 set -uo pipefail
@@ -17,7 +17,7 @@ mkdir -p "$MODULE_DIR"
 echo "[hardline] monitoring $INBOX (Ctrl-C to stop). Zero tokens while idle."
 
 # Inbox line format: <project>|<line>
-#   <project>  registered, bound project name (letters, numbers, dot, underscore, hyphen), or "matrix" for the workspace root
+#   <project>  registered project name (letters, numbers, dot, underscore, hyphen), or "matrix" for the workspace root
 #   <line>     the unattended prompt/task; must not contain a newline
 # Example: mck|Update the README with a one-line note about hardline events.
 

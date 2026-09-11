@@ -11,13 +11,12 @@ Usage:
 """
 
 import os
+import subprocess
 import time
 
 from _common import (
     _load_registry,
-    _registry_project,
     emit,
-    exclude_drift,
     ledger_tail_events,
     model_override_active,
     read_input,
@@ -26,6 +25,13 @@ from _common import (
     snapshot_window,
     ttl_scan,
 )
+
+try:
+    from _flags import DEFAULTS as _FLAGS_DEFAULTS
+    from _flags import get_flag as _get_flag
+except Exception:
+    _FLAGS_DEFAULTS = {}
+    _get_flag = None
 
 try:
     from validate_ship import validate as validate_ship
@@ -70,43 +76,82 @@ ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith"]
 SUPPORTING_AGENTS = ["lock"]
 
 
-def _workspace_warm_projects(root):
-    """Return (name, path) tuples from brain/state/workspace.yaml without PyYAML."""
-    path = os.path.join(root, "brain", "state", "workspace.yaml")
-    if not os.path.isfile(path):
-        return []
+def _flags_value(name):
+    """Effective boolean of a feature flag; falls back to the loader default."""
+    if _get_flag is None:
+        return bool(_FLAGS_DEFAULTS.get(name, False))
     try:
-        with open(path, encoding="utf-8") as fh:
-            lines = fh.read().splitlines()
-    except OSError:
-        return []
-    projects = []
-    current_name = None
-    for raw in lines:
-        stripped = raw.strip()
-        if stripped.startswith("- name:"):
-            current_name = stripped.split(":", 1)[1].strip().strip('"').strip("'")
-        elif stripped.startswith("path:") and current_name is not None:
-            p = stripped.split(":", 1)[1].strip().strip('"').strip("'")
-            projects.append((current_name, p))
-            current_name = None
-    return projects
+        return bool(_get_flag(name)["value"])
+    except Exception:
+        return bool(_FLAGS_DEFAULTS.get(name, False))
 
 
-def _brain_symlink_error(project_path, brain_dir, brain_real):
-    """Return a human error string if _brain is missing or points elsewhere."""
-    brain_link = os.path.join(project_path, "_brain")
-    if not os.path.lexists(brain_link):
+def _git_exclude_path(project_path):
+    """Return the absolute .git/info/exclude path for a project, or None."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", project_path, "rev-parse", "--git-path", "info/exclude"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if proc.returncode != 0:
+            return None
+        p = proc.stdout.strip()
+        if not p:
+            return None
+        if not os.path.isabs(p):
+            p = os.path.join(project_path, p)
+        return p
+    except Exception:
         return None
-    if not os.path.islink(brain_link):
-        return "_brain exists but is not a symlink"
-    actual = os.path.realpath(brain_link)
-    if actual != brain_real:
-        target = os.readlink(brain_link)
-        if not os.path.exists(brain_link):
-            return f"_brain is a dangling symlink (points to {target}); should point to {brain_dir}"
-        return f"_brain points to {target}; should point to {brain_dir}"
-    return None
+
+
+def _legacy_binding_artifacts(root, registry, artifacts_on):
+    """Return {project: [artifact labels]} for projects with legacy no-binding
+    leftovers. With binding.artifacts=on those files are expected (only a
+    broken `_brain` symlink is still a WARN). Warn-only; never blocks."""
+    out = {}
+    brain_real = os.path.realpath(os.path.join(root, "brain"))
+    for proj in (registry or {}).get("projects", []):
+        if proj.get("type") != "local":
+            continue
+        name = proj.get("name")
+        path = proj.get("path")
+        if not name or not path or not os.path.isdir(path):
+            continue
+        found = []
+        brain_link = os.path.join(path, "_brain")
+        if os.path.lexists(brain_link):
+            if os.path.islink(brain_link):
+                actual = os.path.realpath(brain_link)
+                if actual == brain_real:
+                    if not artifacts_on:
+                        found.append("_brain (symlink to brain)")
+                else:
+                    found.append("_brain (broken or other target)")
+            else:
+                found.append("_brain (not a symlink)")
+        agents_local = os.path.join(path, "AGENTS.local.md")
+        if os.path.isfile(agents_local) and not artifacts_on:
+            try:
+                with open(agents_local, encoding="utf-8") as fh:
+                    if "<!-- MATRIX:BEGIN" in fh.read():
+                        found.append("AGENTS.local.md (managed block)")
+            except OSError:
+                pass
+        if not artifacts_on:
+            exf = _git_exclude_path(path)
+            if exf and os.path.isfile(exf):
+                try:
+                    with open(exf, encoding="utf-8") as fh:
+                        if "# === MATRIX:EXCLUDE:BEGIN" in fh.read():
+                            found.append(".git/info/exclude (managed block)")
+                except OSError:
+                    pass
+        if found:
+            out[name] = found
+    return out
 
 
 BOOT_WARN_ORDER = [
@@ -131,8 +176,7 @@ def _boot_warn(root, target="devin"):
     skipped = []
     start = time.perf_counter()
 
-    enabled = os.environ.get("BOOT_WARN_ENABLED", os.environ.get("MATRIX_BOOT_WARN", "1"))
-    if enabled in ("0", "false", "False", "no", "off"):
+    if not _flags_value("hooks.boot_warn"):
         return {
             "warns": [],
             "details": {},
@@ -350,40 +394,27 @@ def main():
     state = os.path.join(root, "brain", "state")
     check("state_dir", os.path.isdir(state), f"missing {state}")
 
-    # Brain symlink integrity for all active / local / requested projects
-    brain_dir = os.path.join(root, "brain")
-    brain_real = os.path.realpath(brain_dir)
+    # Legacy binding artifacts — WARN only, never BLOCK. With binding.artifacts=on
+    # the legacy files are expected (only a broken `_brain` symlink still warns).
     registry = _load_registry(root)
-    candidate_paths = {}
-    for proj in (registry or {}).get("projects", []):
-        if proj.get("type") == "local":
-            path = proj.get("path")
-            if path and os.path.isdir(path):
-                candidate_paths.setdefault(path, proj.get("name"))
-    for name, path in _workspace_warm_projects(root):
-        if path and os.path.isdir(path):
-            candidate_paths.setdefault(path, name)
-    requested = data.get("project")
-    if requested:
-        req_proj = _registry_project(registry, requested)
-        if req_proj:
-            req_path = req_proj.get("path")
-            if req_path and os.path.isdir(req_path):
-                candidate_paths.setdefault(req_path, requested)
-    broken = [
-        f"{name}: {err}"
-        for path, name in candidate_paths.items()
-        if (err := _brain_symlink_error(path, brain_dir, brain_real))
+    artifacts_on = _flags_value("binding.artifacts")
+    legacy = _legacy_binding_artifacts(root, registry, artifacts_on)
+    missing_paths = [
+        f"{proj.get('name')}: {proj.get('path')}"
+        for proj in (registry or {}).get("projects", [])
+        if proj.get("type") == "local" and proj.get("path") and not os.path.isdir(proj.get("path"))
     ]
-    if broken:
-        detail = (
-            "broken _brain symlinks in " + "; ".join(broken) + ". "
-            "Fix with `bin/matrix select <name>` or recreate with "
-            f"`ln -sfn {brain_dir} <project>/_brain`"
+    warns = []
+    if legacy:
+        detail = "; ".join(
+            f"{proj} -> {', '.join(arts)}" for proj, arts in legacy.items()
         )
-    else:
-        detail = ""
-    check("brain_symlinks_intact", not broken, detail)
+        warns.append(
+            "legacy_binding_artifacts: " + detail
+            + " — run `bin/matrix migrate-nobind [<name>|--all]`"
+        )
+    if missing_paths:
+        warns.append("registry_path_missing: " + "; ".join(missing_paths))
 
     target = data.get("target") or resolve_bound_target(data.get("project")) or "devin"
 
@@ -405,12 +436,6 @@ def main():
     # Boot WARN channel — information only, never blocks, no project gate.
     boot_warn = _boot_warn(root, target=target)
 
-    # Exclude drift — informational only, warn-only. The result lives in its own
-    # field and never feeds into the global `ok` of the hook.
-    drift = None
-    if data.get("project"):
-        drift = exclude_drift(data["project"], root=root)
-
     result = {
         "hook": "pre_activation_check",
         "ok": not errors,
@@ -420,7 +445,9 @@ def main():
         "checks": checks,
         "errors": errors,
         "boot_warn": boot_warn,
-        "exclude_drift": drift,
+        "legacy_binding_artifacts": legacy,
+        "registry_path_missing": missing_paths,
+        "warns": warns,
     }
     emit(result)
 

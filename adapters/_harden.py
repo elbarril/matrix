@@ -32,6 +32,19 @@ def _say(msg):
     print(f"[trainman:harden] {msg}")
 
 
+def _secret_deny_flag_enabled(root):
+    """Effective gate.secret_deny from hooks/_flags.py (best-effort). When off,
+    harden never emits deny entries — the deny list stays empty (post-incident
+    state). Activation is a two-step process: set the flag on, then run
+    `bin/matrix harden --target=devin --apply`."""
+    try:
+        sys.path.insert(0, os.path.join(root, "hooks"))
+        from _flags import get_flag as _get_flag
+        return bool(_get_flag("gate.secret_deny")["value"])
+    except Exception:
+        return False
+
+
 def _declared_harden_contract(target):
     adapter_yaml = os.path.join(ROOT, "adapters", target, "adapter.yaml")
     if not os.path.isfile(adapter_yaml):
@@ -298,6 +311,11 @@ def main():
     home = os.path.expanduser("~")
     desired_config = _desired_patterns(secret_deny, home)
     excludes = _normalize_excludes(secret_deny)
+    if not _secret_deny_flag_enabled(ROOT):
+        # gate.secret_deny off → never emit deny entries; harden only removes
+        # Matrix-managed leftovers (post-incident empty-deny state).
+        desired_config = set()
+        excludes = set()
 
     # Load real Devin config and sidecar.
     cfg = _load_json(config_path, default={})

@@ -31,7 +31,7 @@ modules/hardline/hardline-monitor.sh
 A non-Telegram bridge may append the exact monitor format directly:
 
 ```bash
-# <project> must be registered and bound, except "matrix" (the workspace root).
+# <project> must be registered, except "matrix" (the workspace root).
 echo 'mck|Update the README with a one-line note about Hardline events' >> modules/hardline/inbox.log
 ```
 
@@ -89,7 +89,7 @@ The bridge is a small Python 3 script using only the standard library, matching 
    mck Update the README with a one-line note about Hardline events
    ```
 
-   The bridge splits on the first whitespace, checks that `<project>` matches `[A-Za-z0-9._-]+`, and appends `mck|Update the README with a one-line note about Hardline events` to `inbox.log`. Multiline, non-text, missing-task, and invalid-project messages are ignored. The project must already be registered and bound; "matrix" (the workspace root) is the exception.
+   The bridge splits on the first whitespace, checks that `<project>` matches `[A-Za-z0-9._-]+`, and appends `mck|Update the README with a one-line note about Hardline events` to `inbox.log`. Multiline, non-text, missing-task, and invalid-project messages are ignored. The project must already be registered; "matrix" (the workspace root) is the exception.
 
 The bridge retains only Telegram's non-secret resume cursor in `brain/state/hardline/telegram-offset`. It advances the cursor after every received update, including ignored updates, so a restart does not replay them. Delete that cursor only if you intentionally want Telegram's still-pending updates reconsidered. Telegram's `getUpdates` cannot operate while the bot has an active webhook; this deployment intentionally uses long polling and no webhook.
 
@@ -99,7 +99,7 @@ For parser-only testing without a token, `modules/hardline/telegram-bridge.py --
 
 `modules/hardline/status-webapp.py` is a small read-only, stdlib-only web page that
 lists every currently open event (`queued`, `dispatched`, `orphaned`, `resumed`,
-`requeued`) across all bound projects — the same set `matrix hardline status` reports,
+`requeued`) across all registered projects — the same set `matrix hardline status` reports,
 but browsable and auto-refreshing instead of a one-shot CLI call.
 
 ```bash
@@ -118,8 +118,8 @@ be exposed on the network. Override the port with
 ## Connected panel, webapp verbs, and alias
 
 The webapp also shows a small **Connected** panel at the top of the page: it
-lists every registered project and whether it is currently bound (`✓ bound` or
-`✗ not bound`), plus whether the monitor and Telegram bridge are running. The
+lists every registered project and whether it is warm (`✓ warm`) or known-only
+(`○ known`), plus whether the monitor and Telegram bridge are running. The
 data comes from the same CLI sources the rest of the module uses:
 
 ```bash
@@ -150,9 +150,9 @@ This starts the webapp (silently, in the background, and surviving the
 terminal) and opens `http://127.0.0.1:8765/` in the default browser. Running it
 again will not duplicate the webapp process.
 
-## SessionEnd notification for bound projects
+## SessionEnd notification for registered projects
 
-When `adapters/devin/install-hooks.sh` runs, it wires a second `SessionEnd` hook (`adapters/devin/hooks/session_end_notify.py`) alongside `session_audit.py`. This hook sends a single "básico" Telegram message when a Devin CLI session ends inside a **Matrix-bound project**:
+When `adapters/devin/install-hooks.sh` runs, it wires a second `SessionEnd` hook (`adapters/devin/hooks/session_end_notify.py`) alongside `session_audit.py`. This hook sends a single "básico" Telegram message when a Devin CLI session ends inside a **registered Matrix project**:
 
 - `🔔 <project_name>`
 - `Sesión finalizada — <reason>`
@@ -161,7 +161,7 @@ When `adapters/devin/install-hooks.sh` runs, it wires a second `SessionEnd` hook
 It fires only when all four of these gates are true; otherwise it no-ops silently and never blocks session teardown:
 
 1. The session was **not** started by the Hardline dispatcher (`MATRIX_HARDLINE_DISPATCH` is absent and `/proc` ancestry does not contain `hardline-dispatch.sh`).
-2. `DEVIN_PROJECT_DIR` resolves to a currently bound Matrix project (`_brain` symlink + `bin/matrix bindings --json` longest-prefix match).
+2. `DEVIN_PROJECT_DIR` resolves to a registered Matrix project (`bin/matrix scope` subject).
 3. The Hardline Telegram bridge is running (`hardline-ctl.sh status --json` reports `bridge.running == true`).
 4. `brain/state/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
 
@@ -176,7 +176,7 @@ This hook notifies you when the agent finishes a turn and is waiting for your in
 It fires only when all five of these gates are true; otherwise it no-ops silently and never blocks the agent:
 
 1. The session was **not** started by the Hardline dispatcher (`MATRIX_HARDLINE_DISPATCH` is absent and `/proc` ancestry does not contain `hardline-dispatch.sh`).
-2. `DEVIN_PROJECT_DIR` resolves to a currently bound Matrix project (`_brain` symlink + `bin/matrix bindings --json` longest-prefix match).
+2. `DEVIN_PROJECT_DIR` resolves to a registered Matrix project (`bin/matrix scope` subject).
 3. The Hardline Telegram bridge is running (`hardline-ctl.sh status --json` reports `bridge.running == true`).
 4. `brain/state/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
 5. The turn's elapsed time (since the last message you sent) exceeds the configured threshold.

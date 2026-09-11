@@ -131,11 +131,13 @@ Usage: matrix <command> [args]
 Projects:
   list                    List all registered projects
   add <name> [path] [--replace]  Register a project (path optional → current dir; --replace updates existing)
-  remove <name>           Remove an unbound, non-warm project from the registry
-  select <name> [--target=<cli>]    Create adapter binding
-  deselect <name> [--target=<cli>]  Remove an adapter binding (requires <name>; --target optional)
-  bindings [--warm-only]  Show bound status for all registered projects (--warm-only for warm set)
+  remove <name>           Remove a non-warm project from the registry
+  select <name> [--target=<cli>]    Warm + set adapter target + output dirs (+ clone if remote); no filesystem binding
+  deselect <name>         Clean legacy binding artifacts + remove from the active set
+  migrate-nobind [<name>|--all] [--dry-run]  Remove legacy _brain/AGENTS.local.md/exclude artifacts (idempotent)
+  bindings [--warm-only]  Show known/warm status for all registered projects (--warm-only for warm set)
   scope                   Print "<mode>\t<project>\t<detail>" for cwd (resolve_scope; used by adapters)
+  scope --tree [--json]   Print the memory chain (registered ancestors, innermost first; --json for machines)
   focus <name>            Persist a session-scoped focus (brain/state/sessions/<sid>.json) that
                           resolve_scope_project() prefers over cwd for this session only;
                           requires an active session marker, fails closed on an unregistered project
@@ -144,14 +146,20 @@ Projects:
 Multi-project (warm set):
   work <name>             Warm a project into the active set
   unwork <name>           Remove a project from the active set
-  unwork --all [--dry-run]   Deselect + remove every registered project from the active set (registry untouched)
+  unwork --all [--dry-run]   Clean legacy artifacts + remove every registered project from the active set (registry untouched)
 
 State & telemetry:
   status [--all]          Show current Matrix status (checkpoints/Link scoped to the
-                          resolved project by default; --all for the unfiltered view)
+                          resolved chain by default; --all for the unfiltered view)
   checkpoint "<note>"     Write a timestamped checkpoint (+ Link entry)
   activity [n] [--all] [--project=<name>]  Show last n Link ledger events, scoped to
-                          the resolved project by default (default n=20)
+                          the resolved chain by default (default n=20)
+
+Flags:
+  flags                   Show the effective feature-flag table (value, source, risk, state, depends_on)
+  flags --json            JSON array of all flags
+  flags --get <name>      JSON of one flag
+  flags --validate        List dangerous/inert flags; exit 1 if any
 
 Link ledger & fleet:
   link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event and echo the ref
@@ -175,10 +183,6 @@ Retrospectivas (Devin-specific):
   session-report [cwd] [YYYY-MM-DD] [--out PATH] [--limit N]  Genera reporte HTML estático
   session close '[<json>]'  Run the session_close hook and persist a session:close entry to the Link ledger
 
-Exclude:
-  exclude audit <name> [--all-branches]  Check for tracked files that should be excluded
-  exclude fix <name> [--fix]             Report (or --fix) tracked leaks (staged, never committed)
-
 Enforcement & adapters:
   phase close '<json>'    Run the validate_phase_close gate and persist the verdict
                           (PASS or BLOCK) to the Link ledger; exits non-zero on BLOCK
@@ -192,6 +196,42 @@ Enforcement & adapters:
                           use --apply to write, --revert to undo Matrix-managed entries)
   help                    Show this help
 EOF
+}
+
+scope_cmd() {
+    case "${1:-}" in
+        --tree) shift; scope_tree "$@" ;;
+        -h|--help) echo "Usage: matrix scope [--tree [--json]]"; return 0 ;;
+        --*) log_error "Unknown flag '$1'"; return 1 ;;
+        *) resolve_scope ;;
+    esac
+}
+
+flags_cmd() {
+    local json=false get="" validate=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --json) json=true ;;
+            --get=*) get="${arg#*=}" ;;
+            --get) log_error "--get requires a value"; return 1 ;;
+            --validate) validate=true ;;
+            --*) log_error "Unknown flag '$arg'"; return 1 ;;
+            *) log_error "Unknown argument '$arg'"; return 1 ;;
+        esac
+    done
+    if [[ -n "$get" ]]; then
+        python3 "$HOOKS_DIR/_flags.py" get "$get"
+        return $?
+    fi
+    if $validate; then
+        python3 "$HOOKS_DIR/_flags.py" validate
+        return $?
+    fi
+    if $json; then
+        python3 "$HOOKS_DIR/_flags.py" list
+        return $?
+    fi
+    python3 "$HOOKS_DIR/_flags.py" table
 }
 
 main() {
@@ -213,11 +253,13 @@ main() {
                 remove)     shift; remove_project "$@" ;;
                 select)     shift; select_project "$@" ;;
                 deselect)   shift; deselect_project "$@" ;;
+                migrate-nobind) shift; migrate_nobind_cmd "$@" ;;
                 focus)      focus_project "${2:-}" ;;
                 work)       work_project "${2:-}" ;;
                 unwork)     shift; unwork_dispatch "$@" ;;
                 bindings)   shift; show_bindings "$@" ;;
-                scope)      resolve_scope ;;
+                scope)      shift; scope_cmd "$@" ;;
+                flags)      shift; flags_cmd "$@" ;;
                 adapter-doc-path) shift; adapter_doc_path "${1:-devin}" ;;
                 status)     shift; show_status "$@" ;;
                 checkpoint) write_checkpoint "${2:-}" ;;
@@ -226,7 +268,6 @@ main() {
                 ship)       shift; ship_cmd "${1:-}" "${2:-}" ;;
                 corpus-ingest) shift; corpus_ingest_cmd "$@" ;;
                 hardline)   shift; hardline_cmd "$@" ;;
-                exclude)    shift; exclude_cmd "$@" ;;
                 phase)      shift; phase_cmd "$@" ;;
                 session)    shift; session_cmd "$@" ;;
                 hooks)      shift; run_hook "$@" ;;

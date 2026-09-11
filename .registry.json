@@ -59,7 +59,8 @@
       "name": "pas",
       "path": "/home/emiliano/www/Portal-Templates-Group",
       "type": "local",
-      "added": "2026-05-22T17:58:41-03:00"
+      "added": "2026-05-22T17:58:41-03:00",
+      "bound_target": "devin"
     },
     {
       "name": "sandisk",

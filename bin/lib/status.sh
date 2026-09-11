@@ -20,22 +20,22 @@ show_bindings() {
         while IFS=$'\t' read -r name path type; do
             local real_path; real_path="$(get_project_path "$name" 2>/dev/null || true)"
             [[ -z "$real_path" ]] && real_path="$path"
-            local bound=false
-            is_bound "$name" && bound=true
+            local warm=false
+            is_project_warm "$name" && warm=true
             lines="${lines}$(jq -n -c \
-                --arg name "$name" --arg path "$real_path" --arg type "$type" --argjson bound "$bound" \
-                '{name:$name,path:$path,type:$type,bound:$bound}')"$'\n'
+                --arg name "$name" --arg path "$real_path" --arg type "$type" --argjson warm "$warm" \
+                '{name:$name,path:$path,type:$type,known:true,warm:$warm}')"$'\n'
         done <<< "$projects"
         printf '%s' "$lines" | jq -s '.'
         return
     fi
-    log_info "Bound projects:"; echo
+    log_info "Known / Warm projects:"; echo
     while IFS=$'\t' read -r name path type; do
         local real_path; real_path="$(get_project_path "$name" 2>/dev/null || true)"
-        if is_bound "$name"; then
-            echo "  ✓ $name -> $real_path [bound]"
+        if is_project_warm "$name"; then
+            echo "  ✓ $name -> $real_path [warm]"
         else
-            echo "  ✗ $name -> $real_path"
+            echo "    $name -> $real_path"
         fi
     done <<< "$projects"
 }
@@ -51,57 +51,65 @@ show_status() {
         workspace)
             echo "Current directory: Matrix workspace mode"
             ;;
-        bound)
-            echo "Current directory: bound to $project"
-            ;;
-        bound-unregistered)
-            echo "Current directory: bound (project not in registry)"
-            ;;
-        broken)
-            echo "Current directory: not bound (broken _brain link at $detail)"
+        project)
+            echo "Current directory: in project $project"
             ;;
         none|*)
-            echo "Current directory: not bound"
+            echo "Current directory: no project in scope (neutral)"
             ;;
     esac
     echo
-    local bound_count=0 bound_names=""
+    local known_count=0 warm_count=0 known_names="" warm_names=""
     while IFS=$'\t' read -r n _ _; do
         [[ -z "$n" ]] && continue
-        if is_bound "$n"; then
-            bound_count=$((bound_count+1))
-            bound_names="$bound_names$n "
+        known_count=$((known_count+1))
+        known_names="$known_names$n "
+        if is_project_warm "$n"; then
+            warm_count=$((warm_count+1))
+            warm_names="$warm_names$n "
         fi
     done <<< "$(read_registry)"
-    bound_names="${bound_names% }"
-    echo "Bound: $bound_count project(s)${bound_names:+ ($bound_names)}"
-    local warm_n; warm_n="$(grep -c '^  - name:' "$WORKSPACE_FILE" 2>/dev/null)" || warm_n=0
-    echo "Warm set: ${warm_n:-0} project(s)"
-    local reg_n; reg_n="$(jq '.projects | length' "$REGISTRY_FILE" 2>/dev/null)" || reg_n=0
-    echo "Registered: ${reg_n:-0} project(s)"
+    known_names="${known_names% }"; warm_names="${warm_names% }"
+    echo "Known: $known_count project(s)${known_names:+ ($known_names)}"
+    echo "Warm: $warm_count project(s)${warm_names:+ ($warm_names)}"
     echo
-    # Default view is scoped to the resolved project (session focus > cwd
-    # binding) — global checkpoints/Link events are one project's needle in
-    # everyone else's haystack (see lessons.md: cross-project sessions were
-    # pushing a project's own recent checkpoint out of an unfiltered last-3
-    # window). `matrix status --all` keeps the old unfiltered, cross-project view.
-    local show_all="${1:-}" scope_project="" scope_label=""
-    [[ "$show_all" != "--all" ]] && scope_project="$(resolve_scope_project)"
+    # Default view is scoped to the resolved project — or, with views.scoped
+    # (default on), to the whole memory chain (subject + registered ancestors).
+    # Global checkpoints/Link events are one project's needle in everyone
+    # else's haystack. `matrix status --all` keeps the unfiltered view.
+    local show_all="${1:-}" filter_projects="" scope_label=""
+    if [[ "$show_all" != "--all" ]]; then
+        if [[ "$(flag_value views.scoped)" == "true" ]]; then
+            filter_projects="$(resolve_scope_chain_effective)"
+            if [[ -z "$filter_projects" ]]; then
+                local subject; subject="$(resolve_scope_project)"
+                [[ -n "$subject" ]] && filter_projects="$subject"
+            fi
+        else
+            filter_projects="$(resolve_scope_project)"
+        fi
+    fi
     if [[ "$mode" == "workspace" ]]; then
         scope_label="Matrix workspace mode"
+    elif [[ -n "$filter_projects" ]]; then
+        scope_label="chain: $(printf '%s' "$filter_projects" | tr '\n' ' ')"
     else
-        scope_label="project: $scope_project"
+        scope_label="no subject (neutral)"
     fi
-    if [[ -n "$scope_project" ]]; then
+    if [[ -n "$filter_projects" ]]; then
+        local chain_json; chain_json="$(printf '%s\n' "$filter_projects" | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')"
         if [[ -s "$CHECKPOINTS_FILE" ]]; then
             echo "Recent checkpoints ($scope_label):"
-            jq -c --arg p "$scope_project" 'select(.project == $p)' "$CHECKPOINTS_FILE" 2>/dev/null \
+            jq -c --argjson ps "$chain_json" 'select(.project as $p | $ps | index($p))' "$CHECKPOINTS_FILE" 2>/dev/null \
                 | tail -n 5 | jq -r '"  " + .timestamp + " — " + .note' 2>/dev/null || true
         fi
         echo
         if [[ -s "$ACTIVITY_LOG" ]]; then
             echo "Recent Link events ($scope_label):"
-            awk -F' *\\| *' -v p="$scope_project" '{if ($3==p) print}' "$ACTIVITY_LOG" | tail -n 5 | sed 's/^/  /'
+            awk -F' *\\| *' -v chain="$filter_projects" '
+                BEGIN { nn=split(chain, arr, "\n"); for (i=1;i<=nn;i++) set[arr[i]]=1 }
+                { if ($3 in set) print }
+            ' "$ACTIVITY_LOG" | tail -n 5 | sed 's/^/  /'
         fi
         echo
         echo "(run 'matrix status --all' for the unfiltered, cross-project view)"
@@ -133,35 +141,58 @@ write_checkpoint() {
 }
 
 # show_activity [n] [--all] [--project=<name>]
-# Default scope mirrors show_status: filters to the resolved project (session
-# focus > cwd binding). --all forces the old unfiltered, all-projects tail;
-# --project=<name> filters to an explicit project regardless of cwd (e.g. to
-# check on a project you aren't currently bound to).
+# Default scope mirrors show_status: filters to the resolved project — or, with
+# views.scoped (default on), to the whole memory chain. --all forces the old
+# unfiltered, all-projects tail; --project=<name> filters to an explicit
+# project regardless of cwd.
 show_activity() {
     init_state
-    local n=20 show_all=false proj="" mode=""
+    local n=20 show_all=false explicit_proj="" mode=""
     for arg in "$@"; do
         case "$arg" in
             --all) show_all=true ;;
-            --project=*) proj="${arg#*=}" ;;
+            --project=*) explicit_proj="${arg#*=}" ;;
             *[0-9]*) [[ "$arg" =~ ^[0-9]+$ ]] && n="$arg" ;;
         esac
     done
-    if [[ -z "$proj" && "$show_all" != true ]]; then
-        local line raw_proj
-        IFS=$'\n' read -r line < <(resolve_scope)
-        mode="$(printf '%s\n' "$line" | cut -f1)"
-        raw_proj="$(printf '%s\n' "$line" | cut -f2)"
-        proj="$raw_proj"
-        [[ "$proj" == "null" ]] && proj=""
-    fi
-    if [[ -n "$proj" && "$show_all" != true ]]; then
-        if [[ "$mode" == "workspace" ]]; then
-            log_info "Link ledger (last $n, Matrix workspace mode):"; echo
+    local filter="" label=""
+    if [[ -n "$explicit_proj" ]]; then
+        filter="$explicit_proj"
+        label="project: $explicit_proj"
+    elif [[ "$show_all" == true ]]; then
+        label="all projects"
+    else
+        if [[ "$(flag_value views.scoped)" == "true" ]]; then
+            filter="$(resolve_scope_chain_effective)"
+            if [[ -z "$filter" ]]; then
+                local subject; subject="$(resolve_scope_project)"
+                [[ -n "$subject" ]] && filter="$subject"
+            fi
+            if [[ -n "$filter" ]]; then
+                label="chain: $(printf '%s' "$filter" | tr '\n' ' ')"
+            else
+                label="no subject (neutral)"
+            fi
         else
-            log_info "Link ledger (last $n, project: $proj):"; echo
+            IFS=$'\n' read -r line < <(resolve_scope)
+            mode="$(printf '%s\n' "$line" | cut -f1)"
+            local raw_proj; raw_proj="$(printf '%s\n' "$line" | cut -f2)"
+            [[ "$raw_proj" == "null" ]] && raw_proj=""
+            filter="$raw_proj"
+            if [[ "$mode" == "workspace" ]]; then
+                filter="$(resolve_scope_project)"
+                label="Matrix workspace mode"
+            else
+                label="project: $raw_proj"
+            fi
         fi
-        awk -F' *\\| *' -v p="$proj" '{if ($3==p) print}' "$ACTIVITY_LOG" | tail -n "$n" | sed 's/^/  /'
+    fi
+    if [[ -n "$filter" && "$show_all" != true ]]; then
+        log_info "Link ledger (last $n, $label):"; echo
+        awk -F' *\\| *' -v chain="$filter" '
+            BEGIN { nn=split(chain, arr, "\n"); for (i=1;i<=nn;i++) set[arr[i]]=1 }
+            { if ($3 in set) print }
+        ' "$ACTIVITY_LOG" | tail -n "$n" | sed 's/^/  /'
     else
         log_info "Link ledger (last $n, all projects):"; echo
         tail -n "$n" "$ACTIVITY_LOG" | sed 's/^/  /'

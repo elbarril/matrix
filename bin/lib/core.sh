@@ -80,6 +80,14 @@ log_success() { echo -e "${GREEN}[MATRIX]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[MATRIX]${NC} $1"; }
 log_error()   { echo -e "${RED}[MATRIX]${NC} $1"; }
 
+# --- Feature flags ----------------------------------------------------------
+# flag_value <name>: prints the effective boolean ("true"/"false") for a flag.
+# Thin wrapper over hooks/_flags.py — a single source of truth for bash.
+flag_value() {
+    local name="$1"
+    python3 "$HOOKS_DIR/_flags.py" get "$name" 2>/dev/null | jq -r '.value // "false"' 2>/dev/null || echo "false"
+}
+
 # --- Global lock ------------------------------------------------------------
 acquire_lock() {
     if [[ -n "${MATRIX_LOCKED:-}" ]]; then

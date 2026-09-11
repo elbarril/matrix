@@ -22,6 +22,7 @@ for _ in range(3):
     _candidate = os.path.dirname(_candidate)
 sys.path.insert(0, os.path.join(_candidate, "hooks"))
 import _common as common  # noqa: E402
+import _flags  # noqa: E402
 import _writer_lane as lane  # noqa: E402
 from post_run_audit import _write_targets, ALLOWED_MUTANT_PREFIX  # noqa: E402
 
@@ -51,14 +52,26 @@ MUTANT_WORK_THRESHOLD = 16
 MUTANT_WORK_TOOLS = {"write", "edit", "multi_edit", "run_command", "run-command", "exec"}
 
 
+def _flag_value(name):
+    """Effective boolean of a feature flag via hooks/_flags.py (best-effort).
+
+    On loader failure, fall back to the flag's declared default — security
+    gates with default on (gate.shared_surface, gate.writer_lane,
+    gate.pre_exec_guard) must never fail open silently.
+    """
+    try:
+        return bool(_flags.get_flag(name)["value"])
+    except Exception:
+        return bool(_flags.DEFAULTS.get(name, False))
+
+
 def _scope_project():
     """Return the project scope for this session's cwd via `bin/matrix scope`.
 
     Delegates to resolve_scope() — the single bash owner of the "where am I?"
     walk-up — instead of re-implementing it in Python (same no-duplicate rule
     as _activation_reinject_scope). Returns field 2 of the printed line
-    (workspace→matrix, bound→<name>, none/broken/bound-unregistered→empty,
-    normalized to None).
+    (workspace→matrix, project→<name>, none→empty, normalized to None).
     """
     try:
         proc = subprocess.run(
@@ -80,82 +93,20 @@ def _scope_project():
         return None
 
 
-def _parse_scalar(raw):
-    """Parse a simple YAML scalar value (bool/int/string)."""
-    raw = raw.strip()
-    if raw in ("true", "True", "yes"):
-        return True
-    if raw in ("false", "False", "no"):
-        return False
-    try:
-        return int(raw)
-    except ValueError:
-        pass
-    try:
-        return float(raw)
-    except ValueError:
-        pass
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
-        return raw[1:-1]
-    if raw in ("null", "~", "None", ""):
-        return None
-    return raw
-
-
-def _load_adapter_config(root):
-    """Load adapters/devin/config.yaml. Prefer PyYAML if present; fall back to
-    a minimal line parser so this Layer 3 adapter stays dependency-free."""
-    path = os.path.join(root, "adapters", "devin", "config.yaml")
-    if not os.path.isfile(path):
-        return {}
-    with open(path, encoding="utf-8") as fh:
-        text = fh.read()
-    # PyYAML is installed in this environment, but we keep a minimal fallback
-    # so the adapter does not hard-depend on it in other environments.
-    try:
-        import yaml
-        return yaml.safe_load(text) or {}
-    except Exception:
-        pass
-    data = {}
-    section = None
-    for line in text.splitlines():
-        line = line.split("#", 1)[0]
-        if not line.strip():
-            continue
-        # Top-level section with no inline value, e.g. "experiment:"
-        m = re.match(r"^([A-Za-z0-9_]+)\s*:\s*$", line)
-        if m:
-            section = m.group(1)
-            data.setdefault(section, {})
-            continue
-        # Nested key under current section, e.g. "  activation_inject: false"
-        if section:
-            m = re.match(r"^\s+([A-Za-z0-9_]+)\s*:\s*(.*)$", line)
-            if m:
-                data[section][m.group(1)] = _parse_scalar(m.group(2))
-    return data
-
-
 def _activation_inject_enabled():
-    """Return True when the Etapa G/H3 experiment is active."""
-    env = os.environ.get("MATRIX_INJECT_ACTIVATION")
-    if env == "1":
-        return True
-    if env == "0":
-        return False
-    cfg = _load_adapter_config(ROOT)
-    return bool(cfg.get("experiment", {}).get("activation_inject", False))
+    """Flag activation.reinject gates the per-turn reinjection channel (B1)."""
+    return _flag_value("activation.reinject")
 
 
 def _activation_inject_userprompt_full():
-    cfg = _load_adapter_config(ROOT)
-    return bool(cfg.get("experiment", {}).get("activation_inject_userprompt_full", True))
+    """Flag activation.reinject_full gates full-preamble reinjection on every
+    user prompt (vs. session_start + sentinel)."""
+    return _flag_value("activation.reinject_full")
 
 
 def _is_workspace_mode(root):
     """True when this session's cwd is the Matrix root itself (AGENTS.md §6
-    step 0: "Matrix workspace mode", no external project bound). Devin runs
+    step 0: "Matrix workspace mode", no external project in scope). Devin runs
     hook commands as a child process of the session, so os.getcwd() here is
     the session's own cwd, not this script's location — confirmed live
     (2026-07-28) by a temporary debug spike that logged os.getcwd() during a
@@ -167,22 +118,16 @@ def _is_workspace_mode(root):
 
 
 def _activation_reinject_scope():
-    """Return True when this session's cwd is either Matrix workspace mode or a
-    real bound project (valid `_brain` symlink to this root + AGENTS.local.md
-    managed block) — the two cases where per-turn activation reinjection should
-    fire (B1-Option 1, matrix-system-health-audit.md).
+    """Return True when this session's cwd is either Matrix workspace mode or
+    a registry-resolved project — the two cases where per-turn activation
+    reinjection should fire (B1). There is no filesystem binding anymore; the
+    mode comes from `bin/matrix scope` (registry-path walk-up).
 
-    Reuses `bin/matrix scope`, a thin wrapper around resolve_scope() — the
-    single existing "where am I?" resolver (innermost-root-wins walk from cwd)
-    already used by show_status/checkpoints/ledger. This intentionally calls
-    into bash instead of re-implementing the walk-up + `_brain`/AGENTS.local.md
-    validity check in Python: that logic already has one bash owner
-    (resolve_scope/path_is_bound in bin/matrix) and a documented no-duplicate
-    rule (see resolve_bound_target()'s docstring in hooks/_common.py) — adding
-    a second, divergence-prone copy here would violate it. Falls back to
-    workspace-only behavior (the old, narrower condition) if the subprocess
-    call fails for any reason, so a broken `bin/matrix` never widens injection
-    beyond what was already proven safe.
+    This intentionally calls into bash instead of re-implementing the walk-up
+    in Python: that logic already has one bash owner (resolve_scope in
+    bin/matrix). Falls back to workspace-only behavior (the old, narrower
+    condition) if the subprocess call fails for any reason, so a broken
+    `bin/matrix` never widens injection beyond what was already proven safe.
     """
     try:
         proc = subprocess.run(
@@ -195,11 +140,7 @@ def _activation_reinject_scope():
         )
         line = (proc.stdout or "").splitlines()[0] if proc.stdout else ""
         mode = line.split("\t", 1)[0].strip()
-        # "bound-unregistered" is still a real, working binding (valid _brain +
-        # managed AGENTS.local.md) — see resolve_scope()'s own comment in
-        # bin/matrix; only "broken" and "none" (and any unexpected output)
-        # must NOT reinject.
-        return mode in ("workspace", "bound", "bound-unregistered")
+        return mode in ("workspace", "project")
     except Exception as e:
         print(f"[session_audit] scope resolution failed: {e}", file=sys.stderr)
         return _is_workspace_mode(ROOT)
@@ -228,9 +169,9 @@ def _adapter_doc_path(root):
 
 def _render_activation_preamble(root):
     """Render brain/data/activation-preamble.tmpl — the single source of truth
-    also used by the generated neo SKILL.md and by AGENTS.local.md's bound-project
-    block (see bin/matrix matrix_block_tmp()). Reusing it here means workspace-mode
-    injection, the Neo skill, and bound-project binding all carry one wording."""
+    also used by the generated neo SKILL.md and by the (optional) legacy
+    AGENTS.local.md artifacts. Workspace injection, the Neo skill, and project
+    sessions all carry one wording."""
     tmpl_path = os.path.join(root, "brain", "data", "activation-preamble.tmpl")
     if not os.path.isfile(tmpl_path):
         return ""
@@ -740,6 +681,38 @@ def _b3_nudge_text(root, session_id):
     )
 
 
+def _log_flags_state():
+    """Snapshot `link flags:state` once per session when any flag is dangerous
+    or inert. Best-effort; never blocks and never leaks values."""
+    try:
+        flags = _flags.all_flags()
+    except Exception:
+        return
+    dangerous = [n for n, f in flags.items() if f["state"] == "dangerous"]
+    inert = [n for n, f in flags.items() if f["state"] == "inert"]
+    if not dangerous and not inert:
+        return
+    detail = ""
+    if dangerous:
+        detail += "dangerous=" + ",".join(sorted(dangerous))
+    if inert:
+        if detail:
+            detail += " "
+        detail += "inert=" + ",".join(sorted(inert))
+    try:
+        env = {**os.environ, "MATRIX_ROOT": ROOT}
+        subprocess.run(
+            [BIN_MATRIX, "link", "flags:state", "matrix", detail],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
 def _boot_warn_tokens(payload):
     """Extract the closed set of boot_warn tokens from a pre_activation payload."""
     if not isinstance(payload, dict):
@@ -830,10 +803,12 @@ def main():
     pre_result = None
     orphan_session_id = None
     if event == "session_start":
-        pre_result = _run_pre_activation_check()
+        if _flag_value("hooks.pre_activation_check"):
+            pre_result = _run_pre_activation_check()
         orphan_session_id = _run_detect_orphan_session(project_active)
         if orphan_session_id:
             _run_session_close_async(orphan_session_id)
+        _log_flags_state()
 
     envelope = {
         "event": event,

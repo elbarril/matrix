@@ -86,8 +86,6 @@ hardline_dispatch() {
     else
         get_project_path "$project" >/dev/null 2>&1 || {
             hardline_reject "$project" "$raw_line" "Project '$project' not found"; return 1; }
-        is_bound "$project" || {
-            hardline_reject "$project" "$raw_line" "Project '$project' is not bound"; return 1; }
         project_path="$(get_project_path "$project")"
     fi
 

@@ -25,3 +25,5 @@ se resuelve a `templates-automation`. El detalle de investigación completo vive
 10. **Ejecución remota vía ETT:** `frontier_templates --remote --create --run_id ...`; logs en Kibana; API `https://ett.xcade.net/api/runs` (detalle en `frontier-wiki/tests-execution.md`). Útil para regresiones sin correr local.
 
 11. **Cookies-steps del framework es mínima** (1 step: `user accepts cookies if prompted`); el consentimiento a nivel portal se gestiona con Portal-Steps (enable/disable + verificación). Para tests de portales con cookie consent usar el patrón del delta `write-test-pas`.
+
+12. **Pre-push hook de templates-automation requiere el venv activado.** El hook `run_tests_checks` (`python3 .pre-commit/static_tests_checks.py`) importa `frontier_templates` del python en PATH; sin el `.venv` activado cae al validador custom (`template_rules_validator.py`) que flaggea ~5600 errores pre-existentes repo-wide (selectors en single quotes) y bloquea el push. `source .venv/bin/activate` antes de `git push` (verificado 2026-09-10, case 1266145).

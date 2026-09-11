@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Devin CLI SessionEnd hook — best-effort Telegram notification for bound projects.
+"""Devin CLI SessionEnd hook — best-effort Telegram notification for projects.
 
 Fires only when ALL of these are true:
 - the session was NOT started by the Hardline dispatcher (no duplicate ack)
-- DEVIN_PROJECT_DIR points to a Matrix-bound project
+- DEVIN_PROJECT_DIR resolves to a registry project (`bin/matrix scope` mode == project)
 - the Hardline Telegram bridge is running
 - the Telegram secrets file is present and complete
 
@@ -82,7 +82,7 @@ def main():
     if not project_dir or not os.path.isdir(project_dir):
         sys.exit(0)
 
-    if not os.path.islink(os.path.join(project_dir, "_brain")):
+    if not common_notify.is_brain_linked(project_dir):
         sys.exit(0)
 
     root = common.resolve_root()

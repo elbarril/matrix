@@ -42,6 +42,7 @@ PAGE_TEMPLATE = """<!doctype html>
   #services {{ margin: 0.75rem 0; font-size: 0.9rem; }}
   .svc {{ display: inline-block; margin-right: 1.5rem; }}
   .status-ok {{ color: #7ce87c; }}
+  .status-mid {{ color: #c9b458; }}
   .status-bad {{ color: #ff9b9b; }}
   table {{ border-collapse: collapse; width: 100%; }}
   th, td {{ text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #1e2733; font-size: 0.9rem; }}
@@ -119,9 +120,9 @@ async function refreshConnected() {{
     if (data.projects && data.projects.length > 0) {{
       for (const p of data.projects) {{
         const tr = document.createElement('tr');
-        const mark = p.bound ? '✓' : '✗';
-        const text = p.bound ? 'bound' : 'not bound';
-        const cls = p.bound ? 'status-ok' : 'status-bad';
+        const mark = p.warm ? '✓' : '○';
+        const text = p.warm ? 'warm' : 'known';
+        const cls = p.warm ? 'status-ok' : 'status-mid';
         tr.innerHTML = `<td>${{p.name}}</td><td>${{p.path}}</td><td><span class="${{cls}}">${{mark}} ${{text}}</span></td>`;
         tbody.appendChild(tr);
       }}
@@ -167,9 +168,9 @@ def read_open_events(project_filter=None):
 
 
 def read_connected():
-    """Return bound-project and service-status data by reusing the CLI.
+    """Return project (known/warm) and service-status data by reusing the CLI.
 
-    This keeps a single source of truth for "is this project bound?" and
+    This keeps a single source of truth for "is this project known/warm?" and
     "is this service alive?" in bash; the webapp only consumes it.
     """
     try:

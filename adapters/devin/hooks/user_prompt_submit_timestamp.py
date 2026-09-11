@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Devin CLI UserPromptSubmit hook — stamps the turn-start clock for
 stop_notify.py's elapsed-time gate. Fires on every user message, on every
-Devin CLI session on the machine (Matrix-bound or not) — must be as close
+Devin CLI session on the machine (Matrix-project or not) — must be as close
 to free as possible for the common (non-Matrix) case.
 
 Same hard invariant as stop_notify.py: never print to stdout, always
