@@ -3,9 +3,17 @@
 # experiment.activation_inject*, experiment.activation_inject_userprompt_full
 # and secret_deny.enabled knobs; hooks read flags exclusively via _flags.py.
 flags:
-  activation.reinject: true          # absorbe experiment.activation_inject
+  activation.reinject: false         # absorbe experiment.activation_inject
   activation.reinject_full: false    # absorbe experiment.activation_inject_userprompt_full
+  gate.shared_surface: false
+  gate.writer_lane: false
+  gate.pre_exec_guard: false
   gate.secret_deny: false            # absorbe secret_deny.enabled
+  hooks.pre_activation_check: false
+  hooks.boot_warn: false
+  memory.tree: false
+  views.scoped: false
+  binding.artifacts: false
 
 secret_deny:
   # DESHABILITADA por decisión del usuario el 2026-09-07 (incidente
