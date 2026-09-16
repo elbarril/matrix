@@ -45,12 +45,6 @@ else:
 command = f'env MATRIX_ROOT={matrix_root} python3 {hook_script}'
 guard_script = f'{matrix_root}/adapters/devin/hooks/pre_tool_use_guard.py'
 guard_command = f'env MATRIX_ROOT={matrix_root} python3 {guard_script}'
-notify_script = f'{matrix_root}/adapters/devin/hooks/session_end_notify.py'
-notify_command = f'env MATRIX_ROOT={matrix_root} python3 {notify_script}'
-stop_notify_script = f'{matrix_root}/adapters/devin/hooks/stop_notify.py'
-stop_notify_command = f'env MATRIX_ROOT={matrix_root} python3 {stop_notify_script}'
-prompt_timestamp_script = f'{matrix_root}/adapters/devin/hooks/user_prompt_submit_timestamp.py'
-prompt_timestamp_command = f'env MATRIX_ROOT={matrix_root} python3 {prompt_timestamp_script}'
 
 # Merge Matrix lifecycle hooks without touching unrelated config keys.
 # PostToolUse omits matcher to audit every tool call (empty/omitted matcher
@@ -59,40 +53,13 @@ hooks = cfg.setdefault("hooks", {})
 
 for event in ("SessionStart", "UserPromptSubmit", "PostCompaction", "SessionEnd"):
     timeout = 30 if event == "SessionEnd" else 10
-    if event == "SessionEnd":
-        hooks[event] = [
-            {
-                "hooks": [
-                    {"type": "command", "command": command, "timeout": 30},
-                    {"type": "command", "command": notify_command, "timeout": 15},
-                ]
-            }
-        ]
-    elif event == "UserPromptSubmit":
-        hooks[event] = [
-            {
-                "hooks": [
-                    {"type": "command", "command": command, "timeout": timeout},
-                    {"type": "command", "command": prompt_timestamp_command, "timeout": 5},
-                ]
-            }
-        ]
-    else:
-        hooks[event] = [
-            {
-                "hooks": [
-                    {"type": "command", "command": command, "timeout": timeout}
-                ]
-            }
-        ]
-
-hooks["Stop"] = [
-    {
-        "hooks": [
-            {"type": "command", "command": stop_notify_command, "timeout": 10}
-        ]
-    }
-]
+    hooks[event] = [
+        {
+            "hooks": [
+                {"type": "command", "command": command, "timeout": timeout}
+            ]
+        }
+    ]
 
 hooks["PostToolUse"] = [
     {
@@ -158,6 +125,11 @@ hooks["PreToolUse"] = [
         ]
     }
 ]
+
+# Stop (Hardline stop_notify) is no longer wired by Matrix. Remove any stale
+# entry left by an older install; the merge above is additive and would not
+# clear a key it no longer manages. Reactivate: re-add the Stop block + script.
+hooks.pop("Stop", None)
 
 # Merge Matrix Exec allowlist from adapter.yaml into permissions.allow.
 # Preserves pre-existing entries (Read(**), Write(**), MCP tools, etc.) and

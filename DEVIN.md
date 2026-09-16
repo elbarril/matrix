@@ -4,11 +4,11 @@ Devin CLI is the **only** host Matrix currently runs under; this file documents 
 
 ## Prime directives
 
-Prime directives: AGENTS.md §1-§4 + §8 son el contrato; lo único Devin-específico está en este archivo. #1 Read AGENTS.md first.
+Prime directives: AGENTS.md §1-§4 + §8 are the contract. AGENTS.md carries one canonical CLI mention (the current Devin binding, §1); all other Devin-specific material lives in this file. #1 Read AGENTS.md first.
 
 ## Capability → Devin tool mapping (the Trainman table)
 
-Puntero: la fuente es `adapters/devin/adapter.yaml`, transcripta en "The live `adapter.yaml` binding" al final; no se duplica en tabla manual.
+Pointer: the source is `adapters/devin/adapter.yaml`, transcribed in "The live `adapter.yaml` binding" below; it is not duplicated in a manual table.
 
 Every generated `AGENT.md` also gets a Devin-native `allowed-tools:` grant from the same `capabilities:` list via the `allowed_tools:` map in `adapters/devin/adapter.yaml` — see "Least-privilege" below.
 
@@ -25,7 +25,7 @@ bin/matrix install --target=devin   # 2. deploy them into Devin's global discove
 ### Where the artifacts land (global discovery)
 
 | Artifact | Global path | Effect |
-|---|---|---|
+| --- | --- | --- |
 | Neo (master) | `~/.config/devin/skills/neo/SKILL.md` | `/neo` and autonomous invocation in **every** project |
 | Specialists | `~/.config/devin/agents/<name>/AGENT.md` | Subagent profiles available in **every** project |
 
@@ -38,8 +38,8 @@ Global install is deliberate: Neo must be reachable from any repo (Matrix, `clie
 Every generated `SKILL.md`/`AGENT.md` carries a `model:` frontmatter field, resolved at build time from the agent's `model_policy` tier (`cheap`/`reasoning`/`auto`, declared in `brain/agents/<name>.md`) through `adapters/devin/adapter.yaml`'s `model_policy` map (or a `model_template_*` preset when `--template=` is given). User priority = compute-unit consumption; every tier runs DeepSeek (or a low-cost SWE variant):
 
 | Tier | Model | Used by | Why |
-|---|---|---|---|
-| `cheap` | `swe-1-7-medium` | Lock, Logos Sparks | Mechanical/plumbing. Proven key (26 sessions). SWE-1.7's free preview ended ~2026-08-08; only confirmed free key today: `swe-1-6` (credit multiplier 0). |
+| --- | --- | --- | --- |
+| `cheap` | `swe-1-7-medium` | Lock, Logos Sparks | Mechanical/plumbing. Proven key (26 sessions). `cheap` means low-cost, not free; the free key is `swe-1-6` (credit multiplier 0), used by the `gratis` template. The default `equilibrado`/fallback keeps `swe-1-7-medium` as cheap-but-paid. |
 | `reasoning` | `deepseek-v4-pro-high` | Architect, Morpheus | Planning/architecture/research/eval. Verified key (sessions.db 2026-09-04). History: `opus` → `sonnet` (2026-07-27) → `deepseek-v4-pro-high` (2026-09-05). |
 | `auto` | `deepseek-v4-flash-high` | Neo, Trinity, Smith, Oracle | Mixed workloads. Compute-priority default — also the global `agent.model` in `~/.config/devin/config.json`. Verified key (27 sessions). |
 
@@ -59,13 +59,13 @@ No agent file changes — tier assignment is separate from its backing model.
 ## External MCP servers this brain assumes
 
 | Capability | Server | Devin binding | Scope | Added | Used by |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | `browser` | `chrome-browser` | `mcp__chrome-browser` | user (`~/.config/devin/config.json`) | pre-existing | Smith |
 | `docs-lookup` | `context7` | `mcp__context7` | user (`~/.config/devin/config.json`) | 2026-07-15, `devin mcp add context7 --url https://mcp.context7.com/mcp --scope user` | Oracle |
 
 Both are **user-scope**, so they follow Neo/the specialists globally rather than needing per-project setup. Neither is required for the roster: the capability is simply unavailable if the server isn't configured, and the agent should say so (Foundation 3). context7 works unauthenticated (rate-limited, verified live).
 
-**Binding note:** `mcp__<server>__<tool>` es la convención de naming MCP de Devin, no un concepto del capability-map — el binding de otro adapter usaría su propia convención MCP (o no-MCP).
+**Binding note:** `mcp__<server>__<tool>` is Devin's MCP naming convention, not a capability-map concept — another adapter's binding would use its own MCP (or non-MCP) convention.
 
 ## Least-privilege `allowed-tools`
 
@@ -74,6 +74,7 @@ Every specialist's generated `AGENT.md` carries an `allowed-tools:` list from it
 Grant-resolution timing status: `brain/output/research/devin-tool-grant-resolution-timing.md`.
 
 **Known fixes (one-line pointers):**
+
 - `pre_exec_guard.py` token-match false-positive fix → `brain/output/eval/pre-exec-guard-false-positive-fix.md`.
 - Logos-Sparks `run-command` removal + exec allowlist for subagents (`permissions.allow`/`PreToolUse` guard) → `brain/output/eval/devin-subagent-exec-hardening.md`.
 
@@ -81,31 +82,31 @@ Neo's `SKILL.md` deliberately has no `allowed-tools` (`run_subagent`/`ask_user_q
 
 ## Subagents can never ask the user directly
 
-Puntero: mecanismo completo (withholding incondicional + bounce-to-Neo) en "`ask-user` withheld from every subagent (mechanics)" más abajo.
+Pointer: full mechanism (unconditional withholding + bounce-to-Neo) in "`ask-user` withheld from every subagent (mechanics)" below.
 
 **User-only restriction (observed runtime):** the host's saved sessions carry a system-level restriction — "Do not use subagents unless the user explicitly asks you to." (first observed 2026-09-03 14:01:28 UTC). Host runtime behavior, not a user request, Matrix update, or model change. Ask the user explicitly once before delegating; never override the host.
 
 ## Federated ships and `max-nesting`
 
-Puntero: mecanismo completo del `max-nesting` (fórmula `depth_from_root + subtree_depth`, ejemplo Logos) en "`run-subagent` in nestable artifacts (the `max-nesting` mechanism)" más abajo.
+Pointer: full `max-nesting` mechanism (formula `depth_from_root + subtree_depth`, Logos example) in "`run-subagent` in nestable artifacts (the `max-nesting` mechanism)" below.
 
 ## Session hygiene
 
-See [`AGENTS.md`](AGENTS.md) §12.
+See [`AGENTS.md`](AGENTS.md) §11.
 
 ## Matrix workspace mode auto-bootstrap (AGENTS.md §6 step 0)
 
 Reuses `adapters/devin/hooks/session_audit.py` + the `activation.reinject` flag (`hooks/_flags.py`).
 
 - **Wiring.** `session_audit.py` wired to `SessionStart`/`UserPromptSubmit`/`PostToolUse`/`PostCompaction`/`SessionEnd` in `~/.config/devin/config.json` by `adapters/devin/install-hooks.sh`.
-- **Injection.** `activation.reinject: true` (via `adapters/devin/config.yaml#flags`) renders `brain/data/activation-preamble.tmpl` (misma fuente que `matrix_block_tmp()` en `bin/matrix` y el `neo` SKILL.md generado) como `hookSpecificOutput.additionalContext` en `SessionStart`/`UserPromptSubmit`.
-- **`{{ADAPTER_DOC_PATH}}`** → `DEVIN.md` (`binding.doc_path` en `adapters/devin/adapter.yaml`); las tres superficies (`matrix_block_tmp()`, `adapters/_build.py`, `_render_activation_preamble()` de `session_audit.py`) la resuelven a ruta **absoluta**.
-- **Scope.** `_activation_reinject_scope()` (B1-Option 1) aplica en workspace mode y en proyectos resueltos por registry, cada `session_start`/`user_prompt_submit`, via `bin/matrix scope` (wrapper de `resolve_scope()`).
-- **Flag state.** Ver `bin/matrix flags` para el valor efectivo de `activation.reinject`; afecta workspace mode y project.
+- **Injection.** `activation.reinject: true` (via `adapters/devin/config.yaml#flags`) renders `brain/data/activation-preamble.tmpl` (same source as `matrix_block_tmp()` in `bin/matrix` and the generated `neo` SKILL.md) as `hookSpecificOutput.additionalContext` in `SessionStart`/`UserPromptSubmit`.
+- **`{{ADAPTER_DOC_PATH}}`** → `DEVIN.md` (`binding.doc_path` in `adapters/devin/adapter.yaml`); all three surfaces (`matrix_block_tmp()`, `adapters/_build.py`, `session_audit.py`'s `_render_activation_preamble()`) resolve it to an **absolute** path.
+- **Scope.** `_activation_reinject_scope()` (B1-Option 1) applies in workspace mode and in registry-resolved projects, on every `session_start`/`user_prompt_submit`, via `bin/matrix scope` (wrapper around `resolve_scope()`).
+- **Flag state.** See `bin/matrix flags` for the effective value of `activation.reinject`; it affects both workspace mode and project sessions.
 
 ### `activation.reinject_full` (throttled since 2026-09-01, Camino 2 Q1-A)
 
-Current value: **`false`** in `adapters/devin/config.yaml#flags` (absorbe el legacy `experiment.activation_inject_userprompt_full`) — full preamble on turn 1, again roughly every 10 turns; sentinel preamble between.
+Current value: **`false`** in `adapters/devin/config.yaml#flags` (it absorbs the legacy `experiment.activation_inject_userprompt_full`) — full preamble on turn 1, again roughly every 10 turns; sentinel preamble between.
 
 - **Revert criterion.** Back to `true` only if (a) observed BLOCK ratio > 21% over ≥ 20 phase closes, **or** (b) a contract violation is traced to a throttled turn (the missing full preamble caused it).
 - **Known gap.** No env-var kill-switch — only editing `adapters/devin/config.yaml` directly.
@@ -114,35 +115,35 @@ Current value: **`false`** in `adapters/devin/config.yaml#flags` (absorbe el leg
 
 ## Hardening `permissions.deny` for secret stores
 
-**Estado actual: DESHABILITADA** (decisión del usuario, 2026-09-07, incidente
-`incident-secret-deny-overblock-tl0090`). `permissions.deny` en
-`~/.config/devin/config.json` está vacío y el bloque `secret_deny` de
-`adapters/devin/config.yaml` está en `enabled: false`. Estado de los tres flags
-que exige el chequeo `config_flags_missing` de `the_source` (todos en su estado
-post-deny-list-off 2026-09-07): `class_b_repo_secrets` (`enabled: false`,
-`patterns: []`), `static: []` y `exclude: []`. Para re-habilitar: restaurar la
-config declarativa y correr `bin/matrix harden --target=devin --apply`.
+**Current status: DISABLED** (user decision, 2026-09-07, incident
+`incident-secret-deny-overblock-tl0090`). `permissions.deny` in
+`~/.config/devin/config.json` is empty and the `secret_deny` block of
+`adapters/devin/config.yaml` is set to `enabled: false`. State of the three
+flags required by `the_source`'s `config_flags_missing` check (all in their
+post-deny-list-off 2026-09-07 state): `class_b_repo_secrets` (`enabled: false`,
+`patterns: []`), `static: []` and `exclude: []`. To re-enable: restore the
+declarative config and run `bin/matrix harden --target=devin --apply`.
 
-Mecánica (válida si se re-habilita): `bin/matrix harden --target=devin`
-reconcilia `permissions.deny` contra el bloque `secret_deny` de
-`adapters/devin/config.yaml`. Dry-run por defecto; `--apply` escribe, `--revert`
-elimina las entradas Matrix-managed. Solo toca `permissions.deny` y usa el
-sidecar (`~/.config/devin/.matrix-managed-deny.json`) para respetar borrados
-manuales. El `secret_deny.discover` escanea `$HOME` buscando carpetas
-`credentials/` y archivos `.env`, emitiendo patrones `Read(...)` a nivel
-directorio — nunca nombres de archivo de credenciales.
+Mechanics (valid if re-enabled): `bin/matrix harden --target=devin`
+reconciles `permissions.deny` against the `secret_deny` block of
+`adapters/devin/config.yaml`. Dry-run by default; `--apply` writes, `--revert`
+removes the Matrix-managed entries. It only touches `permissions.deny` and uses
+the sidecar (`~/.config/devin/.matrix-managed-deny.json`) to respect manual
+deletions. `secret_deny.discover` scans `$HOME` for `credentials/` folders and
+`.env` files, emitting directory-level `Read(...)` patterns — never credential
+file names.
 
-**Por qué se deshabilitó (semántica verificada 2026-09-07, Devin CLI 3000.6.14):**
-`permissions.deny` con `Read(...)` no solo bloquea el tool `read`: bloquea
-también `grep`/`glob` y los comandos `exec` que LEEN contenido con path literal
-(`cat`, `ls`). NO bloquea predicados (`test -f`), `source`, ni indirección de
-variable (`$HOME`). La lista over-broad (`~/.local/share/devin/**`) rompió la
-lectura de la doc del propio CLI; la sesión en curso conserva el snapshot de
-permisos hasta reiniciar. Workaround sancionado (aplicable si se re-habilita):
-`test -f "$HOME/.avature/credentials/<host>.env"` para existencia,
-`source "$HOME/.avature/credentials/<host>.env"` para cargar el token. El hook
-`pre_tool_use_guard` bloquea con guía los verbos de volcado sobre rutas
-denyadas (inactivo con deny vacía). Ver lección 65.
+**Why it was disabled (semantics verified 2026-09-07, Devin CLI 3000.6.14):**
+`permissions.deny` with `Read(...)` does not only block the `read` tool: it also
+blocks `grep`/`glob` and `exec` commands that READ content with a literal path
+(`cat`, `ls`). It does NOT block predicates (`test -f`), `source`, or variable
+indirection (`$HOME`). The over-broad list (`~/.local/share/devin/**`) broke
+reading the CLI's own docs; the running session keeps its permission snapshot
+until restart. Sanctioned workaround (applicable if re-enabled):
+`test -f "$HOME/.avature/credentials/<host>.env"` for existence,
+`source "$HOME/.avature/credentials/<host>.env"` to load the token. The
+`pre_tool_use_guard` hook blocks dump verbs on denied paths with guidance
+(inactive with an empty deny list). See lesson 65.
 
 ## Headless / non-interactive execution (`devin -p`)
 
@@ -164,16 +165,18 @@ capabilities:
   read: read_file
   edit: [edit, multi_edit, write]
   search: [grep_search, find_by_name]
-  code-nav: codebase_search        # fallback: search
+  code-nav: codebase_search        # fallback: grep_search
   run-subagent: run_subagent
   run-command: run_command
   ask-user: ask_user_question
-  browser: mcp__chrome-browser     # visual QA; no-op if unconfigured; live subagent testing (2026-07-27) found mcp__chrome-browser__* CONFIRMED ABSENT despite this declared binding — see "Least-privilege allowed-tools" above
+  browser: mcp__chrome-browser     # visual QA; no-op if unconfigured. Re-verified 2026-09-16: chrome-browser MCP tools are present.
   docs-lookup: mcp__context7       # version-pinned library docs
 render:
   master: skill        # → .agents/skills/<name>/SKILL.md
   specialist: subagent # → .agents/agents/<name>/AGENT.md
 ```
+
+This block is the `capabilities:` map (abstract capability → concrete tool id). A **separate** `allowed_tools:` map in the same `adapter.yaml` translates capabilities into Devin's *allowlist categories* (`read`, `grep`, `glob`, `exec`, `mcp__server__tool` patterns) — see "Least-privilege" above. The two maps use different nomenclatures on purpose.
 
 ### `run-subagent` in nestable artifacts (the `max-nesting` mechanism)
 
@@ -209,20 +212,22 @@ bin/matrix link ttl:path-decision-reform matrix until=YYYY-MM-DD motivo=fallback
 
 ## Shared-surface gate & writer lane (Q2-D)
 
-El hook `PreToolUse` (`adapters/devin/hooks/pre_tool_use_guard.py`) ahora también cubre las tools nativas de edición (`edit`, `write`, `multi_edit`), pero **solo contra la superficie compartida del harness**: `AGENTS.md`, `DEVIN.md`, `brain/agents/*`, `brain/data/lessons.md`, `brain/data/capability-map.md`, `hooks/`, `bin/`, `adapters/`. Una sesión `project` (cwd en un proyecto resuelto por registry) queda **bloqueada** para editar esa superficie — salvo la promoción proactiva de lessons, que solo permite `brain/data/lessons.md` (core) y `brain/data/lessons/<proyecto-actual>.md` (subject = innermost), ambas bajo un lane de escritor per-file. Matrix workspace mode conserva acceso completo (también bajo lane). Los flags `gate.shared_surface` y `gate.writer_lane` (default on) gatean el aislamiento y el lane; `gate.pre_exec_guard` gatea el guard de comandos shell.
+The `PreToolUse` hook (`adapters/devin/hooks/pre_tool_use_guard.py`) now also covers the native edit tools (`edit`, `write`, `multi_edit`), but **only against the harness's shared surface**: `AGENTS.md`, `DEVIN.md`, `brain/agents/*`, `brain/data/lessons.md`, `brain/data/capability-map.md`, `hooks/`, `bin/`, `adapters/`. A `project` session (cwd in a registry-resolved project) is **blocked** from editing that surface — except the proactive lessons promotion, which only allows `brain/data/lessons.md` (core) and `brain/data/lessons/<current-project>.md` (subject = innermost), both under a per-file writer lane. Matrix workspace mode keeps full access (also under the lane). The flags `gate.shared_surface` and `gate.writer_lane` (default on) gate the isolation and the lane; `gate.pre_exec_guard` gates the shell-command guard.
 
-- **Excepción / kill-switch:** relanzar la sesión con `MATRIX_SHARED_SURFACE_ALLOW=1` (o `true`) para bypassar el bloqueo de sesión `project` durante toda la sesión (solo emergencias; la decisión queda auditada). El kill-switch NO bypassa el lane.
-- **Lane de escritor:** `brain/state/lanes/<sha1(rel_path)[:16]>.json` — adquirido en `PreToolUse`, liberado en `PostToolUse`/`SessionEnd`, reclamado tras `MATRIX_WRITER_LANE_TTL_S` (default `120`). Un lane tomado bloquea el edit y loguea `bin/matrix link incident:writer-collision`.
-- **Wireado:** `adapters/devin/install-hooks.sh` registra matchers `PreToolUse` para `edit`/`write`/`multi_edit` → `pre_tool_use_guard.py`. Re-correr `bin/matrix install --target=devin` tras este cambio.
+- **Exception / kill-switch:** relaunch the session with `MATRIX_SHARED_SURFACE_ALLOW=1` (or `true`) to bypass the `project` session block for the whole session (emergencies only; the decision stays audited). The kill-switch does NOT bypass the lane.
+- **Writer lane:** `brain/state/lanes/<sha1(rel_path)[:16]>.json` — acquired on `PreToolUse`, released on `PostToolUse`/`SessionEnd`, reclaimed after `MATRIX_WRITER_LANE_TTL_S` (default `120`). A held lane blocks the edit and logs `bin/matrix link incident:writer-collision`.
+- **Wiring:** `adapters/devin/install-hooks.sh` registers `PreToolUse` matchers for `edit`/`write`/`multi_edit` → `pre_tool_use_guard.py`. Re-run `bin/matrix install --target=devin` after this change.
 
 ## Feature flags (Devin adapter)
 
-`hooks/_flags.py` es el loader único (precedencia: env `MATRIX_<NAME>` > `adapters/devin/config.yaml#flags` > `brain/config.yaml#flags` > DEFAULTS). `bin/matrix flags` muestra el valor efectivo, fuente, riesgo y estado; `flags --validate` hace exit 1 si hay flags `dangerous`/`inert`.
+`hooks/_flags.py` is the single loader (precedence: env `MATRIX_<NAME>` > `adapters/devin/config.yaml#flags` > `brain/config.yaml#flags` > DEFAULTS). `bin/matrix flags` shows the effective value, source, risk and state; `flags --validate` exits 1 if there are `dangerous`/`inert` flags.
 
-Los 11 flags: `activation.reinject`, `activation.reinject_full`, `gate.shared_surface`, `gate.writer_lane`, `gate.pre_exec_guard`, `gate.secret_deny`, `hooks.pre_activation_check`, `hooks.boot_warn`, `memory.tree`, `views.scoped`, `binding.artifacts`. Estado efectivo: ver `bin/matrix flags` — los valores de esta doc no son el estado actual.
+The 12 flags: `activation.reinject`, `activation.reinject_full`, `gate.shared_surface`, `gate.writer_lane`, `gate.pre_exec_guard`, `gate.secret_deny`, `hooks.pre_activation_check`, `hooks.boot_warn`, `hooks.session_extras`, `memory.tree`, `views.scoped`, `binding.artifacts`. Effective state: see `bin/matrix flags` — the values in this doc are not the current state.
 
-Legacy env: `MATRIX_INJECT_ACTIVATION`→`activation.reinject`; `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`→`hooks.boot_warn`. `gate.secret_deny` default off; re-habilitar: flag on + `bin/matrix harden --target=devin --apply` (sidecar `~/.config/devin/.matrix-managed-deny.json`). Los TTLs numéricos (`MATRIX_WRITER_LANE_TTL_S`, `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`) NO son flags.
+`hooks.session_extras` (default `false`) is the umbrella switch for the **non-audit** extras of `session_audit.py`: orphan-session detection, `link flags:state`, periodic `validate_routing_signal` (every 20 tools) and the `phase_close` nudge. Off = only the audit trail (`audit_event`) + `pre_activation_check` (its own flag) + `session close` on SessionEnd run.
 
-## Lessons — detalle de adapter
+Legacy env: `MATRIX_INJECT_ACTIVATION`→`activation.reinject`; `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`→`hooks.boot_warn`. `gate.secret_deny` defaults off; to re-enable: flag on + `bin/matrix harden --target=devin --apply` (sidecar `~/.config/devin/.matrix-managed-deny.json`). The numeric TTLs (`MATRIX_WRITER_LANE_TTL_S`, `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`) are NOT flags.
 
-Narrativa por-lección (citas, versiones, IDs, nombres de tools) en `brain/output/research/adapter-lessons-detail.md`. `lessons.md` conserva la regla operable + puntero.
+## Lessons — adapter detail
+
+Per-lesson narrative (citations, versions, IDs, tool names) in `brain/output/research/adapter-lessons-detail.md`. `lessons.md` keeps the operable rule + pointer.

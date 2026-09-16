@@ -37,7 +37,7 @@ def build_fixture(repo_root, fixture_root):
     (fixture_root / "brain" / "output" / "plans" / "smoke.md").write_text(
         "## 3.2 Smoke develop\n\n**Dueño:** Trinity\n\nFase: develop\n"
     )
-    for name in ["AGENTS.md", "onboarding.html", "DEVIN.md", "README.md"]:
+    for name in ["AGENTS.md", "DEVIN.md", "README.md"]:
         src = repo_root / name
         if src.exists():
             shutil.copy2(src, fixture_root / name)
@@ -98,7 +98,6 @@ def state_snapshot(fixture_root, home_dir, projects):
         "brain/state/validation-report.json",
         "brain/state/.current-hook-session",
         "docs/SYSTEM_TRUTH.md",
-        "onboarding.html",
         "DEVIN.md",
         ".devin/config.json",
     ]

@@ -745,7 +745,7 @@ def _render_boot_warn_text(payload):
         "model_drift": ("generated-vs-installed model drift", "run `bin/matrix build --target=devin && bin/matrix install --target=devin`"),
         "ttl_expired": ("a TTL override has expired", "run `bin/matrix link ttl:<name> <subject> until=<new-date>`"),
         "validate_layer2": ("Layer-2 CLI-neutrality drift", "run `bin/matrix hooks validate_layer2`"),
-        "the_source": ("SYSTEM_TRUTH/onboarding is stale", "run `bin/matrix hooks the_source`"),
+        "the_source": ("SYSTEM_TRUTH is stale", "run `bin/matrix hooks the_source`"),
         "snapshot_due": ("metrics snapshot is due", "run the harness-health-report extractor, then `bin/matrix link metrics:snapshot matrix path=<output>`"),
     }
     lines = []
@@ -807,10 +807,11 @@ def main():
             pre_result = _run_pre_activation_check()
         else:
             pre_result = {"ok": None, "status": "disabled", "payload": {}}
-        orphan_session_id = _run_detect_orphan_session(project_active)
-        if orphan_session_id:
-            _run_session_close_async(orphan_session_id)
-        _log_flags_state()
+        if _flag_value("hooks.session_extras"):
+            orphan_session_id = _run_detect_orphan_session(project_active)
+            if orphan_session_id:
+                _run_session_close_async(orphan_session_id)
+            _log_flags_state()
 
     envelope = {
         "event": event,
@@ -883,7 +884,7 @@ def main():
     _call_audit_event(envelope)
 
     # B2: periodic routing-signal validation every N post_tool_use events.
-    if event == "post_tool_use" and session_id:
+    if event == "post_tool_use" and session_id and _flag_value("hooks.session_extras"):
         if _post_tool_use_count(ROOT, session_id) % ROUTING_SIGNAL_INTERVAL == 0:
             _run_validate_routing_signal(session_id)
 
@@ -900,7 +901,7 @@ def main():
 
     # B3: nudge when mutating work since the last phase_close exceeds threshold.
     nudge = None
-    if event == "user_prompt_submit" and session_id:
+    if event == "user_prompt_submit" and session_id and _flag_value("hooks.session_extras"):
         nudge = _b3_nudge_text(ROOT, session_id)
 
     # B1: reinject activation preamble on session_start / user_prompt_submit.
