@@ -83,11 +83,158 @@ def read_input():
         return {}
 
 
-def current_session_id(root=None):
-    """Return the synthetic session id from the marker file, or None."""
-    if root is None:
-        root = resolve_root()
-    marker = os.path.join(root, "brain", "state", ".current-hook-session")
+# --- Session identity bindings (D1/A0) ------------------------------------
+# Single owner for the binding schema, path and TTL in Layer 1. The adapter
+# (adapters/devin/hooks/session_audit.py) imports these helpers; the path is
+# never duplicated. `brain/state/sessions/<sid>.json` is owned by `matrix
+# focus` (bin/lib/registry.sh), so the liveness binding lives at
+# `brain/state/sessions/<sid>-binding.json` — no collision.
+SESSION_BINDING_DIR = os.path.join("brain", "state", "sessions")
+SESSION_BINDING_SUFFIX = "-binding.json"
+SESSION_BINDING_DEFAULT_TTL_S = 900
+SESSION_BINDING_HEARTBEAT_INTERVAL_S = 60
+SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
+
+
+def _session_binding_ttl_s():
+    return int(os.environ.get("MATRIX_SESSION_BINDING_TTL_S", SESSION_BINDING_DEFAULT_TTL_S))
+
+
+def _session_binding_path(root, session_id):
+    return os.path.join(root, SESSION_BINDING_DIR, f"{session_id}{SESSION_BINDING_SUFFIX}")
+
+
+def _session_binding_paths(root):
+    directory = os.path.join(root, SESSION_BINDING_DIR)
+    if not os.path.isdir(directory):
+        return []
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return []
+    return [
+        os.path.join(directory, name)
+        for name in names
+        if name.endswith(SESSION_BINDING_SUFFIX)
+    ]
+
+
+def _read_binding(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _write_binding(path, data):
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
+        return True
+    except OSError:
+        return False
+
+
+def _binding_now_iso():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def _binding_fresh(binding):
+    """True when the binding's last_seen_at is within TTL of now."""
+    ts = _parse_iso_ts(binding.get("last_seen_at"))
+    if ts is None:
+        return False
+    now = datetime.datetime.now().astimezone()
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=now.tzinfo)
+    return (now - ts).total_seconds() <= _session_binding_ttl_s()
+
+
+def _prune_stale_bindings(root):
+    """Best-effort hygiene: remove bindings older than 2*TTL.
+
+    Never a correctness requirement — the read predicate already ignores stale
+    files, so a failed prune only accumulates disk until the next success.
+    """
+    threshold = 2 * _session_binding_ttl_s()
+    now = datetime.datetime.now().astimezone()
+    for path in _session_binding_paths(root):
+        binding = _read_binding(path)
+        if binding is None:
+            continue
+        ts = _parse_iso_ts(binding.get("last_seen_at"))
+        if ts is None:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=now.tzinfo)
+        if (now - ts).total_seconds() > threshold:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def write_session_binding(root, session_id, project_active=None):
+    """Create/refresh the liveness binding for a session (session_start).
+
+    Best-effort: a failed write never blocks the session. Prunes stale
+    bindings on the way in (hygiene, not correctness).
+    """
+    if not session_id:
+        return
+    _prune_stale_bindings(root)
+    path = _session_binding_path(root, session_id)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    except OSError:
+        return
+    now = _binding_now_iso()
+    _write_binding(path, {
+        "session_id": session_id,
+        "started_at": now,
+        "project_active": project_active,
+        "last_seen_at": now,
+    })
+
+
+def touch_session_binding(root, session_id):
+    """Refresh last_seen_at, throttled to HEARTBEAT_INTERVAL_S.
+
+    A busy session (every post_tool_use) must not rewrite the binding on every
+    tool call. Best-effort.
+    """
+    if not session_id:
+        return
+    path = _session_binding_path(root, session_id)
+    existing = _read_binding(path)
+    if existing is None:
+        write_session_binding(root, session_id)
+        return
+    ts = _parse_iso_ts(existing.get("last_seen_at"))
+    now = datetime.datetime.now().astimezone()
+    if ts is not None:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=now.tzinfo)
+        if (now - ts).total_seconds() < SESSION_BINDING_HEARTBEAT_INTERVAL_S:
+            return
+    existing["last_seen_at"] = _binding_now_iso()
+    _write_binding(path, existing)
+
+
+def remove_session_binding(root, session_id):
+    """Remove the liveness binding (session_end). Best-effort."""
+    if not session_id:
+        return
+    try:
+        os.remove(_session_binding_path(root, session_id))
+    except OSError:
+        pass
+
+
+def _marker_session_id(root):
+    marker = os.path.join(root, SESSION_MARKER)
     if not os.path.isfile(marker):
         return None
     try:
@@ -96,6 +243,37 @@ def current_session_id(root=None):
         return sid or None
     except OSError:
         return None
+
+
+def current_session_id(root=None, session_id=None):
+    """Resolve the current session id fail-closed (D1/A0).
+
+    Order (strict):
+      1. explicit session_id (payload/env MATRIX_SESSION_ID) -> always wins;
+      2. 0 binding files -> legacy marker (.current-hook-session);
+      3. exactly 1 binding file and fresh (now - last_seen_at <= TTL) -> it;
+      4. any other case (2+ files, or 1 stale) -> None (ambiguous/unknown).
+    None means the caller should BLOCK and ask for an explicit session_id.
+    "Active" is derived from last_seen_at at read time, never from the file's
+    existence; never resolve to "the only active one" — that reopens the race.
+    """
+    if session_id:
+        return session_id
+    env_sid = os.environ.get("MATRIX_SESSION_ID", "").strip()
+    if env_sid:
+        return env_sid
+    if root is None:
+        root = resolve_root()
+    _prune_stale_bindings(root)
+    paths = _session_binding_paths(root)
+    if not paths:
+        return _marker_session_id(root)
+    if len(paths) == 1:
+        binding = _read_binding(paths[0])
+        sid = binding.get("session_id") if binding else None
+        if sid and _binding_fresh(binding):
+            return sid
+    return None
 
 
 def _load_registry(root):

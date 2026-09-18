@@ -509,6 +509,17 @@ def main():
     os.makedirs(state_dir, exist_ok=True)
     with open(os.path.join(state_dir, "validation-report.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, ensure_ascii=False, indent=2)
+    # D3: per-session authoritative report (same payload). Only written when a
+    # reliable session_id exists; otherwise only the global slot is written and
+    # the smith_remediation block already emits attribution: no-session-id.
+    if session_id:
+        sessions_dir = os.path.join(state_dir, "sessions")
+        os.makedirs(sessions_dir, exist_ok=True)
+        with open(
+            os.path.join(sessions_dir, f"{session_id}-validation-report.json"),
+            "w", encoding="utf-8",
+        ) as fh:
+            json.dump(report, fh, ensure_ascii=False, indent=2)
     emit(report)
 
 

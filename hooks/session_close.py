@@ -151,6 +151,14 @@ def main():
     session_id = data.get("session_id") if data else None
     if not session_id:
         session_id = current_session_id()
+    if not session_id:
+        emit({
+            "hook": "session_close",
+            "ok": False,
+            "session_id": None,
+            "errors": ["sesión ambigua o desconocida — pasá session_id explícito"],
+        })
+        return
 
     log_path = os.path.join(root, "brain", "state", AUDIT_LOG)
     entries = _read_audit_log(log_path)

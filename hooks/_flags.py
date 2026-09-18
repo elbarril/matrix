@@ -23,8 +23,8 @@ import os
 import re
 import sys
 
-# The 11 flags from the v2 matrix (design appendix C). Defaults never change
-# the 10 original v1 values; #11 `binding.artifacts` is new and off.
+# The v2 matrix flags (design appendix C); see `DEFAULTS` below. Defaults never
+# change the 10 original v1 values; `binding.artifacts` is new and off.
 DEFAULTS = {
     "activation.reinject": True,
     "activation.reinject_full": False,

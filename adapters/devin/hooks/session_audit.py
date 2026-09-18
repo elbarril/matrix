@@ -193,7 +193,7 @@ def _render_sentinel_text(session_id, turn):
     return f"Matrix contract active — session {session_id}, turn {turn}. Full activation preamble reinjects at turn {next_drift} or on-demand."
 
 
-SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
+SESSION_MARKER = common.SESSION_MARKER
 
 
 def _session_id_from_devin(payload):
@@ -823,6 +823,16 @@ def main():
     session_id = _session_id(ROOT, event, payload)
     project_active = _scope_project()
 
+    # D1 (A0): maintain the per-session liveness binding. Schema/path/TTL are
+    # owned by hooks/_common.py — this adapter only calls the helpers. Throttled
+    # refresh on user_prompt_submit/post_tool_use; removed on session_end.
+    if event == "session_start":
+        common.write_session_binding(ROOT, session_id, project_active)
+    elif event in ("user_prompt_submit", "post_tool_use"):
+        common.touch_session_binding(ROOT, session_id)
+    elif event == "session_end":
+        common.remove_session_binding(ROOT, session_id)
+
     pre_result = None
     orphan_session_id = None
     if event == "session_start":
@@ -921,6 +931,14 @@ def main():
     # line; neither suppresses the other. This keeps B3 usable even if the
     # activation_inject experiment is later disabled.
     contexts = []
+
+    # H5: dedicated copyable session-id line. The fail-closed BLOCK for an
+    # ambiguous/unknown session asks for an explicit session_id; Neo needs its
+    # own sid in the context to be able to pass it. Independent of the
+    # activation_reinject experiment — the id line is emitted whenever this
+    # hook emits context.
+    if event in ("session_start", "user_prompt_submit") and session_id:
+        contexts.append(f"session_id={session_id}")
 
     # B3: nudge when mutating work since the last phase_close exceeds threshold.
     nudge = None

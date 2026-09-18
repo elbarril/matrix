@@ -178,6 +178,11 @@ def main():
         session_id = (sid_raw or "").strip() or None
     if not session_id:
         session_id = current_session_id(root)
+        if not session_id:
+            errors.append(
+                "sesión ambigua o desconocida — pasá session_id explícito "
+                "(el session_id=<sid> del contexto de activación)"
+            )
 
     if phase_ok and phase not in VALID_PHASES:
         errors.append(

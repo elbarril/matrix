@@ -48,12 +48,14 @@ GIT_BUDGET_S = 10.0
 MAX_GIT_CALLS = 6
 
 # Detection criterion (documented explicitly because activity.log is free text):
-# A line counts as delegation evidence only if it contains "route" or "handoff"
-# (case-insensitive) AND one of the three agent names (case-insensitive).
-# A `phase:close` entry is NOT counted as delegation evidence; that is a separate
+# A line counts as delegation evidence only when its PARSED event field is
+# "route" or "handoff" (see _line_parts) AND it names one of the three agent
+# names on the line (case-insensitive). Using the parsed event instead of a
+# substring over the whole line means a `checkpoint` whose prose happens to
+# contain "route ... Smith" is never misread as a delegation. A `phase:close`
+# entry is NOT counted as delegation evidence; that is a separate
 # checkpoint-discipline signal already handled by `_has_mutating_work` /
 # `phase_close_missing` in session_close.py.
-ROUTE_HANDOFF_RE = re.compile(r"\b(route|handoff)\b", re.IGNORECASE)
 DELEGATION_RE = re.compile(
     r"\b(" + "|".join(re.escape(n) for n in DELEGATION_NAMES) + r")\b",
     re.IGNORECASE,
@@ -287,17 +289,23 @@ def _session_project(entries, session_id):
 def _find_delegation_evidence(root, start_dt, end_dt, session_id=None, project=None):
     """Search activity.log for route/handoff entries naming Trinity/Smith/Architect.
 
-    Returns (line, verified): searches ALL in-scope entries in the window and
-    prefers a verified one (a real mechanical check token or an eval artifact);
-    if none verifies, returns the first matching entry with verified False.
+    Returns (line, verified): only lines whose PARSED event is `route` or
+    `handoff` qualify (structural, not a substring over the whole line); the
+    agent-name match and the verified-token match stay on the line. Prefers a
+    verified one (a real mechanical check token or an eval artifact); if none
+    verifies, returns the first matching entry with verified False.
     """
     matches = []
     for _ts, rest, line in _iter_activity_events(root, start_dt, end_dt):
-        if ROUTE_HANDOFF_RE.search(rest) and DELEGATION_RE.search(rest):
-            if not _activity_in_scope(rest, session_id, project):
-                continue
-            verified = bool(SMITH_CHECK_RE.search(rest) or EVAL_ARTIFACT_RE.search(rest))
-            matches.append((line, verified))
+        event, _subject, _detail = _line_parts(rest)
+        if event not in ("route", "handoff"):
+            continue
+        if not DELEGATION_RE.search(rest):
+            continue
+        if not _activity_in_scope(rest, session_id, project):
+            continue
+        verified = bool(SMITH_CHECK_RE.search(rest) or EVAL_ARTIFACT_RE.search(rest))
+        matches.append((line, verified))
     if not matches:
         return None, False
     for line, verified in matches:
