@@ -772,6 +772,29 @@ def _render_boot_warn_text(payload):
     return text
 
 
+def _render_pre_activation_failure_text(pre_result):
+    """Render a compact pre-activation failure notice for additionalContext.
+
+    Only fires when pre_result["ok"] is False (failed/timeout/error); a
+    disabled flag produces ok None and never reaches here. The text is injected
+    in session_start, where neo.md step 5 mandates halt, so it states the
+    failure and the repair command without softening it.
+    """
+    if not isinstance(pre_result, dict) or pre_result.get("ok") is not False:
+        return ""
+    payload = pre_result.get("payload") or {}
+    errors = payload.get("errors") if isinstance(payload, dict) else None
+    detail = ""
+    if isinstance(errors, list):
+        items = [str(e).strip() for e in errors if isinstance(e, str) and e.strip()]
+        if items:
+            detail = ": " + "; ".join(items[:5])
+    return (
+        f"Matrix pre-activation check FAILED{detail}. "
+        "Fix and re-run bin/matrix hooks pre_activation_check before proceeding."
+    )
+
+
 def main():
     raw = ""
     if not sys.stdin.isatty():
@@ -922,8 +945,14 @@ def main():
         contexts.append(nudge)
 
     # D-boot WARN channel: always injected on session_start inside the reinjection scope,
-    # regardless of the activation_inject experiment flag.
+    # regardless of the activation_inject experiment flag. A hard pre-activation
+    # failure (ok is False) is concatenated with the boot warn text: neo.md step 5
+    # mandates halt on failure, so the notice states the repair command without
+    # softening it.
     if event == "session_start" and pre_result and _activation_reinject_scope():
+        fail_text = _render_pre_activation_failure_text(pre_result)
+        if fail_text:
+            contexts.append(fail_text)
         warn_text = _render_boot_warn_text(pre_result.get("payload"))
         if warn_text:
             contexts.append(warn_text)

@@ -59,7 +59,10 @@ def _derive_steps(entries):
         event = entry.get("event")
         if event and event not in steps:
             steps.append(event)
-        if event == "session_start" and entry.get("pre_activation_check_ok") is True:
+        if event == "session_start" and (
+            entry.get("pre_activation_check_ok") is True
+            or entry.get("pre_activation_check_status") in ("ok", "failed", "timeout", "error")
+        ):
             if "pre_activation_check" not in steps:
                 steps.append("pre_activation_check")
     return steps
@@ -179,6 +182,8 @@ def main():
         "session_end_seen": "session_end" in steps,
         "steps_seen": steps,
         "entries_examined": len(filtered),
+        "pre_activation_check_status": start_status,
+        "pre_activation_check_failed": start_status in ("failed", "timeout", "error"),
         "validation": post_report,
         "validate_routing_signal_check": validate_routing_signal_report,
     }

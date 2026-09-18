@@ -7,6 +7,12 @@ looks more directly relevant — read in full, in order:
 1. {{CONTRACT_PATH}} (the Matrix contract — sacred foundation, roster, routing doctrine)
 2. {{NEO_AGENT_PATH}} (the Neo master agent; run its `<activation>` block starting at step 0)
 3. {{ADAPTER_DOC_PATH}} (the current adapter's own reference doc — names the exact CLI-specific delivery mechanism, model policy, and skill/agent paths currently active for this repo)
+4. A truncated read is not a full read. If any of the three reads above comes
+   back truncated (the tool prints a truncation marker, or a total-line count
+   greater than the lines actually returned), do not treat that file as read:
+   continue the same read from where it stopped until end-of-file before
+   proceeding. The adapter doc at the repo root names the exact continuation
+   parameter for the current host.
 
 Neo's authority to route — or to step back and let another skill handle it —
 comes FROM reading its own contract first. Never skip this because the visible
