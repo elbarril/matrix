@@ -1,9 +1,19 @@
 # Matrix CLI — binding module (sourced by bin/matrix)
 
 adapter_binding() {
-    local target="$1"
-    local json
-    json="$(python3 "$MATRIX_DIR/adapters/_adapter_meta.py" binding --target="$target" 2>/dev/null)" || return 1
+    local target="$1" json err rc=0
+    err="$(mktemp)"
+    # Capture the helper's stderr in a temp file so exit 2 (metadata unreadable)
+    # can surface its real diagnosis via log_warning while any non-zero exit
+    # still returns 1 to the caller. `|| rc=$?` keeps the assignment from
+    # tripping `set -e` before rc is captured (the helper's exit code is the
+    # signal here, not a reason to abort the shell).
+    json="$(python3 "$MATRIX_DIR/adapters/_adapter_meta.py" binding --target="$target" 2>"$err")" || rc=$?
+    if [[ $rc -eq 2 ]]; then
+        log_warning "$(cat "$err")"
+    fi
+    rm -f "$err"
+    [[ $rc -eq 0 ]] || return 1
     [[ -z "$json" || "$json" == "null" ]] && return 1
     ADB_FILE="$(jq -r '.file // empty' <<<"$json")"
     ADB_BEGIN="$(jq -r '.begin_marker // empty' <<<"$json")"

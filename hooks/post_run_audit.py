@@ -33,6 +33,16 @@ edits without profile metadata are conservatively attributed to Smith; a closed
 ``session_id`` identifies the host session (verified to span ~38 h), not the
 run being audited.
 
+The eval artifact is always excluded from ``observed``/``declared`` before the
+``evaluated`` set is computed: it is the *report*, never a *fix*, so a gate that
+only wrote its artifact (and throwaway scripts) must not be flagged as a
+mutating Smith run. Observed edits whose normalized path is absolute (outside
+this root) are likewise excluded from ``evaluated`` and surfaced separately in
+``observed_outside_root``. Accepted trade-off: this gate protects the integrity
+of THIS root; a Smith edit outside it (a detached worktree, /tmp scripts) is
+invisible to the remediation gate by design -- a real worktree remediation is a
+separate design question, not an ad-hoc ``git rev-parse`` here.
+
 Shell mutation detection is intentionally duplicated with pre_exec_guard;
 the two hooks have a diverging fail policy — see the other module.
 """
@@ -389,30 +399,48 @@ def check_smith_remediation(root, data, session_id):
     except ValueError:
         until = None
         reasons.append("until_unparseable: " + str(until_raw))
-    declared = {_normalize_path(root, p) for p in (data.get("edited_paths") or []) if isinstance(p, str)}
+    # Resolve the eval-artifact candidate BEFORE _observed_edits / evaluated
+    # (Architect P2 hoist): the eval artifact is the *report*, never a *fix*,
+    # so it must never be what trips the pre-registration requirement no matter
+    # how it was created. Excluding it from `evaluated` keeps a gate that only
+    # wrote its artifact (and throwaway scripts) in the no-edits branch.
+    artifact_input = data.get("eval_artifact")
+    eval_candidates = (
+        {os.path.abspath(artifact_input)}
+        if artifact_input and os.path.isabs(artifact_input)
+        else {os.path.join(root, artifact_input), os.path.join(os.getcwd(), artifact_input)}
+        if artifact_input else set()
+    )
+    eval_paths = {_normalize_path(root, c) for c in eval_candidates}
     if since is not None and until is not None and until < since:
         reasons.append("until_before_since: " + str(until_raw) + " < " + str(since_raw))
     observed, bad_lines, profile_scoped, any_events = _observed_edits(root, session_id, since, until)
-    evaluated = declared | observed
+    observed_inside = {p for p in observed if not os.path.isabs(p)}
+    observed_outside = observed - observed_inside
+    observed_inside = observed_inside - eval_paths
+    declared = {_normalize_path(root, p) for p in (data.get("edited_paths") or []) if isinstance(p, str)}
+    declared = declared - eval_paths
+    evaluated = declared | observed_inside
     if not evaluated:
+        artifact = next((os.path.abspath(c) for c in eval_candidates if os.path.isfile(c)), None)
         return (not reasons), {"checked": True, "ok": (not reasons),
                                "verdict": "no-edits" if not reasons else "non-compliant",
                                "edit_signal": "none",
                                "attribution": "no-session-id" if not session_id else "self-report-only",
-                               "eval_artifact": None, "declared_paths": sorted(declared),
-                               "observed_paths": sorted(observed), "evaluated_paths": [],
+                               "eval_artifact": artifact, "declared_paths": sorted(declared),
+                               "observed_paths": sorted(observed_inside), "evaluated_paths": [],
+                               "observed_outside_root": sorted(observed_outside),
                                "since": since_raw, "until": until_raw, "findings": [],
                                "reasons": reasons, "warnings": warnings,
                                "audit_log_unparseable_lines": bad_lines}
-    if declared and observed:
+    if declared and observed_inside:
         signal = "declared+observed"
     elif declared:
         signal = "declared"
     else:
         signal = "observed"
     attribution = "no-session-id" if not session_id else ("profile-scoped" if profile_scoped else ("session-scoped" if any_events else "self-report-only"))
-    artifact_input = data.get("eval_artifact")
-    block = {"checked": True, "ok": False, "verdict": "non-compliant", "edit_signal": signal, "attribution": attribution, "eval_artifact": None, "declared_paths": sorted(declared), "observed_paths": sorted(observed), "evaluated_paths": sorted(evaluated), "since": since_raw, "until": until_raw, "findings": [], "reasons": reasons, "warnings": warnings, "audit_log_unparseable_lines": bad_lines}
+    block = {"checked": True, "ok": False, "verdict": "non-compliant", "edit_signal": signal, "attribution": attribution, "eval_artifact": None, "declared_paths": sorted(declared), "observed_paths": sorted(observed_inside), "evaluated_paths": sorted(evaluated), "observed_outside_root": sorted(observed_outside), "since": since_raw, "until": until_raw, "findings": [], "reasons": reasons, "warnings": warnings, "audit_log_unparseable_lines": bad_lines}
     if not artifact_input:
         reasons.append("eval_artifact_missing")
         return False, block
