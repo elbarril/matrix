@@ -95,6 +95,24 @@ def case_link_handoff_existing_sid_not_duplicated():
         print("A LINK HANDOFF EXISTING SID NOT DUPLICATED PASS")
 
 
+def case_link_decision_prose_sid_still_annotates():
+    with tempfile.TemporaryDirectory(prefix="lsid-prose-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        proc = run_cli(
+            fixture_root, home_dir,
+            ["link", "decision", "matrix", "--ref=refprose123",
+             "nota que menciona session_id=otro-valor en prosa"],
+        )
+        assert proc.returncode == 0, f"{proc.stdout} {proc.stderr}"
+        decisions = lines_for_event(fixture_root, "decision")
+        assert decisions, "no decision line in ledger"
+        line = decisions[-1]
+        assert "session_id=otro-valor" in line, line
+        assert line.rstrip().split()[-1] == f"session_id={MARKER_SID}", line
+        print("A LINK DECISION PROSE SID STILL ANNOTATES PASS")
+
+
 def case_phase_close_payload_sid_wins():
     with tempfile.TemporaryDirectory(prefix="lsid-close-") as td:
         fixture_root = Path(td)
@@ -115,6 +133,7 @@ def main():
     assert REPO_ROOT != Path("/tmp").resolve(), "repo root must not be /tmp"
     case_link_route_annotates_sid()
     case_link_handoff_existing_sid_not_duplicated()
+    case_link_decision_prose_sid_still_annotates()
     case_phase_close_payload_sid_wins()
     print("A LINK SESSION-ID ALL PASS")
     return 0

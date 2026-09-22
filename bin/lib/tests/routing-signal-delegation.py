@@ -356,6 +356,24 @@ def case_scope_sid_attribution_rules():
         print("C SCOPE SID ATTRIBUTION RULES PASS")
 
 
+def case_prose_mention_last_annotation_wins():
+    with tempfile.TemporaryDirectory(prefix="rs-prose-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sys.path.insert(0, str(REPO_ROOT / "hooks"))
+        import validate_routing_signal as r
+        rest = (
+            "handoff | matrix | Trinity -> Smith con e2e, nota que menciona "
+            "session_id=otra-sesion en prosa y cierra con session_id=S1"
+        )
+        assert r._line_session_id(rest) == "S1", r._line_session_id(rest)
+        assert r._activity_in_scope(rest, "S1", "matrix") is True
+        assert r._activity_in_scope(rest, "otra-sesion", "matrix") is False
+        print("C PROSE MENTION LAST ANNOTATION WINS PASS")
+
+
 def case_foreign_sid_same_project_no_resolve():
     with tempfile.TemporaryDirectory(prefix="rs-foreignsid-") as td:
         fixture_root = Path(td)
@@ -511,6 +529,7 @@ def main():
     case_path_decision_not_borrowed()
     case_legacy_no_project_fallback()
     case_scope_sid_attribution_rules()
+    case_prose_mention_last_annotation_wins()
     case_foreign_sid_same_project_no_resolve()
     case_own_sid_same_project_resolves()
     case_path_decision_foreign_sid_not_borrowed()

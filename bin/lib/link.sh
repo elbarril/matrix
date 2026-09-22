@@ -8,7 +8,7 @@ link_append() {
     event="$(printf '%s' "$event" | tr '\r\n' '  ')"
     subject="$(printf '%s' "$subject" | tr '\r\n' '  ')"
     detail="$(printf '%s' "$detail" | tr '\r\n' '  ')"
-    if [[ "$detail" != *"session_id="* ]]; then
+    if [[ "${detail##* }" != session_id=* ]]; then
         local sid="${MATRIX_SESSION_ID:-}"
         [[ -z "$sid" ]] && sid="$(current_session_id || true)"
         sid="$(printf '%s' "$sid" | tr '\r\n' '  ')"

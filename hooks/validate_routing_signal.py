@@ -230,14 +230,18 @@ def _line_parts(rest):
 
 
 def _line_session_id(text):
-    """Return the session_id=<sid> value in a line, or None.
+    """Return the last session_id=<sid> value in a line, or None.
 
-    Trailing punctuation is stripped so (session_id=S1) parses as S1.
+    The Link writes the structural attribution as the final token of the
+    detail (the last whitespace-separated token starts with session_id=),
+    so the last match is the attribution; a prose mention of session_id=
+    earlier in the line must not override it. Trailing punctuation is
+    stripped so (session_id=S1) parses as S1.
     """
-    m = SESSION_ID_RE.search(text)
-    if not m:
+    matches = list(SESSION_ID_RE.finditer(text))
+    if not matches:
         return None
-    return m.group(1).rstrip("),;.")
+    return matches[-1].group(1).rstrip("),;.")
 
 
 def _detail_subject(detail):
