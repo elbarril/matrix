@@ -139,7 +139,8 @@ def _session_window(entries, session_id):
                 end_dt = ts
         if last_dt is None or ts > last_dt:
             last_dt = ts
-    if end_dt is None:
+    # Resumed sessions: the window reaches the session's last event (last_dt), not a stale session_end; ledger lines without session_id= attribute by project (known limitation: possible false negative between sessions of the same project, never a false positive).
+    if end_dt is None or last_dt > end_dt:
         end_dt = last_dt
     return start_dt, end_dt
 

@@ -62,7 +62,7 @@ La numeración de las lecciones es un identificador estable, no un índice secue
 
 41. **Persistí el cierre formal/eval de una fase antes de encadenar la siguiente.** Detalle: `brain/output/research/lesson-41-persist-phase-close.md`.
 
-42. **Session close y routing de trabajo mutante tienen gates mecánicos warn-only.** — enforced by `hooks/detect_orphan_session.py` y `hooks/validate_routing_signal.py`.
+42. **Session close y routing de trabajo mutante tienen gates mecánicos warn-only.** — enforced by `hooks/detect_orphan_session.py` y `hooks/validate_routing_signal.py`. La ventana de análisis de una sesión cierra en su ÚLTIMO evento, no en el último `session_end`: una sesión reanudada dejaba el trabajo del día nuevo fuera de la ventana y producía un falso positivo de escalada (fix 2026-09-22, cubierto por 2 casos de regresión en `bin/lib/tests/routing-signal-delegation.py`).
 
 43. **Re-medí una cifra de un audit viejo antes de heredarla.** Detalle: `brain/output/architecture/matrix-system-health-audit.md`.
 

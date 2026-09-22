@@ -383,6 +383,85 @@ def case_path_decision_foreign_sid_not_borrowed():
         print("C PATH DECISION FOREIGN SID NOT BORROWED PASS")
 
 
+def case_resumed_session_window_reaches_last_event():
+    with tempfile.TemporaryDirectory(prefix="rs-resume-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sid = "rs-resume"
+        audit = fixture_root / "brain" / "state" / "hook-audit.jsonl"
+        audit.parent.mkdir(parents=True, exist_ok=True)
+        # Custom audit (not write_audit): a session resumed on day 2, with a
+        # stale session_end from day 1; last event is the day-2 exec.
+        entries = [
+            {"event": "session_start", "session_id": sid,
+             "pre_activation_check_ok": True, "timestamp": "2026-01-01T00:00:00+00:00"},
+            {"event": "session_end", "session_id": sid,
+             "timestamp": "2026-01-01T00:05:00+00:00"},
+            {"event": "session_start", "session_id": sid,
+             "pre_activation_check_ok": True, "timestamp": "2026-01-02T10:00:00+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "edit", "tool_paths": ["docs/a.md"],
+             "timestamp": "2026-01-02T10:00:01+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "edit", "tool_paths": ["docs/b.md"],
+             "timestamp": "2026-01-02T10:00:02+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "exec", "tool_paths": [],
+             "timestamp": "2026-01-02T10:00:03+00:00"},
+        ]
+        audit.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+        # Bare handoff (no session_id=), verified token e2e, inside day 2 and
+        # within the last audit event's ts.
+        write_activity(
+            fixture_root,
+            '[2026-01-02T10:00:02+00:00] | handoff | matrix | Trinity -> Smith gate e2e',
+        )
+        proc = run_hook(fixture_root, env, sid)
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is False, \
+            f"resumed session must find day-2 delegation evidence: {result}"
+        assert result["resolved"] == "delegated", result
+        assert result["window"]["end"] == "2026-01-02T10:00:03+00:00", \
+            f"window must reach the last event, not the stale session_end: {result['window']}"
+        assert "e2e" in result["delegation_evidence"], result["delegation_evidence"]
+        print("C RESUMED SESSION WINDOW REACHES LAST EVENT PASS")
+
+
+def case_no_resume_window_ends_at_session_end():
+    with tempfile.TemporaryDirectory(prefix="rs-norresume-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sid = "rs-norresume"
+        audit = fixture_root / "brain" / "state" / "hook-audit.jsonl"
+        audit.parent.mkdir(parents=True, exist_ok=True)
+        # Non-resumed session: session_end is the last event. window.end must
+        # stay at session_end (no regression).
+        entries = [
+            {"event": "session_start", "session_id": sid,
+             "pre_activation_check_ok": True, "timestamp": "2026-01-01T00:00:00+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "edit", "tool_paths": ["docs/a.md"],
+             "timestamp": "2026-01-01T00:00:01+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "edit", "tool_paths": ["docs/b.md"],
+             "timestamp": "2026-01-01T00:00:02+00:00"},
+            {"event": "session_end", "session_id": sid,
+             "timestamp": "2026-01-01T00:00:03+00:00"},
+        ]
+        audit.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+        proc = run_hook(fixture_root, env, sid)
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["window"]["end"] == "2026-01-01T00:00:03+00:00", \
+            f"non-resumed window must end at session_end: {result['window']}"
+        print("C NO-RESUME WINDOW ENDS AT SESSION END PASS")
+
+
 def main():
     assert REPO_ROOT != Path("/tmp").resolve(), "repo root must not be /tmp"
     case_delegated_with_check()
@@ -399,6 +478,8 @@ def main():
     case_foreign_sid_same_project_no_resolve()
     case_own_sid_same_project_resolves()
     case_path_decision_foreign_sid_not_borrowed()
+    case_resumed_session_window_reaches_last_event()
+    case_no_resume_window_ends_at_session_end()
     print("C DELEGATION ALL PASS")
     return 0
 
