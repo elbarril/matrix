@@ -90,8 +90,10 @@ def case_positive():
         env["HOME"] = str(home_dir)
         write_audit(fixture_root, "s3")
         write_history(fixture_root, [
-            {"session_id": "s1", "triggered": True, "resolved": "triggered"},
-            {"session_id": "s2", "triggered": True, "resolved": "triggered"},
+            {"session_id": "s1", "triggered": True, "resolved": "triggered",
+             "timestamp": "2026-01-01T00:00:00+00:00"},
+            {"session_id": "s2", "triggered": True, "resolved": "triggered",
+             "timestamp": "2026-01-01T00:00:01+00:00"},
         ])
         payload = '{"phase":"develop","e2e":true,"evidence":"ran d3 positive","session_id":"s3"}'
         proc = run_hook(fixture_root, env, payload)
@@ -103,7 +105,7 @@ def case_positive():
         warn = result["warns"][0]
         assert warn["source"] == "routing_signal_escalation", warn
         assert "s3" in warn["detail"], warn
-        assert "prior=2" in warn["detail"], warn
+        assert "racha=2" in warn["detail"], warn
         print("D3 POSITIVE PASS")
 
 

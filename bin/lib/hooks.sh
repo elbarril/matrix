@@ -263,7 +263,6 @@ phase_close() {
 
     subject="$(resolve_scope_project || true)"
     subject="${subject:-matrix}"
-    link_append "phase:close" "$subject" "$verdict | phase=${phase} | ${detail}"
 
     local sid="" sid_kind
     sid_kind="$(printf '%s' "$payload" | jq -r 'if has("session_id") then (.session_id | type) else "absent" end' 2>/dev/null || echo absent)"
@@ -272,6 +271,7 @@ phase_close() {
     elif [[ "$sid_kind" == "absent" ]]; then
         sid="$(current_session_id || true)"
     fi
+    MATRIX_SESSION_ID="${sid:-}" link_append "phase:close" "$subject" "$verdict | phase=${phase} | ${detail}"
     if [[ -n "$sid" ]]; then
         local audit_event_name audit_json
         if [[ "$verdict" == "PASS" ]]; then
@@ -371,7 +371,7 @@ session_close() {
         detail="${detail} | precheck=${precheck}"
     fi
 
-    link_append "session:close" "$subject" "$detail"
+    MATRIX_SESSION_ID="${sid:-}" link_append "session:close" "$subject" "$detail"
 
     printf '%s\n' "$out"
     return $rc

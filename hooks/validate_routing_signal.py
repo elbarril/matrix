@@ -139,9 +139,14 @@ def _session_window(entries, session_id):
                 end_dt = ts
         if last_dt is None or ts > last_dt:
             last_dt = ts
-    # Resumed sessions: the window reaches the session's last event (last_dt), not a stale session_end; ledger lines without session_id= attribute by project (known limitation: possible false negative between sessions of the same project, never a false positive).
+    # Window reaches max(last_dt, now): a resumed session ends at its last
+    # event; a line written in the same tool call as the close is in scope.
     if end_dt is None or last_dt > end_dt:
         end_dt = last_dt
+    if end_dt is not None:
+        now = datetime.now(timezone.utc)
+        if now > end_dt:
+            end_dt = now
     return start_dt, end_dt
 
 
@@ -490,35 +495,46 @@ def _evaluate_small_path(root, paths, start_dt, end_dt, session_id=None, project
         return result
 
 
-def _last_state_by_session(path):
-    """Return {session_id: last_record} from the append-only history (last wins)."""
+def count_consecutive_unresolved_sessions(path, exclude_session_id=None):
+    """Count consecutive unresolved sessions from the newest last-record backwards.
+
+    Last state per session wins; sessions without a timestamp sort as infinitely
+    old; ties break by insertion order (latest in the file first). The count
+    stops at the first session whose last record is not triggered. Returns
+    (streak, [session_ids]).
+    """
     by_session = {}
-    if not os.path.isfile(path):
-        return by_session
+    order = []
     for record in _read_jsonl(path):
         sid = record.get("session_id")
         if not sid:
             continue
+        if sid not in by_session:
+            order.append(sid)
         by_session[sid] = record
-    return by_session
-
-
-def count_unresolved_sessions(path, exclude_session_id=None):
-    """Count sessions whose last history record is an unresolved trigger.
-
-    Same coherent count used by validate_phase_close's escalation warn: last
-    state per session wins; the current session is excluded. Returns
-    (count, [session_ids]).
-    """
-    count = 0
-    unresolved = []
-    for sid, record in _last_state_by_session(path).items():
+    entries = []
+    for i, sid in enumerate(order):
         if exclude_session_id is not None and sid == exclude_session_id:
             continue
-        if record.get("triggered"):
-            count += 1
+        ts = _parse_timestamp(by_session[sid].get("timestamp"))
+        entries.append((ts, i, sid, by_session[sid]))
+    entries.sort(
+        key=lambda e: (
+            0 if e[0] is not None else 1,
+            e[0].timestamp() if e[0] is not None else 0.0,
+            e[1],
+        ),
+        reverse=True,
+    )
+    streak = 0
+    unresolved = []
+    for _ts, _i, sid, rec in entries:
+        if rec.get("triggered"):
+            streak += 1
             unresolved.append(sid)
-    return count, unresolved
+        else:
+            break
+    return streak, unresolved
 
 
 def _last_record_for_session(path, session_id):
@@ -610,7 +626,7 @@ def validate(data, persist_history=True):
             resolved = "triggered"
 
     history_path = os.path.join(root, HISTORY_LOG)
-    prior, _ = count_unresolved_sessions(history_path, exclude_session_id=session_id)
+    streak, _ = count_consecutive_unresolved_sessions(history_path, exclude_session_id=session_id)
     if threshold_triggered:
         _record_outcome(
             history_path, session_id, triggered, resolved, small_path,
@@ -658,7 +674,7 @@ def validate(data, persist_history=True):
         "run_command_seen": run_command_seen,
         "delegation_evidence": delegation_evidence,
         "unverified_delegation": unverified_delegation,
-        "historical_triggers": prior,
+        "prior_streak": streak,
         "message": message,
     }
 
