@@ -39,6 +39,24 @@ TERMINAL_STATES = {
     "orphaned",
 }
 
+MAX_OUTPUT_CHARS = 3500
+
+
+def event_output(event):
+    event_id = event.get("event_id")
+    if not event_id:
+        return ""
+    path = ROOT / "brain" / "state" / "hardline" / "events" / f"{event_id}.out"
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except (OSError, FileNotFoundError):
+        return ""
+    if not text:
+        return ""
+    if len(text) > MAX_OUTPUT_CHARS:
+        text = text[:MAX_OUTPUT_CHARS] + "\n... (truncado)"
+    return f"\n\nRespuesta:\n{text}"
+
 
 def dedupe_key(project, raw_line):
     return hashlib.sha256(f"{project}\0{raw_line}".encode("utf-8")).hexdigest()
@@ -140,10 +158,10 @@ def notification_text(event):
     task = str(event.get("raw_line", ""))[:100]
     state = event.get("state")
     if state == "acked-success":
-        return f"✅ {project}: listo — {task}"
+        return f"✅ {project}: listo — {task}{event_output(event)}"
     if state == "acked-needs-human":
         reason = event.get("outcome_note") or "el agente indicó que no puede continuar sin una decisión humana"
-        return f"⚠️ {project}: necesita tu decisión — {task}\nMotivo: {reason}"
+        return f"⚠️ {project}: necesita tu decisión — {task}\nMotivo: {reason}{event_output(event)}"
     if state == "acked-refused-generic":
         reason = event.get("reject_reason") or "rechazado antes de ejecutarse por una validación temprana"
         return f"🚫 {project}: rechazado antes de ejecutarse — {task}\nMotivo: {reason}"
