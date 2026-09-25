@@ -7,6 +7,14 @@ activations. Besides the existing input (``agent``, ``steps``, and optional
 ``required``), it accepts optional ``profile``, ``session_id``,
 ``eval_artifact``, ``edited_paths``, ``since``, and ``until`` keys.
 
+Output report keys (Layer-1 contract): ``hook``, ``ok``, ``agent``,
+``profile``, ``session_id``, ``timestamp``, ``steps_seen``, ``required``,
+``missing``, ``bypass_suspected``, ``compliant``, ``smith_remediation``,
+``mutant_command_anomalies`` (command heads that are real mutants), and
+``unresolved_shell_var_targets`` (informative list of ``{"target", "head"}``
+for write targets that reference a shell variable the tokenizer could not
+resolve, e.g. ``$FR/...``; always present, empty when none).
+
 A Smith-profile run with edits must point to an eval artifact containing one
 ``<!-- MATRIX:EVAL-PREREG v1 -->`` JSON block, terminated by
 ``<!-- MATRIX:EVAL-PREREG END -->``. Its JSON has ``prereg_version: 1``,
@@ -33,14 +41,27 @@ edits without profile metadata are conservatively attributed to Smith; a closed
 ``session_id`` identifies the host session (verified to span ~38 h), not the
 run being audited.
 
-Shell mutation detection is intentionally duplicated with pre_exec_guard;
-the two hooks have a diverging fail policy — see the other module.
+The eval artifact is always excluded from ``observed``/``declared`` before the
+``evaluated`` set is computed: it is the *report*, never a *fix*, so a gate that
+only wrote its artifact (and throwaway scripts) must not be flagged as a
+mutating Smith run. Observed edits whose normalized path is absolute (outside
+this root) are likewise excluded from ``evaluated`` and surfaced separately in
+``observed_outside_root``. Accepted trade-off: this gate protects the integrity
+of THIS root; a Smith edit outside it (a detached worktree, /tmp scripts) is
+invisible to the remediation gate by design -- a real worktree remediation is a
+separate design question, not an ad-hoc ``git rev-parse`` here.
+
+The detective shell-mutation tokenizer lives in hooks/_tokenizer.py and is
+consumed by the runtime translator (adapters/*/hooks/session_audit.py), which
+persists parsed targets per event. This gate reads the persisted
+tool_paths/tool_command_unparsed — it never re-parses. The tokenizer is
+deliberately not shared with pre_exec_guard's preventive tokenizer (diverging
+fail policy — see that module).
 """
 
 import datetime
 import json
 import os
-import shlex
 
 from _common import current_session_id, emit, read_input, resolve_root
 
@@ -48,123 +69,23 @@ REQUIRED_STEPS = ["load_config", "resolve_context", "pre_activation_check"]
 SMITH_ALIASES = {"smith", "agent smith", "agent_smith"}
 EDIT_TOOLS = {"edit", "multi_edit", "write"}
 MUTANT_TOOL_NAMES = {"exec", "run_command", "run-command"}
-ALLOWED_MUTANT_PREFIX = "bin/matrix corpus-ingest"
-_WRITE_ALL_ARGS = {"rm", "rmdir", "truncate", "tee"}
-_WRITE_LAST_ARG = {"mv", "cp"}
-_CONTROL_OPS = {";", "&&", "||", "|", "&"}
-_WRITE_HINTS = (">", ">>", "tee ", "rm ", "rmdir ", "mv ", "cp ", "truncate ", "sed -i")
 
 
 def _is_smith(value):
     return str(value or "").strip().lower() in SMITH_ALIASES
 
 
-def _strip_heredocs(command):
-    """Return the command's shell lines with heredoc bodies removed.
-
-    A heredoc body is data, not shell syntax: an eval artifact written with
-    `cat > path << 'EOF'` carries prose that must never reach the tokenizer
-    (a `>` inside a sentence is not a redirection). Delimiter forms handled:
-    << EOF, <<- EOF, << 'EOF', << "EOF".
-    """
-    lines, out, i = command.splitlines(), [], 0
-    while i < len(lines):
-        line = lines[i]
-        out.append(line)
-        marker = None
-        idx = line.find("<<")
-        if idx != -1 and not line[idx:].startswith("<<<"):
-            rest = line[idx + 2:].lstrip()
-            if rest.startswith("-"):
-                rest = rest[1:].lstrip()
-            token = rest.split()[0] if rest.split() else ""
-            marker = token.strip("'\"") or None
-        i += 1
-        if marker:
-            while i < len(lines) and lines[i].strip() != marker:
-                i += 1
-            i += 1  # skip the terminating delimiter line
-    return out
-
-
-def _lexical_chunks(lines):
-    """Group physical shell lines into minimal chunks that shlex can parse.
-
-    A shell command is ONE lexical unit even when it spans several physical
-    lines: a quote opened on line 1 and closed on line 7 is valid syntax, not
-    garbage. Tokenizing line-by-line reported `python3 -c "` as unparseable
-    write intent and fail-closed on a command whose only target was /tmp.
-
-    shlex is the oracle for "is a quote still open" -- a ValueError means the
-    chunk is incomplete, so the next line is appended and the parse retried.
-    Nothing here re-implements shell lexing on purpose (Foundation 4).
-
-    Returns a list of (text, tokens) pairs. `tokens` is None when the chunk
-    never parsed (unterminated quote through the end of the command), leaving
-    the fail-closed policy of the caller in charge.
-    """
-    chunks, buffer = [], None
-    for line in lines:
-        buffer = line if buffer is None else buffer + "\n" + line
-        try:
-            tokens = shlex.split(buffer)
-        except ValueError:
-            continue
-        chunks.append((buffer, tokens))
-        buffer = None
-    if buffer is not None:
-        chunks.append((buffer, None))
-    return chunks
-
-
-def _write_targets(command, root):
-    """Return parsed write targets and whether write intent could not be parsed.
-
-    A shell command is a single lexical unit even across physical lines; see
-    `_lexical_chunks`. Order of operations: strip heredocs, chunk by quotable
-    lines, tokenize each chunk. This detective tokenizer intentionally
-    duplicates pre_exec_guard but fails closed on unparseable write intent;
-    the preventive guard fails open to avoid blocking on uncertainty.
-    """
-    targets = []
-    unparsed = False
-    for text, tokens in _lexical_chunks(_strip_heredocs(command)):
-        if tokens is None:
-            if any(hint in text for hint in _WRITE_HINTS):
-                unparsed = True
-            continue
-        for i, token in enumerate(tokens):
-            if token in (">", ">>") and i + 1 < len(tokens):
-                targets.append(tokens[i + 1])
-        segments, segment = [], []
-        for token in tokens:
-            if token in _CONTROL_OPS:
-                if segment:
-                    segments.append(segment)
-                segment = []
-            else:
-                segment.append(token)
-        if segment:
-            segments.append(segment)
-        for segment in segments:
-            verb = segment[0]
-            args = segment[1:]
-            if verb in _WRITE_ALL_ARGS:
-                targets.extend(arg for arg in args if not arg.startswith("-"))
-            elif verb in _WRITE_LAST_ARG and args:
-                targets.append(args[-1])
-            elif verb == "git" and args and args[0] == "rm":
-                targets.extend(arg for arg in args[1:] if not arg.startswith("-"))
-            elif verb == "sed" and any(arg == "-i" or arg.startswith("-i.") or arg == "--in-place" for arg in args):
-                targets.extend(arg for arg in args if not arg.startswith("-"))
-    return targets, unparsed
-
-
 def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=None):
-    """Return shell commands in this session that wrote to a repo path outside
-    the sanctioned set.
+    """Return (anomalies, unresolved) for shell commands in this session that
+    wrote to a repo path outside the sanctioned set.
 
-    Detective check, not a preventive guard (that is pre_exec_guard). Four
+    `anomalies` is the list of command heads that are real mutants.
+    `unresolved` is a list of {"target", "head"} entries for targets that
+    reference a shell variable the tokenizer could not resolve ($FR/...):
+    those are reported informatively, never flagged as anomalies, because the
+    check cannot prove they write inside the repo (Foundation 3).
+
+    Detective check, not a preventive guard (that is pre_exec_guard). Five
     classes are NOT anomalies, by design:
       * commands outside the audited [since, until] window -- events that cannot
         be attributed to the run in time must not be attributed to Smith;
@@ -174,21 +95,24 @@ def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=N
         out of scope, this check protects repo integrity, not the filesystem;
       * writes to a path already in `sanctioned` -- the declared + pre-registered
         paths of this same run, which is how Smith's own eval artifact is
-        created via shell redirection per its <boundaries>.
+        created via shell redirection per its <boundaries>;
+      * targets with an unresolved shell variable ($VAR/...) -- the tokenizer
+        left them raw for the informative bucket, never a false anomaly.
     A write to any other repo path is the mutant this check was written for
     (see brain/subsystems/logos/agents/niobe.md: never ad-hoc redirection).
     """
     sanctioned = set(sanctioned or ())
     anomalies = []
+    unresolved = []
     if not session_id:
-        return anomalies
+        return anomalies, unresolved
     log_path = os.path.join(root, "brain", "state", "hook-audit.jsonl")
     if not os.path.isfile(log_path):
-        return anomalies
+        return anomalies, unresolved
     try:
         fh = open(log_path, encoding="utf-8")
     except OSError:
-        return anomalies
+        return anomalies, unresolved
     with fh:
         for line in fh:
             line = line.strip()
@@ -212,6 +136,9 @@ def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=N
                 continue
             offending = False
             for target in targets:
+                if isinstance(target, str) and "$" in target:
+                    unresolved.append({"target": target, "head": head})
+                    continue
                 norm = _normalize_path(root, target)
                 if os.path.isabs(norm):
                     continue
@@ -220,7 +147,7 @@ def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=N
                     break
             if offending:
                 anomalies.append(head)
-    return anomalies
+    return anomalies, unresolved
 
 
 def _parse_time(value):
@@ -389,30 +316,48 @@ def check_smith_remediation(root, data, session_id):
     except ValueError:
         until = None
         reasons.append("until_unparseable: " + str(until_raw))
-    declared = {_normalize_path(root, p) for p in (data.get("edited_paths") or []) if isinstance(p, str)}
+    # Resolve the eval-artifact candidate BEFORE _observed_edits / evaluated
+    # (Architect P2 hoist): the eval artifact is the *report*, never a *fix*,
+    # so it must never be what trips the pre-registration requirement no matter
+    # how it was created. Excluding it from `evaluated` keeps a gate that only
+    # wrote its artifact (and throwaway scripts) in the no-edits branch.
+    artifact_input = data.get("eval_artifact")
+    eval_candidates = (
+        {os.path.abspath(artifact_input)}
+        if artifact_input and os.path.isabs(artifact_input)
+        else {os.path.join(root, artifact_input), os.path.join(os.getcwd(), artifact_input)}
+        if artifact_input else set()
+    )
+    eval_paths = {_normalize_path(root, c) for c in eval_candidates}
     if since is not None and until is not None and until < since:
         reasons.append("until_before_since: " + str(until_raw) + " < " + str(since_raw))
     observed, bad_lines, profile_scoped, any_events = _observed_edits(root, session_id, since, until)
-    evaluated = declared | observed
+    observed_inside = {p for p in observed if not os.path.isabs(p)}
+    observed_outside = observed - observed_inside
+    observed_inside = observed_inside - eval_paths
+    declared = {_normalize_path(root, p) for p in (data.get("edited_paths") or []) if isinstance(p, str)}
+    declared = declared - eval_paths
+    evaluated = declared | observed_inside
     if not evaluated:
+        artifact = next((os.path.abspath(c) for c in eval_candidates if os.path.isfile(c)), None)
         return (not reasons), {"checked": True, "ok": (not reasons),
                                "verdict": "no-edits" if not reasons else "non-compliant",
                                "edit_signal": "none",
                                "attribution": "no-session-id" if not session_id else "self-report-only",
-                               "eval_artifact": None, "declared_paths": sorted(declared),
-                               "observed_paths": sorted(observed), "evaluated_paths": [],
+                               "eval_artifact": artifact, "declared_paths": sorted(declared),
+                               "observed_paths": sorted(observed_inside), "evaluated_paths": [],
+                               "observed_outside_root": sorted(observed_outside),
                                "since": since_raw, "until": until_raw, "findings": [],
                                "reasons": reasons, "warnings": warnings,
                                "audit_log_unparseable_lines": bad_lines}
-    if declared and observed:
+    if declared and observed_inside:
         signal = "declared+observed"
     elif declared:
         signal = "declared"
     else:
         signal = "observed"
     attribution = "no-session-id" if not session_id else ("profile-scoped" if profile_scoped else ("session-scoped" if any_events else "self-report-only"))
-    artifact_input = data.get("eval_artifact")
-    block = {"checked": True, "ok": False, "verdict": "non-compliant", "edit_signal": signal, "attribution": attribution, "eval_artifact": None, "declared_paths": sorted(declared), "observed_paths": sorted(observed), "evaluated_paths": sorted(evaluated), "since": since_raw, "until": until_raw, "findings": [], "reasons": reasons, "warnings": warnings, "audit_log_unparseable_lines": bad_lines}
+    block = {"checked": True, "ok": False, "verdict": "non-compliant", "edit_signal": signal, "attribution": attribution, "eval_artifact": None, "declared_paths": sorted(declared), "observed_paths": sorted(observed_inside), "evaluated_paths": sorted(evaluated), "observed_outside_root": sorted(observed_outside), "since": since_raw, "until": until_raw, "findings": [], "reasons": reasons, "warnings": warnings, "audit_log_unparseable_lines": bad_lines}
     if not artifact_input:
         reasons.append("eval_artifact_missing")
         return False, block
@@ -502,13 +447,24 @@ def main():
     sanctioned = set(smith_block.get("evaluated_paths") or ())
     if smith_block.get("eval_artifact"):
         sanctioned.add(_normalize_path(root, smith_block["eval_artifact"]))
-    mutant_anomalies = _anomalous_mutant_commands(root, session_id, since, sanctioned, until)
+    mutant_anomalies, unresolved_shell_var_targets = _anomalous_mutant_commands(root, session_id, since, sanctioned, until)
     compliant = (not missing) and smith_ok and not mutant_anomalies
-    report = {"hook": "post_run_audit", "ok": compliant, "agent": agent, "profile": profile, "session_id": session_id, "timestamp": datetime.datetime.now().astimezone().isoformat(), "steps_seen": steps, "required": required, "missing": missing, "bypass_suspected": bool(bypass), "compliant": compliant, "smith_remediation": smith_block, "mutant_command_anomalies": mutant_anomalies}
+    report = {"hook": "post_run_audit", "ok": compliant, "agent": agent, "profile": profile, "session_id": session_id, "timestamp": datetime.datetime.now().astimezone().isoformat(), "steps_seen": steps, "required": required, "missing": missing, "bypass_suspected": bool(bypass), "compliant": compliant, "smith_remediation": smith_block, "mutant_command_anomalies": mutant_anomalies, "unresolved_shell_var_targets": unresolved_shell_var_targets}
     state_dir = os.path.join(root, "brain", "state")
     os.makedirs(state_dir, exist_ok=True)
     with open(os.path.join(state_dir, "validation-report.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, ensure_ascii=False, indent=2)
+    # D3: per-session authoritative report (same payload). Only written when a
+    # reliable session_id exists; otherwise only the global slot is written and
+    # the smith_remediation block already emits attribution: no-session-id.
+    if session_id:
+        sessions_dir = os.path.join(state_dir, "sessions")
+        os.makedirs(sessions_dir, exist_ok=True)
+        with open(
+            os.path.join(sessions_dir, f"{session_id}-validation-report.json"),
+            "w", encoding="utf-8",
+        ) as fh:
+            json.dump(report, fh, ensure_ascii=False, indent=2)
     emit(report)
 
 

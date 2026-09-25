@@ -1,0 +1,12 @@
+{
+  "edges": {
+    "hooks/pre_activation_check.py -> hooks/_common.py::_load_registry": {
+      "intentional": true,
+      "note": "simbolo privado preexistente fuera del set de renombres de S3 (G3); candidato a promocion a publico o a resolver junto con la leccion 71."
+    },
+    "adapters/devin/hooks/pre_tool_use_guard.py -> hooks/pre_exec_guard.py::pre_exec_guard": {
+      "intentional": true,
+      "note": "el guard preventivo del adapter envuelve el hook portable pre_exec_guard (misma policy fail-open); arista cross-boundary intencional."
+    }
+  }
+}

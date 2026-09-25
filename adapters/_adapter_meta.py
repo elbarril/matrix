@@ -9,20 +9,24 @@ ROOT = os.environ.get("MATRIX_ROOT") or os.path.dirname(
 )
 
 
+class _AdapterMetaUnreadable(Exception):
+    """metadata exists but could not be read/parsed (import/open/YAMLError)."""
+
+
 def load_yaml(path):
-    try:
-        import yaml
-        with open(path, encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except Exception:
-        return {}
+    import yaml                     # fuera del try: si falla, propaga
+    with open(path, encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
 
 
 def binding(target):
     adapter_yaml = os.path.join(ROOT, "adapters", target, "adapter.yaml")
     if not os.path.isfile(adapter_yaml):
         return None
-    config = load_yaml(adapter_yaml)
+    try:
+        config = load_yaml(adapter_yaml)
+    except Exception as exc:
+        raise _AdapterMetaUnreadable(exc) from exc
     if not isinstance(config, dict):
         return None
     value = config.get("binding")
@@ -55,7 +59,16 @@ def binding(target):
 def main():
     if len(sys.argv) != 3 or sys.argv[1] != "binding" or not sys.argv[2].startswith("--target="):
         sys.exit(1)
-    value = binding(sys.argv[2].split("=", 1)[1])
+    target = sys.argv[2].split("=", 1)[1]
+    try:
+        value = binding(target)
+    except _AdapterMetaUnreadable as exc:
+        cause = exc.__cause__ or exc
+        print(f"[trainman:adapter-meta] error: metadata ilegible para '{target}': "
+              f"{type(cause).__name__}: {cause}", file=sys.stderr)
+        print(f"[trainman:adapter-meta] sys.executable={sys.executable}", file=sys.stderr)
+        print(f"[trainman:adapter-meta] sys.path[0:5]={sys.path[:5]}", file=sys.stderr)
+        sys.exit(2)
     if value is None:
         sys.exit(1)
     print(json.dumps(value, ensure_ascii=False))

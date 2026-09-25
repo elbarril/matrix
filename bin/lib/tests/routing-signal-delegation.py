@@ -187,28 +187,58 @@ def case_history_transitions():
         print("C HISTORY TRANSITIONS PASS")
 
 
-def case_count_unresolved_last_state_wins():
+def case_count_consecutive_unresolved_sessions():
     with tempfile.TemporaryDirectory(prefix="rs-count-") as td:
         fixture_root = Path(td)
         home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
         env = fixture_env(fixture_root)
         env["HOME"] = str(home_dir)
         sys.path.insert(0, str(REPO_ROOT / "hooks"))
-        from validate_routing_signal import count_unresolved_sessions
+        from validate_routing_signal import count_consecutive_unresolved_sessions
         hist = fixture_root / "brain" / "state" / "routing-signal-history.jsonl"
         hist.parent.mkdir(parents=True, exist_ok=True)
+
+        # (a) resolved tail -> streak 0.
         records = [
-            {"session_id": "s1", "triggered": True, "resolved": "triggered"},
-            {"session_id": "s2", "triggered": True, "resolved": "triggered"},
-            {"session_id": "s1", "triggered": False, "resolved": "delegated"},
-            {"session_id": "s1", "triggered": True, "resolved": "triggered"},
+            {"session_id": "s0", "triggered": True, "resolved": "triggered",
+             "timestamp": "2026-01-01T00:00:00+00:00"},
+            {"session_id": "s0", "triggered": False, "resolved": "delegated",
+             "timestamp": "2026-01-01T00:00:01+00:00"},
         ]
         hist.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
-        count, unresolved = count_unresolved_sessions(str(hist))
-        assert count == 2, f"expected 2 unresolved (s1 last triggered, s2): {unresolved}"
-        count, unresolved = count_unresolved_sessions(str(hist), exclude_session_id="s1")
-        assert count == 1 and unresolved == ["s2"], (count, unresolved)
-        print("C COUNT LAST-STATE-WINS PASS")
+        streak, unresolved = count_consecutive_unresolved_sessions(str(hist))
+        assert streak == 0, f"expected streak 0 (last s0 resolved): {unresolved}"
+
+        # (b) two consecutive unresolved in the tail -> 2.
+        records = [
+            {"session_id": "s1", "triggered": True, "resolved": "triggered",
+             "timestamp": "2026-01-01T00:00:00+00:00"},
+            {"session_id": "s2", "triggered": True, "resolved": "triggered",
+             "timestamp": "2026-01-01T00:00:01+00:00"},
+        ]
+        hist.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
+        streak, unresolved = count_consecutive_unresolved_sessions(str(hist))
+        assert streak == 2, f"expected streak 2: {unresolved}"
+
+        # (c) last-state-wins: s1 triggered(01) then delegated(02), s2
+        #     triggered(03) -> streak 1 (s2 only; s1's last state is resolved).
+        records = [
+            {"session_id": "s1", "triggered": True, "resolved": "triggered",
+             "timestamp": "2026-01-01T00:00:01+00:00"},
+            {"session_id": "s1", "triggered": False, "resolved": "delegated",
+             "timestamp": "2026-01-01T00:00:02+00:00"},
+            {"session_id": "s2", "triggered": True, "resolved": "triggered",
+             "timestamp": "2026-01-01T00:00:03+00:00"},
+        ]
+        hist.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
+        streak, unresolved = count_consecutive_unresolved_sessions(str(hist))
+        assert streak == 1, f"expected streak 1 (s2 only): {unresolved}"
+        assert unresolved == ["s2"], unresolved
+
+        # (d) exclude_session_id excludes the current session.
+        streak, unresolved = count_consecutive_unresolved_sessions(str(hist), exclude_session_id="s2")
+        assert streak == 0, f"expected streak 0 after excluding s2: {unresolved}"
+        print("C COUNT CONSECUTIVE UNRESOLVED SESSIONS PASS")
 
 
 def case_foreign_project_handoff_does_not_resolve():
@@ -326,6 +356,24 @@ def case_scope_sid_attribution_rules():
         print("C SCOPE SID ATTRIBUTION RULES PASS")
 
 
+def case_prose_mention_last_annotation_wins():
+    with tempfile.TemporaryDirectory(prefix="rs-prose-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sys.path.insert(0, str(REPO_ROOT / "hooks"))
+        import validate_routing_signal as r
+        rest = (
+            "handoff | matrix | Trinity -> Smith con e2e, nota que menciona "
+            "session_id=otra-sesion en prosa y cierra con session_id=S1"
+        )
+        assert r._line_session_id(rest) == "S1", r._line_session_id(rest)
+        assert r._activity_in_scope(rest, "S1", "matrix") is True
+        assert r._activity_in_scope(rest, "otra-sesion", "matrix") is False
+        print("C PROSE MENTION LAST ANNOTATION WINS PASS")
+
+
 def case_foreign_sid_same_project_no_resolve():
     with tempfile.TemporaryDirectory(prefix="rs-foreignsid-") as td:
         fixture_root = Path(td)
@@ -383,6 +431,91 @@ def case_path_decision_foreign_sid_not_borrowed():
         print("C PATH DECISION FOREIGN SID NOT BORROWED PASS")
 
 
+def case_resumed_session_window_reaches_last_event():
+    with tempfile.TemporaryDirectory(prefix="rs-resume-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sid = "rs-resume"
+        audit = fixture_root / "brain" / "state" / "hook-audit.jsonl"
+        audit.parent.mkdir(parents=True, exist_ok=True)
+        # Custom audit (not write_audit): a session resumed on day 2, with a
+        # stale session_end from day 1; last event is the day-2 exec.
+        entries = [
+            {"event": "session_start", "session_id": sid,
+             "pre_activation_check_ok": True, "timestamp": "2026-01-01T00:00:00+00:00"},
+            {"event": "session_end", "session_id": sid,
+             "timestamp": "2026-01-01T00:05:00+00:00"},
+            {"event": "session_start", "session_id": sid,
+             "pre_activation_check_ok": True, "timestamp": "2026-01-02T10:00:00+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "edit", "tool_paths": ["docs/a.md"],
+             "timestamp": "2026-01-02T10:00:01+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "edit", "tool_paths": ["docs/b.md"],
+             "timestamp": "2026-01-02T10:00:02+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "exec", "tool_paths": [],
+             "timestamp": "2026-01-02T10:00:03+00:00"},
+        ]
+        audit.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+        # Bare handoff (no session_id=), verified token e2e, inside day 2 and
+        # within the last audit event's ts.
+        write_activity(
+            fixture_root,
+            '[2026-01-02T10:00:02+00:00] | handoff | matrix | Trinity -> Smith gate e2e',
+        )
+        proc = run_hook(fixture_root, env, sid)
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is False, \
+            f"resumed session must find day-2 delegation evidence: {result}"
+        assert result["resolved"] == "delegated", result
+        assert "e2e" in result["delegation_evidence"], result["delegation_evidence"]
+        print("C RESUMED SESSION WINDOW REACHES LAST EVENT PASS")
+
+
+def case_same_tool_call_line_after_last_event():
+    with tempfile.TemporaryDirectory(prefix="rs-sametool-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sid = "rs-sametool"
+        audit = fixture_root / "brain" / "state" / "hook-audit.jsonl"
+        audit.parent.mkdir(parents=True, exist_ok=True)
+        # The last audit event is at 00:00:03 (exec); a bare handoff written in
+        # the same tool call as the close is timestamped 00:00:05 (in the past).
+        # With D the window reaches max(last_dt, now) so that line is in scope.
+        entries = [
+            {"event": "session_start", "session_id": sid,
+             "pre_activation_check_ok": True, "timestamp": "2026-01-01T00:00:00+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "edit", "tool_paths": ["docs/a.md"],
+             "timestamp": "2026-01-01T00:00:01+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "edit", "tool_paths": ["docs/b.md"],
+             "timestamp": "2026-01-01T00:00:02+00:00"},
+            {"event": "post_tool_use", "session_id": sid,
+             "tool_name": "exec", "tool_paths": [],
+             "timestamp": "2026-01-01T00:00:03+00:00"},
+        ]
+        audit.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:05+00:00] | handoff | matrix | Trinity -> Smith gate e2e',
+        )
+        proc = run_hook(fixture_root, env, sid)
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is False, \
+            f"handoff after last_dt (same tool call) must be in scope: {result}"
+        assert result["resolved"] == "delegated", result
+        assert "e2e" in result["delegation_evidence"], result["delegation_evidence"]
+        print("C SAME-TOOL-CALL LINE AFTER LAST EVENT PASS")
+
+
 def main():
     assert REPO_ROOT != Path("/tmp").resolve(), "repo root must not be /tmp"
     case_delegated_with_check()
@@ -390,15 +523,18 @@ def main():
     case_no_delegation()
     case_prefers_verified_route()
     case_history_transitions()
-    case_count_unresolved_last_state_wins()
+    case_count_consecutive_unresolved_sessions()
     case_foreign_project_handoff_does_not_resolve()
     case_own_project_handoff_resolves()
     case_path_decision_not_borrowed()
     case_legacy_no_project_fallback()
     case_scope_sid_attribution_rules()
+    case_prose_mention_last_annotation_wins()
     case_foreign_sid_same_project_no_resolve()
     case_own_sid_same_project_resolves()
     case_path_decision_foreign_sid_not_borrowed()
+    case_resumed_session_window_reaches_last_event()
+    case_same_tool_call_line_after_last_event()
     print("C DELEGATION ALL PASS")
     return 0
 

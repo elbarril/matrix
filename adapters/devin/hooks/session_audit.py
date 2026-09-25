@@ -23,8 +23,8 @@ for _ in range(3):
 sys.path.insert(0, os.path.join(_candidate, "hooks"))
 import _common as common  # noqa: E402
 import _flags  # noqa: E402
+import _tokenizer  # noqa: E402
 import _writer_lane as lane  # noqa: E402
-from post_run_audit import _write_targets, ALLOWED_MUTANT_PREFIX  # noqa: E402
 
 ROOT = common.resolve_root()
 BIN_MATRIX = os.path.join(ROOT, "bin", "matrix")
@@ -50,6 +50,13 @@ USERPROMPT_FULL_REINJECT_INTERVAL = 10
 # B3: nudge after this many mutating operations without a phase_close.
 MUTANT_WORK_THRESHOLD = 16
 MUTANT_WORK_TOOLS = {"write", "edit", "multi_edit", "run_command", "run-command", "exec"}
+
+# B-opt-3: post_tool_use tools that still append to hook-audit.jsonl. These
+# cover the post_tool_use consumers (validate_routing_signal,
+# _common.has_mutating_work, post_run_audit, and _common.snapshot_window
+# for the snapshot_due metric); read-type calls exit before the append. Do
+# not trim this set without re-checking those consumers.
+AUDIT_CONSUMER_TOOLS = {"write", "edit", "multi_edit", "exec", "run_command", "run-command", "run_subagent"}
 
 
 def _flag_value(name):
@@ -193,7 +200,7 @@ def _render_sentinel_text(session_id, turn):
     return f"Matrix contract active — session {session_id}, turn {turn}. Full activation preamble reinjects at turn {next_drift} or on-demand."
 
 
-SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
+SESSION_MARKER = common.SESSION_MARKER
 
 
 def _session_id_from_devin(payload):
@@ -728,6 +735,7 @@ def _boot_warn_tokens(payload):
         "model_drift",
         "ttl_expired",
         "snapshot_due",
+        "flags_config",
     }
     return [t for t in tokens if isinstance(t, str) and t in allowed]
 
@@ -745,11 +753,12 @@ def _render_boot_warn_text(payload):
         "model_drift": ("generated-vs-installed model drift", "run `bin/matrix build --target=devin && bin/matrix install --target=devin`"),
         "ttl_expired": ("a TTL override has expired", "run `bin/matrix link ttl:<name> <subject> until=<new-date>`"),
         "validate_layer2": ("Layer-2 CLI-neutrality drift", "run `bin/matrix hooks validate_layer2`"),
-        "the_source": ("SYSTEM_TRUTH/onboarding is stale", "run `bin/matrix hooks the_source`"),
+        "the_source": ("SYSTEM_TRUTH is stale", "run `bin/matrix hooks the_source`"),
         "snapshot_due": ("metrics snapshot is due", "run the harness-health-report extractor, then `bin/matrix link metrics:snapshot matrix path=<output>`"),
+        "flags_config": ("the flags config is unreadable or degraded", "repair brain/config.yaml or adapters/<target>/config.yaml"),
     }
     lines = []
-    for token in ["surface_budget", "validate_lessons", "model_drift", "ttl_expired", "validate_layer2", "the_source", "snapshot_due"]:
+    for token in ["surface_budget", "validate_lessons", "model_drift", "ttl_expired", "validate_layer2", "the_source", "snapshot_due", "flags_config"]:
         if token not in details:
             continue
         label, fix = mapping.get(token, (token, ""))
@@ -770,6 +779,29 @@ def _render_boot_warn_text(payload):
     if len(text) > 900:
         text = text[:900] + "…"
     return text
+
+
+def _render_pre_activation_failure_text(pre_result):
+    """Render a compact pre-activation failure notice for additionalContext.
+
+    Only fires when pre_result["ok"] is False (failed/timeout/error); a
+    disabled flag produces ok None and never reaches here. The text is injected
+    in session_start, where neo.md step 5 mandates halt, so it states the
+    failure and the repair command without softening it.
+    """
+    if not isinstance(pre_result, dict) or pre_result.get("ok") is not False:
+        return ""
+    payload = pre_result.get("payload") or {}
+    errors = payload.get("errors") if isinstance(payload, dict) else None
+    detail = ""
+    if isinstance(errors, list):
+        items = [str(e).strip() for e in errors if isinstance(e, str) and e.strip()]
+        if items:
+            detail = ": " + "; ".join(items[:5])
+    return (
+        f"Matrix pre-activation check FAILED{detail}. "
+        "Fix and re-run bin/matrix hooks pre_activation_check before proceeding."
+    )
 
 
 def main():
@@ -798,7 +830,44 @@ def main():
         return
 
     session_id = _session_id(ROOT, event, payload)
-    project_active = _scope_project()
+
+    # B-opt-3: selective hot path for post_tool_use. Every tool call keeps only
+    # the in-process work — liveness touch and writer-lane release — and skips
+    # the `bin/matrix scope` subprocess. The audit append runs only for
+    # consuming tools (AUDIT_CONSUMER_TOOLS: write/edit/multi_edit/exec/
+    # run_command/run_subagent); read-type calls, the bulk of per-event volume,
+    # exit here. Those tools cover the post_tool_use consumers
+    # (validate_routing_signal, _common.has_mutating_work, post_run_audit,
+    # _common.snapshot_window), so omitting the rest does not blind them.
+    if event == "post_tool_use":
+        common.touch_session_binding(ROOT, session_id)
+        tool_name = payload.get("tool_name")
+        tool_input = payload.get("tool_input", {})
+        # Release the per-file writer lane for every surface path this edit
+        # touched (best-effort; only when holder == session_id). The flag
+        # gates acquisition, not release — keep this unconditional.
+        if tool_name in {"edit", "write", "multi_edit"}:
+            for p in _extract_tool_paths(tool_name, tool_input):
+                rel = lane.normalize_relpath(ROOT, p)
+                if rel is not None:
+                    lane.release(ROOT, rel, session_id)
+        if tool_name not in AUDIT_CONSUMER_TOOLS:
+            sys.exit(0)
+
+    # post_tool_use skips scope resolution (project_active stays null; the
+    # consumers of that field fall back to the session_start entry).
+    project_active = None if event == "post_tool_use" else _scope_project()
+
+    # D1 (A0): maintain the per-session liveness binding. Schema/path/TTL are
+    # owned by hooks/_common.py — this adapter only calls the helpers. Throttled
+    # refresh on user_prompt_submit/post_tool_use (the post_tool_use touch ran
+    # in the hot-path branch above); removed on session_end.
+    if event == "session_start":
+        common.write_session_binding(ROOT, session_id, project_active)
+    elif event == "user_prompt_submit":
+        common.touch_session_binding(ROOT, session_id)
+    elif event == "session_end":
+        common.remove_session_binding(ROOT, session_id)
 
     pre_result = None
     orphan_session_id = None
@@ -807,10 +876,11 @@ def main():
             pre_result = _run_pre_activation_check()
         else:
             pre_result = {"ok": None, "status": "disabled", "payload": {}}
-        orphan_session_id = _run_detect_orphan_session(project_active)
-        if orphan_session_id:
-            _run_session_close_async(orphan_session_id)
-        _log_flags_state()
+        if _flag_value("hooks.session_extras"):
+            orphan_session_id = _run_detect_orphan_session(project_active)
+            if orphan_session_id:
+                _run_session_close_async(orphan_session_id)
+            _log_flags_state()
 
     envelope = {
         "event": event,
@@ -830,14 +900,8 @@ def main():
         if isinstance(invocation_id, str) and invocation_id.strip():
             envelope["subagent_invocation_id"] = invocation_id
         if event == "post_tool_use":
+            # Lane release already happened in the hot-path branch above.
             envelope["tool_paths"] = _extract_tool_paths(tool_name, tool_input)
-            # Release the per-file writer lane for every surface path this
-            # edit touched (best-effort; only when holder == session_id).
-            if tool_name in {"edit", "write", "multi_edit"}:
-                for p in envelope.get("tool_paths") or []:
-                    rel = lane.normalize_relpath(ROOT, p)
-                    if rel is not None:
-                        lane.release(ROOT, rel, session_id)
 
         # For shell-like tools, parse write targets in memory and only persist
         # argv[0] + first subcommand plus a parsed-target flag. The full command
@@ -845,10 +909,10 @@ def main():
         if tool_name in {"exec", "run_command", "run-command"} and isinstance(tool_input, dict):
             cmd = tool_input.get("command")
             if isinstance(cmd, str):
-                if cmd.strip().startswith(ALLOWED_MUTANT_PREFIX):
+                if cmd.strip().startswith(_tokenizer.ALLOWED_MUTANT_PREFIX):
                     targets, unparsed = [], False
                 else:
-                    targets, unparsed = _write_targets(cmd, ROOT)
+                    targets, unparsed = _tokenizer.write_targets(cmd, ROOT)
                 head = " ".join(cmd.split()[:2])
                 existing_paths = envelope.get("tool_paths") or []
                 seen = set()
@@ -861,6 +925,13 @@ def main():
                 envelope["tool_command_head"] = head
                 envelope["tool_command_unparsed"] = unparsed
 
+        # Attribution gap (lección 75): `subagent_profile` is written only for
+        # the `run_subagent` event, which never reaches the mutant-command
+        # detector (MUTANT_TOOL_NAMES in post_run_audit.py is exec-only) nor
+        # the inner exec/edit events of the subagent. A parent/subagent split
+        # in the detector would therefore be dead code -- the same no-op as
+        # _observed_edits filtering on this field. Real attribution of inner
+        # events to a subagent needs an adapter-level `delegated` marker.
         if tool_name == "run_subagent":
             try:
                 if isinstance(tool_input, dict):
@@ -883,7 +954,7 @@ def main():
     _call_audit_event(envelope)
 
     # B2: periodic routing-signal validation every N post_tool_use events.
-    if event == "post_tool_use" and session_id:
+    if event == "post_tool_use" and session_id and _flag_value("hooks.session_extras"):
         if _post_tool_use_count(ROOT, session_id) % ROUTING_SIGNAL_INTERVAL == 0:
             _run_validate_routing_signal(session_id)
 
@@ -898,9 +969,17 @@ def main():
     # activation_inject experiment is later disabled.
     contexts = []
 
+    # H5: dedicated copyable session-id line. The fail-closed BLOCK for an
+    # ambiguous/unknown session asks for an explicit session_id; Neo needs its
+    # own sid in the context to be able to pass it. Independent of the
+    # activation_reinject experiment — the id line is emitted whenever this
+    # hook emits context.
+    if event in ("session_start", "user_prompt_submit") and session_id:
+        contexts.append(f"session_id={session_id}")
+
     # B3: nudge when mutating work since the last phase_close exceeds threshold.
     nudge = None
-    if event == "user_prompt_submit" and session_id:
+    if event == "user_prompt_submit" and session_id and _flag_value("hooks.session_extras"):
         nudge = _b3_nudge_text(ROOT, session_id)
 
     # B1: reinject activation preamble on session_start / user_prompt_submit.
@@ -921,8 +1000,14 @@ def main():
         contexts.append(nudge)
 
     # D-boot WARN channel: always injected on session_start inside the reinjection scope,
-    # regardless of the activation_inject experiment flag.
+    # regardless of the activation_inject experiment flag. A hard pre-activation
+    # failure (ok is False) is concatenated with the boot warn text: neo.md step 5
+    # mandates halt on failure, so the notice states the repair command without
+    # softening it.
     if event == "session_start" and pre_result and _activation_reinject_scope():
+        fail_text = _render_pre_activation_failure_text(pre_result)
+        if fail_text:
+            contexts.append(fail_text)
         warn_text = _render_boot_warn_text(pre_result.get("payload"))
         if warn_text:
             contexts.append(warn_text)

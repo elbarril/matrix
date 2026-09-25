@@ -1,0 +1,226 @@
+<!--
+  dashboard.html.tmpl — Template textual del dashboard de salud del harness.
+
+  NOTA AL PIE (leer antes de usar): este archivo NO es procesado por ningún
+  motor de reemplazo de placeholders en esta pasada. Es una referencia
+  textual: quien construya el próximo dashboard real toma este HTML,
+  reemplaza cada placeholder `{{dataset.campo}}` a mano (o con un `sed`/
+  script ad-hoc simple armado en ese momento futuro) usando los valores del
+  JSON producido por scripts/extract_metrics.py, y ajusta a mano el
+  posicionamiento/tamaño de los elementos SVG (anchos de barra, offsets de
+  arcos, etc.) que dependen de esos valores -- ese cálculo geométrico
+  tampoco está mecanizado acá. La notación de punto de los placeholders
+  (`commits_by_type.feat`, `checkpoints.total_lines`,
+  `validation_report.raw.ok`, etc.) es consistente con las claves del
+  contrato JSON documentado en contracts/metrics-schema.json y en el
+  SKILL.md de esta skill.
+
+  La sección de prioridades (§G) es contenido curado por Oracle/Neo, no una
+  métrica del contrato de datos -- queda como texto fijo, nunca como
+  placeholder.
+-->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Matrix · Dashboard del Harness · {{snapshot.generated_at_utc}}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d0d0d; color: #e6e6e6; font: 14px/1.6 system-ui, sans-serif; margin: 0; padding: 1.5rem 2rem; }
+  h1 { color: #00ff41; font-size: 1.6rem; margin-bottom: 0.3rem; }
+  h2 { color: #00ff41; font-size: 1.15rem; margin: 1.8rem 0 0.7rem 0; border-bottom: 1px solid #294333; padding-bottom: 0.3rem; }
+  h3 { color: #88cc88; font-size: 0.95rem; margin: 1rem 0 0.4rem 0; }
+  p, li { color: #a8b3aa; line-height: 1.55; }
+  a { color: #00ff41; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .executive { background: #111a14; border-left: 3px solid #00ff41; padding: 0.8rem 1rem; margin: 0.8rem 0 1.2rem 0; border-radius: 0 4px 4px 0; }
+  .executive p { color: #c8d0ca; font-size: 0.92rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 0.5rem; }
+  .card { background: #111a14; border: 1px solid #294333; border-radius: 6px; padding: 1rem 1.2rem; }
+  .card-full { grid-column: 1 / -1; }
+  .card h3 { margin-top: 0; }
+  svg text { font-family: system-ui, sans-serif; }
+  .label { fill: #a8b3aa; font-size: 11px; }
+  .value { fill: #e6e6e6; font-size: 11px; font-weight: 600; }
+  .bar-green { fill: #00ff41; }
+  .bar-red { fill: #ff4444; }
+  .bar-yellow { fill: #ffaa00; }
+  .bar-blue { fill: #4488ff; }
+  .bar-teal { fill: #00ccaa; }
+  .bar-purple { fill: #aa66ff; }
+  .bar-gray { fill: #666; }
+  .bar-orange { fill: #ff7733; }
+
+  /* Priority badges */
+  .prio-list { list-style: none; padding: 0; }
+  .prio-list li { padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; border-radius: 4px; display: flex; align-items: flex-start; gap: 0.7rem; }
+  .prio-alta { background: rgba(255,68,68,0.12); border-left: 4px solid #ff4444; }
+  .prio-media { background: rgba(255,170,0,0.12); border-left: 4px solid #ffaa00; }
+  .prio-baja { background: rgba(68,136,255,0.12); border-left: 4px solid #4488ff; }
+  .badge { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 3px; white-space: nowrap; flex-shrink: 0; margin-top: 0.15rem; }
+  .badge-alta { background: #ff4444; color: #fff; }
+  .badge-media-alta { background: #ff7733; color: #fff; }
+  .badge-media { background: #ffaa00; color: #111; }
+  .badge-baja { background: #4488ff; color: #fff; }
+  .prio-text { color: #c8d0ca; font-size: 0.88rem; }
+
+  /* Audit badge */
+  .audit-badge { display: inline-flex; align-items: center; gap: 0.6rem; background: rgba(255,68,68,0.15); border: 2px solid #ff4444; border-radius: 6px; padding: 0.6rem 1rem; margin: 0.5rem 0; }
+  .audit-dot { width: 18px; height: 18px; border-radius: 50%; background: #ff4444; box-shadow: 0 0 8px #ff4444; flex-shrink: 0; }
+  .audit-label { color: #ff6666; font-weight: 700; font-size: 0.95rem; }
+  .audit-detail { color: #a8b3aa; font-size: 0.82rem; margin-top: 0.3rem; }
+  .audit-detail code { background: #1a1a1a; padding: 0.1rem 0.35rem; border-radius: 3px; color: #ff8888; font-size: 0.8rem; }
+  .timestamp { color: #555; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+
+<h1>⬡ Matrix · Dashboard del Harness</h1>
+<p class="timestamp">Datos al {{snapshot.generated_at_utc}} (git {{snapshot.git_head}}) · Reporte completo: <a href="#">harness-functioning-report.md</a></p>
+
+<div class="executive">
+  <p>Resumen ejecutivo curado por Oracle/Neo para esta corrida -- no es un dataset del contrato, se redacta a mano en cada dashboard nuevo a partir de los números de abajo.</p>
+</div>
+
+<div class="grid">
+
+  <!-- ═══ A. Checkpoints ═══ -->
+  <div class="card card-full">
+    <h3>Checkpoints ({{checkpoints.total_lines}} totales)</h3>
+    <svg width="100%" height="120" viewBox="0 0 700 120" xmlns="http://www.w3.org/2000/svg">
+      <!--
+        checkpoints.by_agent puede venir {} (ver warnings del JSON) -- si
+        viene vacío, no hay barras por agente para dibujar; mostrar en su
+        lugar el total y first_ts/last_ts como texto.
+      -->
+      <text x="10" y="24" class="label" font-size="12">total_lines: {{checkpoints.total_lines}}</text>
+      <text x="10" y="46" class="label" font-size="11">first_ts: {{checkpoints.first_ts}}</text>
+      <text x="10" y="66" class="label" font-size="11">last_ts: {{checkpoints.last_ts}}</text>
+    </svg>
+  </div>
+
+  <!-- ═══ B. phase:close en activity_log.by_event_type ═══ -->
+  <div class="card">
+    <h3>phase:close en el ledger ({{activity_log.by_event_type.phase:close}} líneas)</h3>
+    <svg width="100%" height="180" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+      <!-- Radios/offsets de arco a calcular a mano contra
+           activity_log.by_event_type.phase:close y cualquier desglose
+           PASS/BLOCK que se derive por separado (no viene en el contrato
+           de datasets de arriba tal cual -- requiere inspección adicional
+           del contenido de esas líneas). -->
+      <circle cx="110" cy="85" r="60" fill="none" stroke="#222" stroke-width="22"/>
+      <text x="110" y="82" text-anchor="middle" fill="#e6e6e6" font-size="16" font-weight="700">{{activity_log.by_event_type.phase:close}}</text>
+      <text x="110" y="97" text-anchor="middle" fill="#888" font-size="10">totales</text>
+    </svg>
+  </div>
+
+  <!-- ═══ C. Lecciones ═══ -->
+  <div class="card">
+    <h3>Zion Archive — Lecciones ({{lessons.total_count}} entradas, última #{{lessons.last_lesson_number}})</h3>
+    <svg width="100%" height="120" viewBox="0 0 320 120" xmlns="http://www.w3.org/2000/svg">
+      <text x="10" y="28" class="label" font-size="12">{{lessons.total_count}} entradas numeradas (última: #{{lessons.last_lesson_number}})</text>
+    </svg>
+  </div>
+
+  <!-- ═══ D. Commits por prefijo ═══ -->
+  <div class="card">
+    <h3>Commits por prefijo ({{commits_by_type._total}} totales)</h3>
+    <svg width="100%" height="175" viewBox="0 0 320 175" xmlns="http://www.w3.org/2000/svg">
+      <!-- ancho de barra a calcular a mano: val/max * 180 -->
+      <text x="65" y="22" text-anchor="end" class="label">feat</text>
+      <rect x="70" y="12" width="180" height="16" rx="2" class="bar-green" opacity="0.85"/>
+      <text x="255" y="24" class="value">{{commits_by_type.feat}}</text>
+
+      <text x="65" y="47" text-anchor="end" class="label">sin-prefijo</text>
+      <rect x="70" y="37" width="108" height="16" rx="2" class="bar-gray" opacity="0.7"/>
+      <text x="183" y="49" class="value">{{commits_by_type.other}}</text>
+
+      <text x="65" y="72" text-anchor="end" class="label">docs</text>
+      <rect x="70" y="62" width="72" height="16" rx="2" class="bar-blue" opacity="0.85"/>
+      <text x="147" y="74" class="value">{{commits_by_type.docs}}</text>
+
+      <text x="65" y="97" text-anchor="end" class="label">chore</text>
+      <rect x="70" y="87" width="81" height="16" rx="2" class="bar-purple" opacity="0.85"/>
+      <text x="156" y="99" class="value">{{commits_by_type.chore}}</text>
+
+      <text x="65" y="122" text-anchor="end" class="label">fix</text>
+      <rect x="70" y="112" width="45" height="16" rx="2" class="bar-red" opacity="0.7"/>
+      <text x="120" y="124" class="value">{{commits_by_type.fix}}</text>
+
+      <text x="65" y="147" text-anchor="end" class="label">refactor</text>
+      <rect x="70" y="137" width="36" height="16" rx="2" class="bar-orange" opacity="0.85"/>
+      <text x="111" y="149" class="value">{{commits_by_type.refactor}}</text>
+    </svg>
+  </div>
+
+  <!-- ═══ E. Fricción operativa: orphan vs routing ═══ -->
+  <div class="card">
+    <h3>Señales de fricción operativa</h3>
+    <svg width="100%" height="140" viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg">
+      <!-- orphan_close_attempts.total_lines vs routing_signal_history.total_lines -->
+      <text x="130" y="48" text-anchor="end" class="label">orphan-close</text>
+      <rect x="135" y="36" width="148" height="22" rx="3" class="bar-red" opacity="0.8"/>
+      <text x="288" y="52" class="value">{{orphan_close_attempts.total_lines}}</text>
+
+      <text x="130" y="82" text-anchor="end" class="label">routing-signal</text>
+      <rect x="135" y="70" width="36" height="22" rx="3" class="bar-yellow" opacity="0.8"/>
+      <text x="176" y="86" class="value">{{routing_signal_history.total_lines}}</text>
+
+      <text x="135" y="115" class="label" font-size="10">{{routing_signal_history.note}}</text>
+    </svg>
+  </div>
+
+  <!-- ═══ F. Estado del último post_run_audit (validation_report) ═══ -->
+  <div class="card">
+    <h3>Último post_run_audit (muestra puntual)</h3>
+    <div class="audit-badge">
+      <div class="audit-dot"></div>
+      <div>
+        <div class="audit-label">ok: {{validation_report.raw.ok}} — bypass_suspected: {{validation_report.raw.bypass_suspected}}</div>
+      </div>
+    </div>
+    <div class="audit-detail">
+      <p><strong>Sesión:</strong> <code>{{validation_report.raw.session_id}}</code> · <strong>Agente:</strong> {{validation_report.raw.agent}}</p>
+      <p><strong>missing:</strong> <code>{{validation_report.raw.missing}}</code></p>
+      <p><strong>compliant:</strong> <code>{{validation_report.raw.compliant}}</code></p>
+      <p style="margin-top:0.4rem; color:#777; font-size:0.78rem;">Timestamp: {{validation_report.raw.timestamp}} · Es una sola muestra puntual, no una serie histórica.</p>
+    </div>
+  </div>
+
+  <!-- ═══ G. Prioridades — TEXTO FIJO, no placeholder (contenido curado por Oracle/Neo, no una métrica del contrato) ═══ -->
+  <div class="card card-full">
+    <h3>Recomendaciones priorizadas</h3>
+    <ol class="prio-list">
+      <li class="prio-alta">
+        <span class="badge badge-alta">ALTA</span>
+        <span class="prio-text"><strong>1.</strong> [Reemplazar a mano por Oracle/Neo en cada corrida: la recomendación de mayor urgencia detectada en esta ronda de métricas.]</span>
+      </li>
+      <li class="prio-alta">
+        <span class="badge badge-alta">ALTA</span>
+        <span class="prio-text"><strong>2.</strong> [Ídem — segunda recomendación de alta prioridad.]</span>
+      </li>
+      <li class="prio-alta">
+        <span class="badge badge-media-alta">MEDIA-ALTA</span>
+        <span class="prio-text"><strong>3.</strong> [Ídem — tercera recomendación.]</span>
+      </li>
+      <li class="prio-media">
+        <span class="badge badge-media">MEDIA</span>
+        <span class="prio-text"><strong>4.</strong> [Ídem — cuarta recomendación.]</span>
+      </li>
+      <li class="prio-media">
+        <span class="badge badge-media">MEDIA</span>
+        <span class="prio-text"><strong>5.</strong> [Ídem — quinta recomendación.]</span>
+      </li>
+      <li class="prio-baja">
+        <span class="badge badge-baja">BAJA</span>
+        <span class="prio-text"><strong>6.</strong> [Ídem — sexta recomendación, baja urgencia.]</span>
+      </li>
+    </ol>
+  </div>
+
+</div><!-- .grid -->
+
+<p style="margin-top:2rem; color:#444; font-size:0.75rem;">Dashboard autocontenido · Sin dependencias externas · Generado para el proyecto Matrix · {{snapshot.generated_at_utc}}</p>
+
+</body>
+</html>

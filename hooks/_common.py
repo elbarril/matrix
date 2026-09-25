@@ -14,6 +14,21 @@ import sys
 import time
 
 
+# Roster + supporting agents — single owner in the kernel. Moved here from
+# pre_activation_check to break the pre_activation_check <-> install_integrity
+# import cycle (G3 S2); both hooks import these names.
+ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith"]
+
+# Infrastructure agents that deliberately live as installable subagent files in
+# brain/agents/ but are NOT subject to roster discipline (see
+# brain/data/contract-catalog.md "Supporting cast" — retire-one-to-add-one
+# applies only to ROSTER above).
+# docs/SYSTEM_TRUTH.md lists these alongside the roster with their own description.
+# Add a name here ONLY if brain/data/contract-catalog.md already documents it as
+# supporting-cast infrastructure — never to silently permit an undocumented new file.
+SUPPORTING_AGENTS = ["lock"]
+
+
 def resolve_root():
     """Resolve the Matrix root: $MATRIX_ROOT, else walk up to brain/ + AGENTS.md."""
     env = os.environ.get("MATRIX_ROOT")
@@ -83,11 +98,284 @@ def read_input():
         return {}
 
 
-def current_session_id(root=None):
-    """Return the synthetic session id from the marker file, or None."""
-    if root is None:
-        root = resolve_root()
-    marker = os.path.join(root, "brain", "state", ".current-hook-session")
+# --- Session identity bindings (D1/A0) ------------------------------------
+# Single owner for the binding schema, path and TTL in Layer 1. The adapter
+# (adapters/devin/hooks/session_audit.py) imports these helpers; the path is
+# never duplicated. `brain/state/sessions/<sid>.json` is owned by `matrix
+# focus` (bin/lib/registry.sh), so the liveness binding lives at
+# `brain/state/sessions/<sid>-binding.json` — no collision.
+SESSION_BINDING_DIR = os.path.join("brain", "state", "sessions")
+SESSION_BINDING_SUFFIX = "-binding.json"
+SESSION_BINDING_DEFAULT_TTL_S = 900
+SESSION_BINDING_HEARTBEAT_INTERVAL_S = 60
+SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
+
+# --- Session artifact pruning (G3 S4) --------------------------------------
+# TTL per artifact type in brain/state/sessions/. "Alive" means the sid has a
+# fresh liveness binding (<SESSION_BINDING_TTL), which touch_session_binding
+# refreshes on every post_tool_use. The TTLs are generous by design: pruning
+# only touches files whose session is long dead, never a working one.
+SESSION_ARTIFACT_TTL_DAYS = {
+    "post-tool-count": 14,
+    "user-prompt-count": 14,
+    "plain-sid": 14,
+    "validation-report": 30,
+    "phase-close-nudge": 7,
+}
+# All prunable kinds except the liveness binding. The sid must be resolved
+# BEFORE these are pruned so the current session's own focus survives (the
+# plain-sid rule needs current_sid); see current_session_id.
+SESSION_ARTIFACT_NON_BINDING_KINDS = frozenset(SESSION_ARTIFACT_TTL_DAYS)
+# Known per-session artifact suffixes. user-prompt-count is classified here so
+# it never falls through to plain-sid; it has a TTL entry (14 d, same "alive"
+# rule as post-tool-count: age + no fresh binding — it is an O(1) counter, and
+# its only reader (activation reinject_full) is off; the adapter rebuilds it
+# from hook-audit.jsonl via _user_prompt_submit_count).
+SESSION_ARTIFACT_SUFFIXES = {
+    "binding": "-binding.json",
+    "post-tool-count": "-post-tool-count.json",
+    "user-prompt-count": "-user-prompt-count.json",
+    "validation-report": "-validation-report.json",
+    "phase-close-nudge": "-phase-close-nudge.json",
+}
+
+
+def _session_binding_ttl_s():
+    return int(os.environ.get("MATRIX_SESSION_BINDING_TTL_S", SESSION_BINDING_DEFAULT_TTL_S))
+
+
+def session_binding_path(root, session_id):
+    return os.path.join(root, SESSION_BINDING_DIR, f"{session_id}{SESSION_BINDING_SUFFIX}")
+
+
+def _session_binding_paths(root):
+    directory = os.path.join(root, SESSION_BINDING_DIR)
+    if not os.path.isdir(directory):
+        return []
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return []
+    return [
+        os.path.join(directory, name)
+        for name in names
+        if name.endswith(SESSION_BINDING_SUFFIX)
+    ]
+
+
+def read_binding(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _write_binding(path, data):
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
+        return True
+    except OSError:
+        return False
+
+
+def _binding_now_iso():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def _binding_fresh(binding):
+    """True when the binding's last_seen_at is within TTL of now."""
+    ts = _parse_iso_ts(binding.get("last_seen_at"))
+    if ts is None:
+        return False
+    now = datetime.datetime.now().astimezone()
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=now.tzinfo)
+    return (now - ts).total_seconds() <= _session_binding_ttl_s()
+
+
+def _classify_session_artifact(name):
+    """Classify a brain/state/sessions filename as (kind, sid) or (None, None)."""
+    if name.startswith(".") or not name.endswith(".json"):
+        return None, None
+    for kind, suffix in SESSION_ARTIFACT_SUFFIXES.items():
+        if name.endswith(suffix):
+            return kind, name[: -len(suffix)]
+    return "plain-sid", name[: -len(".json")]
+
+
+def prune_session_artifacts(root, current_sid=None, dry_run=False, kinds=None):
+    """Generalized TTL pruning of brain/state/sessions artifacts (G3 S4).
+
+    Extends the binding-prune precedent (2*TTL) to every session artifact type:
+
+      binding           age > 2*TTL (unchanged)                       never a fresh binding
+      post-tool-count   14 d and no fresh binding for the sid        never an alive sid
+      plain-sid (focus) 14 d and no fresh binding for the sid        never an alive sid, never current sid
+      validation-report 30 d and no fresh binding for the sid        never an alive sid
+      phase-close-nudge 7 d                                          always prunable past TTL
+
+    kinds restricts which artifact kinds are considered (None = all). The
+    caller owns the ordering: bindings may be pruned before the current sid is
+    known (they are protected by freshness only), but NON-binding kinds must
+    only be pruned once current_sid is resolved, or the current session's own
+    focus/counter would be deleted (see current_session_id).
+
+    "Alive" = the sid has a fresh liveness binding (touch_session_binding
+    refreshes it on every post_tool_use). Pruning is best-effort and never a
+    correctness requirement — the readers already ignore stale files, so a
+    failed prune only accumulates disk until the next success.
+
+    Every removed path is logged to the Link ledger as prune:session-artifact
+    via ledger_append (the kernel is the only writer; hooks never touch
+    activity.log directly). dry_run lists the candidates without removing or
+    logging anything.
+
+    Race (accepted, cosmetic — see hooks-design-hardening-g3-review.md §3):
+    pruning also runs at session_start. A session resumed after 14+ days has no
+    fresh binding in that instant, so its own session_start — or any concurrent
+    session's prune — can remove its counter/validation-report. Focus and
+    counter are rebuildable (the counter rebuilds from hook-audit.jsonl); the
+    plain-sid rule additionally protects the focus whose sid == the current
+    session. Covered by the S4 E2E.
+
+    Returns a list of removed {path, kind, sid, age_days} records.
+    """
+    if kinds is not None:
+        kinds = set(kinds)
+    directory = os.path.join(root, SESSION_BINDING_DIR)
+    if not os.path.isdir(directory):
+        return []
+    now = datetime.datetime.now().astimezone()
+    alive = set()
+    if kinds is None or any(k != "binding" for k in kinds):
+        for bp in _session_binding_paths(root):
+            binding = read_binding(bp)
+            if binding and _binding_fresh(binding):
+                sid = binding.get("session_id")
+                if sid:
+                    alive.add(sid)
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return []
+    removed = []
+    for name in names:
+        kind, sid = _classify_session_artifact(name)
+        if kind is None:
+            continue
+        if kinds is not None and kind not in kinds:
+            continue
+        path = os.path.join(directory, name)
+        if kind == "binding":
+            binding = read_binding(path)
+            if binding is None:
+                continue
+            ts = _parse_iso_ts(binding.get("last_seen_at"))
+            if ts is None:
+                continue
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=now.tzinfo)
+            age_days = (now - ts).total_seconds() / 86400.0
+            if age_days <= 2 * _session_binding_ttl_s() / 86400.0:
+                continue
+        else:
+            ttl_days = SESSION_ARTIFACT_TTL_DAYS.get(kind)
+            if ttl_days is None:
+                continue
+            try:
+                age_days = (now.timestamp() - os.path.getmtime(path)) / 86400.0
+            except OSError:
+                continue
+            if age_days <= ttl_days:
+                continue
+            if kind != "phase-close-nudge":
+                if sid in alive:
+                    continue
+                if kind == "plain-sid" and current_sid and sid == current_sid:
+                    continue
+        if not dry_run:
+            try:
+                os.remove(path)
+            except OSError:
+                continue
+            ledger_append(
+                root,
+                "prune:session-artifact",
+                sid or "matrix",
+                f"path={os.path.relpath(path, root)} | kind={kind} | age_days={age_days:.1f}",
+                session_id=sid,
+            )
+        removed.append({
+            "path": path,
+            "kind": kind,
+            "sid": sid,
+            "age_days": round(age_days, 2),
+        })
+    return removed
+
+
+def write_session_binding(root, session_id, project_active=None):
+    """Create/refresh the liveness binding for a session (session_start).
+
+    Best-effort: a failed write never blocks the session. Prunes stale
+    bindings on the way in (hygiene, not correctness).
+    """
+    if not session_id:
+        return
+    prune_session_artifacts(root, current_sid=session_id)
+    path = session_binding_path(root, session_id)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    except OSError:
+        return
+    now = _binding_now_iso()
+    _write_binding(path, {
+        "session_id": session_id,
+        "started_at": now,
+        "project_active": project_active,
+        "last_seen_at": now,
+    })
+
+
+def touch_session_binding(root, session_id):
+    """Refresh last_seen_at, throttled to HEARTBEAT_INTERVAL_S.
+
+    A busy session (every post_tool_use) must not rewrite the binding on every
+    tool call. Best-effort.
+    """
+    if not session_id:
+        return
+    path = session_binding_path(root, session_id)
+    existing = read_binding(path)
+    if existing is None:
+        write_session_binding(root, session_id)
+        return
+    ts = _parse_iso_ts(existing.get("last_seen_at"))
+    now = datetime.datetime.now().astimezone()
+    if ts is not None:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=now.tzinfo)
+        if (now - ts).total_seconds() < SESSION_BINDING_HEARTBEAT_INTERVAL_S:
+            return
+    existing["last_seen_at"] = _binding_now_iso()
+    _write_binding(path, existing)
+
+
+def remove_session_binding(root, session_id):
+    """Remove the liveness binding (session_end). Best-effort."""
+    if not session_id:
+        return
+    try:
+        os.remove(session_binding_path(root, session_id))
+    except OSError:
+        pass
+
+
+def _marker_session_id(root):
+    marker = os.path.join(root, SESSION_MARKER)
     if not os.path.isfile(marker):
         return None
     try:
@@ -96,6 +384,45 @@ def current_session_id(root=None):
         return sid or None
     except OSError:
         return None
+
+
+def current_session_id(root=None, session_id=None):
+    """Resolve the current session id fail-closed (D1/A0).
+
+    Order (strict):
+      1. explicit session_id (payload/env MATRIX_SESSION_ID) -> always wins;
+      2. 0 binding files -> legacy marker (.current-hook-session);
+      3. exactly 1 binding file and fresh (now - last_seen_at <= TTL) -> it;
+      4. any other case (2+ files, or 1 stale) -> None (ambiguous/unknown).
+    None means the caller should BLOCK and ask for an explicit session_id.
+    "Active" is derived from last_seen_at at read time, never from the file's
+    existence; never resolve to "the only active one" — that reopens the race.
+    """
+    if session_id:
+        return session_id
+    env_sid = os.environ.get("MATRIX_SESSION_ID", "").strip()
+    if env_sid:
+        return env_sid
+    if root is None:
+        root = resolve_root()
+    # Prune order matters: a stale binding must NOT count as the current
+    # session, so stale bindings are pruned BEFORE resolution — but the current
+    # sid is only known after resolution. Therefore non-binding kinds are
+    # pruned AFTER the sid resolves, passing it as current_sid so the current
+    # session's own focus survives even when resumed after 14+ days (no fresh
+    # binding yet). Fix verified 2026-09-25 (Smith BLOCK, S4 hand-back).
+    prune_session_artifacts(root, kinds={"binding"})
+    paths = _session_binding_paths(root)
+    resolved = None
+    if not paths:
+        resolved = _marker_session_id(root)
+    elif len(paths) == 1:
+        binding = read_binding(paths[0])
+        candidate = binding.get("session_id") if binding else None
+        if candidate and _binding_fresh(binding):
+            resolved = candidate
+    prune_session_artifacts(root, current_sid=resolved, kinds=SESSION_ARTIFACT_NON_BINDING_KINDS)
+    return resolved
 
 
 def _load_registry(root):
@@ -120,14 +447,37 @@ def _registry_project(registry, name):
     return None
 
 
-def _load_yaml(path):
-    """Load a YAML file, falling back to empty dict if yaml is unavailable."""
+class LoadYamlError(Exception):
+    """A YAML file exists but could not be read/parsed (lesson 71).
+
+    Never raised by load_yaml_strict — it is returned as the error half of the
+    (data, error) contract so callers decide fatal vs non-fatal.
+    """
+
+
+def load_yaml_strict(path):
+    """Load a YAML file with a typed, return-based failure contract.
+
+    Never raises (lesson 71). Returns (data, None) when the file reads and
+    parses (data is {} for an empty document), or (None, LoadYamlError) when
+    it cannot. The error carries the real diagnostic (exception type + message
+    + sys.executable + sys.path), mirroring adapters/_adapter_meta.py — never a
+    silent {} that is indistinguishable from "no hay nada".
+    """
     try:
         import yaml
+    except Exception as exc:
+        return None, LoadYamlError(
+            f"PyYAML import failed: {type(exc).__name__}: {exc}"
+        )
+    try:
         with open(path, encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except Exception:
-        return {}
+            data = yaml.safe_load(fh)
+    except Exception as exc:
+        return None, LoadYamlError(
+            f"{type(exc).__name__}: {exc} | sys.executable={sys.executable} | sys.path[0:5]={sys.path[:5]}"
+        )
+    return (data if data is not None else {}), None
 
 
 def resolve_bound_target(project_name, root=None):
@@ -174,7 +524,7 @@ def _is_state_path(root, raw_path):
     return norm == "brain/state" or norm.startswith("brain/state/")
 
 
-def _has_mutating_work(entries, root):
+def has_mutating_work(entries, root):
     """Return True if any post_tool_use mutating tool touches a path outside brain/state."""
     for entry in entries:
         if entry.get("event") != "post_tool_use":
@@ -203,6 +553,31 @@ def _parse_iso_ts(ts):
         return datetime.datetime.fromisoformat(ts)
     except ValueError:
         return None
+
+
+def ledger_append(root, event, subject, detail, session_id=None):
+    """Append one event line to the Link ledger (brain/state/activity.log).
+
+    Kernel-side append mirroring the `matrix link` line format so
+    ledger_tail_events and `matrix link --validate` parse it. Hooks must use
+    this helper (or `bin/matrix link`) to touch the ledger — never write
+    activity.log by hand. Returns True on success, False on OSError.
+    """
+    detail = re.sub(r"[\r\n]+", " ", str(detail))
+    if session_id and not re.search(r"(^|\s)session_id=\S+\s*$", detail):
+        detail = f"{detail} session_id={session_id}"
+    line = (
+        f"{datetime.datetime.now().astimezone().isoformat(timespec='seconds')}"
+        f" | {event:<12} | {subject:<16} | {detail}"
+    )
+    path = os.path.join(root, "brain", "state", "activity.log")
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+        return True
+    except OSError:
+        return False
 
 
 def ledger_tail_events(root, max_bytes=256 * 1024):

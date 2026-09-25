@@ -34,7 +34,7 @@ from collections import Counter
 
 from _common import current_session_id, emit, ledger_tail_events, read_input, resolve_root
 from validate_routing_signal import (
-    count_unresolved_sessions,
+    count_consecutive_unresolved_sessions,
     validate as validate_routing_signal,
 )
 
@@ -83,8 +83,9 @@ def _routing_escalation_warns(root, session_id):
 
     Warns only when the current session is actually triggered (recomputed via
     validate_routing_signal, which never writes history here) and at least 2
-    prior sessions are unresolved in history (last state per session wins,
-    current excluded). Without a session_id, another session is never accused.
+    consecutive unresolved sessions immediately before the current (last state
+    per session wins, current excluded). Without a session_id, another session
+    is never accused.
     """
     if not session_id:
         return []
@@ -100,17 +101,17 @@ def _routing_escalation_warns(root, session_id):
         current_triggered = False
     if not current_triggered:
         return []
-    prior, _ = count_unresolved_sessions(
+    streak, _ = count_consecutive_unresolved_sessions(
         os.path.join(root, HISTORY_LOG), exclude_session_id=session_id
     )
-    if prior < 2:
+    if streak < 2:
         return []
     return [
         {
             "source": "routing_signal_escalation",
             "detail": (
                 f"routing-signal: escalada detectada (sesión {session_id}, "
-                f"prior={prior}) — revisar delegación a Trinity/Smith/Architect."
+                f"racha={streak}) — revisar delegación a Trinity/Smith/Architect."
             ),
         }
     ]
@@ -178,6 +179,11 @@ def main():
         session_id = (sid_raw or "").strip() or None
     if not session_id:
         session_id = current_session_id(root)
+        if not session_id:
+            errors.append(
+                "sesión ambigua o desconocida — pasá session_id explícito "
+                "(el session_id=<sid> del contexto de activación)"
+            )
 
     if phase_ok and phase not in VALID_PHASES:
         errors.append(

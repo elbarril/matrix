@@ -34,7 +34,8 @@ NATIVE_EDIT_TOOLS = {"edit", "write", "multi_edit"}
 # Shared-surface constants (spec Q2-D section 1.a). Done-criteria grep these
 # verbatim.
 SHARED_SURFACE_EXACT = ("AGENTS.md", "DEVIN.md", "brain/data/lessons.md",
-                        "brain/data/capability-map.md")
+                        "brain/data/capability-map.md",
+                        "brain/data/activation-preamble.tmpl")
 SHARED_SURFACE_GLOBS = ("brain/agents/*.md",)
 SHARED_SURFACE_PREFIXES = ("hooks/", "bin/", "adapters/")
 PROJECT_LESSON_PREFIX = "brain/data/lessons/"
@@ -407,6 +408,18 @@ def _run_shared_surface_guard(tool_name, tool_input, session_id):
     if not _flag_value("gate.shared_surface"):
         print(json.dumps({"decision": "allow"}, ensure_ascii=False))
         sys.exit(0)
+
+    # D1 fail-closed: an ambiguous/unknown session must not take a writer lane
+    # under a null holder (two ambiguous sessions could otherwise interleave as
+    # reentrant). Block and ask for an explicit session_id.
+    if session_id is None:
+        _block(
+            "shared-surface write blocked: sesión ambigua o desconocida — "
+            "pasá session_id explícito",
+            "shared_surface_block:no-session-id",
+            None,
+            tool_name,
+        )
 
     mode, project = _resolve_mode()
     if mode is None:

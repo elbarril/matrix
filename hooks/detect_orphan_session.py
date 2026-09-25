@@ -23,7 +23,7 @@ import os
 import subprocess
 import sys
 
-from _common import emit, read_input, resolve_root
+from _common import emit, read_binding, read_input, resolve_root, session_binding_path
 
 # Staleness threshold. Chosen generous enough to avoid closing genuinely
 # concurrent sessions in crash-loop bursts while still catching real orphans.
@@ -146,6 +146,16 @@ def main():
             p = e.get("project_active")
             if p is not None:
                 session_project = p
+
+        # Liveness also comes from the D1 binding (touch_session_binding keeps
+        # last_seen_at fresh on every post_tool_use, including read-only tools
+        # that no longer append to hook-audit.jsonl). Without this a read-heavy
+        # open session could look stale and be async-closed as an orphan.
+        binding = read_binding(session_binding_path(root, sid))
+        if binding:
+            bts = _parse_ts(binding.get("last_seen_at"))
+            if bts and (last_ts is None or bts > last_ts):
+                last_ts = bts
 
         if last_ts is None:
             continue

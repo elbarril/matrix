@@ -13,7 +13,7 @@ import json
 import os
 import subprocess
 
-from _common import _has_mutating_work, current_session_id, emit, read_input, resolve_root
+from _common import current_session_id, emit, has_mutating_work, read_input, resolve_root
 
 
 AUDIT_LOG = "hook-audit.jsonl"
@@ -59,7 +59,10 @@ def _derive_steps(entries):
         event = entry.get("event")
         if event and event not in steps:
             steps.append(event)
-        if event == "session_start" and entry.get("pre_activation_check_ok") is True:
+        if event == "session_start" and (
+            entry.get("pre_activation_check_ok") is True
+            or entry.get("pre_activation_check_status") in ("ok", "failed", "timeout", "error")
+        ):
             if "pre_activation_check" not in steps:
                 steps.append("pre_activation_check")
     return steps
@@ -148,6 +151,14 @@ def main():
     session_id = data.get("session_id") if data else None
     if not session_id:
         session_id = current_session_id()
+    if not session_id:
+        emit({
+            "hook": "session_close",
+            "ok": False,
+            "session_id": None,
+            "errors": ["sesión ambigua o desconocida — pasá session_id explícito"],
+        })
+        return
 
     log_path = os.path.join(root, "brain", "state", AUDIT_LOG)
     entries = _read_audit_log(log_path)
@@ -158,13 +169,13 @@ def main():
     start_status = _session_start_status(filtered)
     if start_status == "disabled":
         required = [s for s in required if s != "pre_activation_check"]
-    has_mutating_work = _has_mutating_work(filtered, root)
-    if has_mutating_work:
+    mutating_work = has_mutating_work(filtered, root)
+    if mutating_work:
         required.append("phase_close")
-    phase_close_missing = has_mutating_work and "phase_close" not in steps
+    phase_close_missing = mutating_work and "phase_close" not in steps
 
     validate_routing_signal_report = _run_validate_routing_signal_check(root, session_id)
-    smith_gate_required = has_mutating_work and validate_routing_signal_report.get("triggered") is True
+    smith_gate_required = mutating_work and validate_routing_signal_report.get("triggered") is True
     if smith_gate_required:
         required.append("smith_gate")
 
@@ -179,6 +190,8 @@ def main():
         "session_end_seen": "session_end" in steps,
         "steps_seen": steps,
         "entries_examined": len(filtered),
+        "pre_activation_check_status": start_status,
+        "pre_activation_check_failed": start_status in ("failed", "timeout", "error"),
         "validation": post_report,
         "validate_routing_signal_check": validate_routing_signal_report,
     }

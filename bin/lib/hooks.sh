@@ -263,7 +263,6 @@ phase_close() {
 
     subject="$(resolve_scope_project || true)"
     subject="${subject:-matrix}"
-    link_append "phase:close" "$subject" "$verdict | phase=${phase} | ${detail}"
 
     local sid="" sid_kind
     sid_kind="$(printf '%s' "$payload" | jq -r 'if has("session_id") then (.session_id | type) else "absent" end' 2>/dev/null || echo absent)"
@@ -272,6 +271,7 @@ phase_close() {
     elif [[ "$sid_kind" == "absent" ]]; then
         sid="$(current_session_id || true)"
     fi
+    MATRIX_SESSION_ID="${sid:-}" link_append "phase:close" "$subject" "$verdict | phase=${phase} | ${detail}"
     if [[ -n "$sid" ]]; then
         local audit_event_name audit_json
         if [[ "$verdict" == "PASS" ]]; then
@@ -355,17 +355,23 @@ session_close() {
     local out="" rc=0
     out="$(run_hook session_close "$payload")" || rc=$?
 
-    local sid ok phase_close_missing detail subject
+    local sid ok phase_close_missing precheck detail subject
     sid="$(printf '%s' "$out"     | jq -r '.session_id // ""' 2>/dev/null || true)"
     ok="$(printf '%s' "$out"      | jq -r '.ok // false' 2>/dev/null || echo false)"
     phase_close_missing="$(printf '%s' "$out" | jq -r '.phase_close_missing // false' 2>/dev/null || echo false)"
+    precheck="$(printf '%s' "$out" | jq -r '.pre_activation_check_status // ""' 2>/dev/null || true)"
 
     subject="$sid"
     [[ -z "$subject" || "$subject" == "null" ]] && subject="matrix"
     detail="ok=${ok}"
     [[ "$phase_close_missing" == "true" ]] && detail="${detail} | missing=phase_close"
+    # A failed pre-activation check is surfaced in the ledger even though it no
+    # longer blocks session_close; ok/disabled/absent stay out of detail.
+    if [[ "$precheck" == "failed" || "$precheck" == "timeout" || "$precheck" == "error" ]]; then
+        detail="${detail} | precheck=${precheck}"
+    fi
 
-    link_append "session:close" "$subject" "$detail"
+    MATRIX_SESSION_ID="${sid:-}" link_append "session:close" "$subject" "$detail"
 
     printf '%s\n' "$out"
     return $rc

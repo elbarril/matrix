@@ -4,11 +4,15 @@ Matrix is your personal intelligence layer: one root repo holds the brain, proje
 
 > Themed after the Matrix trilogy. Every component is named after the character or place whose function it mirrors. See [`AGENTS.md`](AGENTS.md) for the canonical contract.
 
+¿Primera vez acá? Abrí [`onboarding.html`](onboarding.html) para un paseo mínimo de 2 minutos, o seguí leyendo esta guía.
+
 ---
 
 ## Empezá acá si no sabés mucho de agentes IA
 
 Esta sección explica todo el sistema en criollo, sin asumir que sabés cómo trabajan los agentes de IA. Si ya lo tenés claro, saltá a [El problema que resuelve Matrix](#el-problema-que-resuelve-matrix).
+
+¿Querés instalarlo en otra máquina/cuenta? Seguí la guía paso a paso en [`INSTALL.md`](INSTALL.md).
 
 ### ¿Qué es un "agente de IA" en este contexto?
 
@@ -30,10 +34,10 @@ Matrix es un cerebro persistente y compartido que le da a Devin CLI memoria, reg
 
 ### ¿Quién hace qué? (el equipo, en criollo)
 
-No hay un solo "modelo" haciendo todo. Matrix reparte el trabajo entre roles con un propósito claro, para que cada tarea la resuelva quien mejor la sabe hacer:
+No hay un solo rol haciendo todo. Matrix reparte el trabajo entre roles con un propósito claro, para que cada tarea la resuelva quien mejor la sabe hacer:
 
 | Quién | Qué hace, en criollo |
-|---|---|
+| --- | --- |
 | **Neo** | Es con quien vos hablás siempre. Entiende el pedido y decide si lo resuelve él mismo (algo chico) o si llama a un especialista (trabajo real). |
 | **The Oracle** | El investigador. Lo llamás (indirectamente, vía Neo) cuando hace falta averiguar algo, comparar opciones, o confirmar hechos antes de actuar. |
 | **Morpheus** | El planificador. Convierte un pedido ambiguo ("quiero que el sistema soporte X") en una lista ordenada de pasos concretos. |
@@ -108,7 +112,7 @@ There is no dedicated git/ops specialist: Neo handles explicitly-requested branc
 - **The Construct** — cost & context optimization (semantic code-nav, model selection, artifact delegation, resume checkpoints).
 - **The Trainman** — the CLI adapter layer + `bin/matrix build`.
 - **Commander Lock** — the unattended/cockpit guardrail (validates the autonomous prompt, hard FS rules, fail-loud).
-- **The Hardline** — opt-in multi-channel/AFK daemon (reacts to external events, zero tokens on idle).
+- **The Hardline** — opt-in multi-channel/AFK daemon (reacts to external events, zero tokens on idle; `hardline resume` recovery pending Layer 3).
 - **The Source** — `docs/SYSTEM_TRUTH.md`, a generated-and-validated single source of truth.
 - **The fleet** — federated subsystems are ships (`brain/subsystems/<ship>/`) with their own master and contract. Core vessel: **Nebuchadnezzar**; example research ship: **Logos** (captain Niobe).
 
@@ -117,11 +121,12 @@ There is no dedicated git/ops specialist: Neo handles explicitly-requested branc
 ```text
 matrix/
 ├── AGENTS.md                  # canonical contract (Layer 2)
-├── README.md                  # this file
+├── README.md                  # this file (guía completa)
+├── onboarding.html            # onboarding visual mínimo (empezá acá)
 ├── DEVIN.md                   # Devin adapter notes
 ├── .registry.json             # all known projects
 ├── bin/matrix                 # CLI orchestrator (Layer 1)
-├── hooks/                     # Seraph — portable enforcement (python)
+├── hooks/                     # Seraph — portable enforcement (python); canonical trio + ~20 more:
 │   ├── pre_activation_check.py
 │   ├── validate_phase_close.py
 │   └── post_run_audit.py
@@ -141,32 +146,46 @@ Work artifacts for a **registered project** are written to `brain/output/<projec
 
 ## CLI commands
 
+El listado canónico es `bin/matrix help` (o `bin/matrix` sin argumentos). Resumen por categoría:
+
 ```text
-list                      List registered projects
-add <name> [path]         Register a project
-select <name>             Activate a project: warm it + set the adapter target +
-                           create the output dirs (+ clone if remote). Writes
-                           NOTHING inside the project.
-deselect <name>           Clean legacy artifacts (migrate-nobind) + unwork
-work <name>               Warm a project into the active set (bookmark)
-unwork <name>             Remove a project from the warm set
-bindings [--warm-only]    List registered projects with warm status (and any
-                           legacy artifacts still present)
-migrate-nobind [<name>|--all] [--dry-run]  Remove legacy _brain/AGENTS.local.md/
-                           exclude blocks left by the old binding system
-flags [--json|--validate] Show the feature flags (state, source, risk);
-                           --validate exits 1 if any flag is inert/dangerous
-scope [--tree [--json]]   Show current mode/project, or the project memory chain
-status [--all]            Show known/warm counts, registered count, recent
-                           checkpoints and Link events — scoped to the resolved
-                           project chain by default; --all for the cross-project view
-checkpoint "<note>"       Write a checkpoint (+ Link entry)
-activity [n] [--all] [--project=<name>]   Show last n Link events, scoped to the
-                           resolved project chain by default (default n=20)
-hooks <name> [json]       Run a Seraph hook
-build --target=<cli>      Trainman: generate native CLI artifacts
-install --target=<cli>    Trainman: deploy generated artifacts into the CLI's discovery path
-help                      Usage
+Projects:
+  list / add / remove / select / deselect / migrate-nobind / bindings
+  scope [--tree [--json]]    resolve mode/project (or the project memory chain)
+  focus <name>               session-scoped focus for this session only
+  adapter-doc-path [<cli>]   absolute path to the current adapter's reference doc
+
+Multi-project (warm set):
+  work / unwork              warm or un-warm a registered project (bookmark)
+
+State & telemetry:
+  status [--all]             checkpoints + Link, scoped to the resolved chain
+  checkpoint "<note>"        write a timestamped checkpoint (+ Link entry)
+  activity [n] [--all] [--project=<name>]   last n Link events
+
+Flags:
+  flags [--json | --get=<name> | --validate]
+
+Link ledger & fleet:
+  link <event> <subject> [--ref=<id>] [detail...]   append a Link event
+  ship list                  list federated ships
+  corpus-ingest --topic=<t> --slug=<s>   ingest stdin as a Logos corpus source
+
+Hardline:
+  hardline dispatch/reject/status/resume/queue
+
+Retrospectivas (Devin-specific):
+  session-find / session-dump / session-cost / session-subagents / session-report
+  session close '[<json>]'   run session_close + persist a session:close entry
+
+Enforcement & adapters:
+  phase close '<json>'       run the validate_phase_close gate (+ persist verdict)
+  phase precheck '<json>'    dry-run phase close (no phase:close ledger entry)
+  hooks <name> [json]        run a Seraph hook
+  build --target=<cli>       generate native CLI artifacts
+  install --target=<cli>     deploy generated artifacts into the CLI's discovery path
+  harden --target=<cli>      reconcile permissions.deny (dry-run; --apply/--revert)
+  help
 ```
 
 ## Multi-project: varios proyectos "vivos" a la vez
@@ -231,7 +250,7 @@ Ahora podés abrir Devin CLI dentro de `sitio-web/` y dentro de `api-backend/` (
 # Generate native artifacts and deploy them into Devin's global discovery path
 ./bin/matrix build   --target=devin
 ./bin/matrix install --target=devin
-# (then invoke Neo via `/neo` in Devin CLI, from any project; the user always talks to Neo first)
+# (Neo auto-activates via the global skill; `/neo` is the manual fallback — from any project you always talk to Neo first)
 ```
 
 ## Runbook (comandos comunes, copiables)
@@ -271,7 +290,7 @@ MATRIX_PROJECT=mi-proyecto /home/vos/matrix/bin/matrix phase close '{"phase":"sp
 ## Principles
 
 1. **Root intelligence + pulled projects.** The root repo is the brain; project repos are pulled on demand.
-2. **One master, capability specialists.** Neo is the face; specialists are capabilities, not topics. Roster discipline: add one → retire one.
+2. **One master, capability specialists.** Neo is the face; specialists are capabilities, not topics. Roster discipline (core specialists): add one → retire one.
 3. **CLI-agnostic core.** The brain speaks capabilities; adapters speak CLIs.
 4. **File-based state.** No database. Managed by the CLI; agents never mutate state by hand.
 5. **Reality decides.** Nothing is done without an E2E happy-path check. (Sacred foundation.)

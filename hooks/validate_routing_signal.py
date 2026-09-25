@@ -48,12 +48,14 @@ GIT_BUDGET_S = 10.0
 MAX_GIT_CALLS = 6
 
 # Detection criterion (documented explicitly because activity.log is free text):
-# A line counts as delegation evidence only if it contains "route" or "handoff"
-# (case-insensitive) AND one of the three agent names (case-insensitive).
-# A `phase:close` entry is NOT counted as delegation evidence; that is a separate
-# checkpoint-discipline signal already handled by `_has_mutating_work` /
+# A line counts as delegation evidence only when its PARSED event field is
+# "route" or "handoff" (see _line_parts) AND it names one of the three agent
+# names on the line (case-insensitive). Using the parsed event instead of a
+# substring over the whole line means a `checkpoint` whose prose happens to
+# contain "route ... Smith" is never misread as a delegation. A `phase:close`
+# entry is NOT counted as delegation evidence; that is a separate
+# checkpoint-discipline signal already handled by `has_mutating_work` /
 # `phase_close_missing` in session_close.py.
-ROUTE_HANDOFF_RE = re.compile(r"\b(route|handoff)\b", re.IGNORECASE)
 DELEGATION_RE = re.compile(
     r"\b(" + "|".join(re.escape(n) for n in DELEGATION_NAMES) + r")\b",
     re.IGNORECASE,
@@ -137,8 +139,14 @@ def _session_window(entries, session_id):
                 end_dt = ts
         if last_dt is None or ts > last_dt:
             last_dt = ts
-    if end_dt is None:
+    # Window reaches max(last_dt, now): a resumed session ends at its last
+    # event; a line written in the same tool call as the close is in scope.
+    if end_dt is None or last_dt > end_dt:
         end_dt = last_dt
+    if end_dt is not None:
+        now = datetime.now(timezone.utc)
+        if now > end_dt:
+            end_dt = now
     return start_dt, end_dt
 
 
@@ -222,14 +230,18 @@ def _line_parts(rest):
 
 
 def _line_session_id(text):
-    """Return the session_id=<sid> value in a line, or None.
+    """Return the last session_id=<sid> value in a line, or None.
 
-    Trailing punctuation is stripped so (session_id=S1) parses as S1.
+    The Link writes the structural attribution as the final token of the
+    detail (the last whitespace-separated token starts with session_id=),
+    so the last match is the attribution; a prose mention of session_id=
+    earlier in the line must not override it. Trailing punctuation is
+    stripped so (session_id=S1) parses as S1.
     """
-    m = SESSION_ID_RE.search(text)
-    if not m:
+    matches = list(SESSION_ID_RE.finditer(text))
+    if not matches:
         return None
-    return m.group(1).rstrip("),;.")
+    return matches[-1].group(1).rstrip("),;.")
 
 
 def _detail_subject(detail):
@@ -287,17 +299,23 @@ def _session_project(entries, session_id):
 def _find_delegation_evidence(root, start_dt, end_dt, session_id=None, project=None):
     """Search activity.log for route/handoff entries naming Trinity/Smith/Architect.
 
-    Returns (line, verified): searches ALL in-scope entries in the window and
-    prefers a verified one (a real mechanical check token or an eval artifact);
-    if none verifies, returns the first matching entry with verified False.
+    Returns (line, verified): only lines whose PARSED event is `route` or
+    `handoff` qualify (structural, not a substring over the whole line); the
+    agent-name match and the verified-token match stay on the line. Prefers a
+    verified one (a real mechanical check token or an eval artifact); if none
+    verifies, returns the first matching entry with verified False.
     """
     matches = []
     for _ts, rest, line in _iter_activity_events(root, start_dt, end_dt):
-        if ROUTE_HANDOFF_RE.search(rest) and DELEGATION_RE.search(rest):
-            if not _activity_in_scope(rest, session_id, project):
-                continue
-            verified = bool(SMITH_CHECK_RE.search(rest) or EVAL_ARTIFACT_RE.search(rest))
-            matches.append((line, verified))
+        event, _subject, _detail = _line_parts(rest)
+        if event not in ("route", "handoff"):
+            continue
+        if not DELEGATION_RE.search(rest):
+            continue
+        if not _activity_in_scope(rest, session_id, project):
+            continue
+        verified = bool(SMITH_CHECK_RE.search(rest) or EVAL_ARTIFACT_RE.search(rest))
+        matches.append((line, verified))
     if not matches:
         return None, False
     for line, verified in matches:
@@ -481,35 +499,46 @@ def _evaluate_small_path(root, paths, start_dt, end_dt, session_id=None, project
         return result
 
 
-def _last_state_by_session(path):
-    """Return {session_id: last_record} from the append-only history (last wins)."""
+def count_consecutive_unresolved_sessions(path, exclude_session_id=None):
+    """Count consecutive unresolved sessions from the newest last-record backwards.
+
+    Last state per session wins; sessions without a timestamp sort as infinitely
+    old; ties break by insertion order (latest in the file first). The count
+    stops at the first session whose last record is not triggered. Returns
+    (streak, [session_ids]).
+    """
     by_session = {}
-    if not os.path.isfile(path):
-        return by_session
+    order = []
     for record in _read_jsonl(path):
         sid = record.get("session_id")
         if not sid:
             continue
+        if sid not in by_session:
+            order.append(sid)
         by_session[sid] = record
-    return by_session
-
-
-def count_unresolved_sessions(path, exclude_session_id=None):
-    """Count sessions whose last history record is an unresolved trigger.
-
-    Same coherent count used by validate_phase_close's escalation warn: last
-    state per session wins; the current session is excluded. Returns
-    (count, [session_ids]).
-    """
-    count = 0
-    unresolved = []
-    for sid, record in _last_state_by_session(path).items():
+    entries = []
+    for i, sid in enumerate(order):
         if exclude_session_id is not None and sid == exclude_session_id:
             continue
-        if record.get("triggered"):
-            count += 1
+        ts = _parse_timestamp(by_session[sid].get("timestamp"))
+        entries.append((ts, i, sid, by_session[sid]))
+    entries.sort(
+        key=lambda e: (
+            0 if e[0] is not None else 1,
+            e[0].timestamp() if e[0] is not None else 0.0,
+            e[1],
+        ),
+        reverse=True,
+    )
+    streak = 0
+    unresolved = []
+    for _ts, _i, sid, rec in entries:
+        if rec.get("triggered"):
+            streak += 1
             unresolved.append(sid)
-    return count, unresolved
+        else:
+            break
+    return streak, unresolved
 
 
 def _last_record_for_session(path, session_id):
@@ -601,7 +630,7 @@ def validate(data, persist_history=True):
             resolved = "triggered"
 
     history_path = os.path.join(root, HISTORY_LOG)
-    prior, _ = count_unresolved_sessions(history_path, exclude_session_id=session_id)
+    streak, _ = count_consecutive_unresolved_sessions(history_path, exclude_session_id=session_id)
     if threshold_triggered:
         _record_outcome(
             history_path, session_id, triggered, resolved, small_path,
@@ -649,7 +678,7 @@ def validate(data, persist_history=True):
         "run_command_seen": run_command_seen,
         "delegation_evidence": delegation_evidence,
         "unverified_delegation": unverified_delegation,
-        "historical_triggers": prior,
+        "prior_streak": streak,
         "message": message,
     }
 

@@ -6,9 +6,10 @@ Builds a throwaway Matrix fixture (never the real repo) and runs six cases:
 2. AGENTS.md missing:           pre_activation_check -> ok:false, contract_present
 3. architect.md missing:        pre_activation_check -> ok:false, roster_intact
 4. audit_event ok:false + session close -> hook-audit.jsonl contains the new keys,
-   session_close does NOT derive pre_activation_check, post_run_audit compliant:false
+   session_close DOES derive pre_activation_check (Opción B, status failed),
+   post_run_audit compliant:true, and the failure is surfaced on the result
 5. healthy fixture (built/installed): ok:true, boot_warn.warns empty (dictamen Architect punto 4)
-6. BOOT_WARN_BUDGET_S=0:       ok:true, boot_warn.warns empty, skipped lists all seven tokens
+6. BOOT_WARN_BUDGET_S=0:       ok:true, boot_warn.warns empty, skipped lists all eight tokens
 """
 import importlib.util
 import json
@@ -152,8 +153,12 @@ def case_downstream_real():
         )
         result = json_or_die(proc, "case4")
         assert any("pre_activation_check_status" in line for line in log_path.read_text(encoding="utf-8").splitlines() if line), "case4 hook-audit missing pre_activation_check_status"
-        assert "pre_activation_check" not in result.get("steps_seen", []), "case4 derived pre_activation_check despite ok:false"
-        assert result.get("validation", {}).get("compliant") is False, f"case4 expected compliant:false: {result.get('validation')}"
+        # Opción B: a failed status DOES derive the step, so the close is
+        # conformant and the failure is surfaced on the result (warn, not block).
+        assert "pre_activation_check" in result.get("steps_seen", []), "case4 failed status must derive pre_activation_check"
+        assert result.get("validation", {}).get("compliant") is True, f"case4 expected compliant:true: {result.get('validation')}"
+        assert result.get("pre_activation_check_status") == "failed", f"case4 expected status failed: {result}"
+        assert result.get("pre_activation_check_failed") is True, f"case4 expected failed surfaced: {result}"
         print("D9-4 PASS")
 
 
@@ -182,8 +187,8 @@ def case_boot_warn_disabled():
         assert result.get("boot_warn", {}).get("warns") == [], f"case6 expected empty warns: {result}"
         assert sorted(result.get("boot_warn", {}).get("skipped", [])) == sorted([
             "surface_budget", "validate_lessons", "model_drift", "ttl_expired",
-            "validate_layer2", "the_source", "snapshot_due",
-        ]), f"case6 expected all 7 tokens skipped: {result}"
+            "validate_layer2", "the_source", "snapshot_due", "flags_config",
+        ]), f"case6 expected all 8 tokens skipped: {result}"
         print("D9-6 PASS")
 
 

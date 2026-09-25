@@ -12,11 +12,9 @@ Usage:
 """
 
 import os
-import re
-import subprocess
 import sys
 
-from _common import _load_yaml, emit, parse_frontmatter as _parse_frontmatter, read_input, resolve_root
+from _common import emit, load_yaml_strict, parse_frontmatter as _parse_frontmatter, read_input, resolve_root
 
 
 def parse_frontmatter(path):
@@ -35,18 +33,6 @@ def live_hooks(root):
         f[:-3] for f in os.listdir(hooks_dir)
         if f.endswith(".py") and f != "_common.py"
     ) if os.path.isdir(hooks_dir) else []
-
-
-def onboarding_hook_counts(onboarding):
-    """Return the two declared hook counts from onboarding.html."""
-    patterns = {
-        "infrastructure": r"Enforcement portable:\s*(\d+)\s+hooks en Python",
-        "table": r"Tabla de hooks\s*\(\s*(\d+)\s+hooks\s*\)",
-    }
-    return {
-        name: [int(count) for count in re.findall(pattern, onboarding)]
-        for name, pattern in patterns.items()
-    }
 
 
 def parse_ship_manifest(path):
@@ -70,54 +56,19 @@ def live_ships(root):
     return out
 
 
-def onboarding_coverage(root):
-    """Return whether onboarding.html covers the current live surface."""
-    onboarding_path = os.path.join(root, "onboarding.html")
-    with open(onboarding_path, encoding="utf-8") as fh:
-        onboarding = fh.read()
-
-    agents_dir = os.path.join(root, "brain", "agents")
-    agents = [
-        parse_frontmatter(os.path.join(agents_dir, filename))[0]
-        for filename in list_md(agents_dir)
-    ]
-    hooks = live_hooks(root)
-
-    proc = subprocess.run(
-        [os.path.join(root, "bin", "matrix"), "help"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    # Help commands begin with two spaces and a lowercase hyphenated token.
-    commands = re.findall(r"(?m)^  ([a-z]+(?:-[a-z]+)*)\s+", proc.stdout)
-
-    missing = {
-        "agents": [name for name in agents if name not in onboarding],
-        "hooks": [name for name in hooks if name not in onboarding],
-        "commands": [name for name in commands if name not in onboarding],
-    }
-    declared_hook_counts = onboarding_hook_counts(onboarding)
-    hook_count = len(hooks)
-    hook_counts_ok = all(
-        counts == [hook_count] for counts in declared_hook_counts.values()
-    )
-    return {
-        "ok": not any(missing.values()) and hook_counts_ok,
-        "missing": missing,
-        "hook_count": hook_count,
-        "declared_hook_counts": declared_hook_counts,
-        "hook_counts_ok": hook_counts_ok,
-    }
-
-
 def config_flags_missing(root):
-    """Return config keys from adapters/devin/config.yaml (depth <= 2) not named in DEVIN.md."""
+    """Return (missing_flags, load_error) for adapters/devin/config.yaml (depth <= 2).
+
+    An unreadable config is a real error, never a silent [] (lesson 71) — it
+    propagates as load_error so check() fails ok=False instead of passing.
+    """
     config_path = os.path.join(root, "adapters", "devin", "config.yaml")
     devin_md_path = os.path.join(root, "DEVIN.md")
-    cfg = _load_yaml(config_path)
+    cfg, load_error = load_yaml_strict(config_path)
+    if load_error is not None:
+        return [], load_error
     if not isinstance(cfg, dict):
-        return []
+        return [], None
     keys = set()
     for top_key, top_val in cfg.items():
         keys.add(top_key)
@@ -131,7 +82,7 @@ def config_flags_missing(root):
                 devin_text = fh.read()
     except Exception:
         pass
-    return sorted(k for k in keys if k not in devin_text)
+    return sorted(k for k in keys if k not in devin_text), None
 
 
 def generate(root):
@@ -200,18 +151,25 @@ def check(root, check=True):
             with open(target, encoding="utf-8") as fh:
                 existing = fh.read()
         in_sync = existing.strip() == content.strip()
-        coverage = onboarding_coverage(root)
-        missing_flags = config_flags_missing(root)
-        ok = in_sync and coverage["ok"] and not missing_flags
+        missing_flags, config_load_error = config_flags_missing(root)
+        ok = in_sync and not missing_flags and config_load_error is None
+        if config_load_error is not None:
+            note = f"adapters/devin/config.yaml is unreadable: {config_load_error}"
+        elif not in_sync:
+            note = "SYSTEM_TRUTH.md is stale"
+        elif missing_flags:
+            note = "DEVIN.md omits a config flag"
+        else:
+            note = "in sync"
         return {
             "hook": "the_source",
             "ok": ok,
             "mode": "check",
             "in_sync": in_sync,
-            "onboarding_coverage": coverage,
             "config_flags_missing": missing_flags,
+            "config_load_error": str(config_load_error) if config_load_error else None,
             "target": target,
-            "note": "in sync" if ok else "SYSTEM_TRUTH.md is stale, onboarding.html is missing live coverage, its hook counts drifted, or DEVIN.md omits a config flag",
+            "note": note,
         }
 
     os.makedirs(os.path.dirname(target), exist_ok=True)

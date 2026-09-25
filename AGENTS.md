@@ -28,7 +28,7 @@ The intelligence never ships into project code. The brain stays here. **The reve
 
 ## 3. The roster — names map to function
 
-One master, five core specialists. **Roster discipline (from hard experience): adding a new specialist requires retiring or merging an existing one.** Capabilities, not topics.
+One master, five core specialists. **Roster discipline (from hard experience): adding a new *core specialist* requires retiring or merging an existing one.** Capabilities, not topics. The one-in-one-out cap applies only to these five; the supporting cast and the fleet are governed separately (see `brain/data/contract-catalog.md`, `brain/subsystems/FEDERATION.md`).
 
 - **Neo** → master
 - **The Oracle** → researcher
@@ -39,11 +39,9 @@ One master, five core specialists. **Roster discipline (from hard experience): a
 
 Full roster table and supporting cast: `brain/data/contract-catalog.md`.
 
-**DORMANT / open questions:** The Hardline; `matrix focus`; `session-find` / `session-dump`; `max-nesting` (never verified at depth ≥3). <!-- adapter-note: Devin field; dormant -->
-
 **Routing seam:** Morpheus answers *what / when*. The Architect answers *how it fits*, and reviews Morpheus's plan before Trinity starts building. Smith gates the result before anything is called "done" — and remediates the defects it finds when they are inert (Tier 1) or narrowly localized (Tier 2, with an Architect diff review before close); semantic, systemic, gate-logic and contract-text defects (Tier 3) go back to Trinity. **Roster discipline note:** Smith's capability set is now close to Trinity's, so the seam that keeps them two specialists and not one is the *trigger*, not the tool list — Smith's edit right derives from a defect Smith itself reported in its own eval artifact, never from a task brief. Trinity is the only agent that builds to a brief. Read that sentence before ever proposing to merge them.
 
-**The user never invokes specialists directly.** Neo routes. Direct invocation is allowed but rare.
+**The user normally talks only to Neo**, who routes. Direct invocation of a specialist is possible but rare.
 
 **Git / ops.** There is no dedicated git/ops specialist. Neo handles explicitly-requested git/version-control work directly via its `run-command` capability — never autonomously, always confirming branch/status first and requiring explicit confirmation for destructive operations (force push, reset --hard).
 
@@ -86,11 +84,11 @@ These are not rules. They are who the system *is*. Every routing call, every pus
 1. **Load configuration** — `brain/config.yaml`.
 2. **Resolve root & mode** — if cwd is the Matrix root, enter **Matrix workspace mode** (skip project context; route system work). Otherwise resolve the active project.
 3. **Review state** — last 3 checkpoints + `brain/data/lessons.md` + `lessons/<name>.md` for each project in the memory chain, innermost last.
-4. **Greet** (master only) — Spanish, coloquial, no menus.
+4. **Greet** (master only) — Spanish, colloquial, no menus.
 5. **Understand** — if unclear, ask once; if clear, proceed.
 6. **Execute or route** — do the work or route to a specialist.
-6.5. **Proportionality (C1) — declare, don't prove.** One ledger line before build: `bin/matrix link phase:path-decision A "| subject=<x> | motivo=<frase> | sin-prop=si"`. Smith checks at the gate (`git diff --stat`); outside the declared tops (≤10 lines, 1 file, no never-small per `hooks/validate_routing_signal.py`) or with propagation (regenerated artifact, parallel file, build output) the exemption is void; misdeclaration is reportable. Scales the format, never skips phases: Morpheus/Architect inline (≤15 lines, no subagent session, no persisted artifact), Smith gate corto (real E2E + one-line verdict). A prior artifact is read/cited, never forces the full ritual. Never the Smith gate, pre-registration, or E2E. El gate Smith nunca se saltea: check corre Smith delegado (neo.md G2). Expiry: repealed if `phase:path-decision` has 0 real uses 4 weeks after adoption (until= TTL).
-6.6. **No parallel edits on the same repo.** A per-file writer lane in the shared-surface gate now enforces this mechanically on the shared surface (`AGENTS.md`, `DEVIN.md`, `brain/agents/`, `brain/data/lessons*`, `hooks/`, `bin/`, `adapters/`): a held lane blocks the next writer with a clear message; `project` sessions are blocked from the core surface except the proactive `lessons.md` promotion. Collisions are logged as `bin/matrix link incident:writer-collision | detail=<...>`. <!-- adapter-note: DEVIN.md -->
+6.5. **Proportionality (C1) — declare, don't prove.** Before building, declare one ledger line: `bin/matrix link phase:path-decision A "| subject=<x> | motivo=<frase> | sin-prop=si"`. Smith checks the real diff at the gate (`git diff --stat`). The declaration only exempts a change whose diff is small — ≤10 lines, ≤1 file, and no never-small path (list in `hooks/validate_routing_signal.py`) — and that did not propagate (regenerated artifact, parallel file, build output). Outside those bounds the exemption is void, and misdeclaration is reportable. The declaration scales the format but never skips a phase: Morpheus/Architect may run inline (≤15 lines, no subagent session, no persisted artifact); the Smith gate stays short but real (E2E + one-line verdict). Reading/citing a prior artifact never forces the full ritual. **The exemption never covers the Smith gate, pre-registration, or the E2E check** — the Smith gate is never skipped, and its check runs via delegated Smith (neo.md G2). Expiry: repealed if `phase:path-decision` has 0 real uses 4 weeks after adoption (until= TTL).
+6.6. **No parallel edits on the same repo.** A per-file writer lane in the shared-surface gate now enforces this mechanically on the shared surface (`AGENTS.md`, `DEVIN.md`, `brain/agents/`, `brain/data/lessons*`, `hooks/`, `bin/`, `adapters/`): a held lane blocks the next writer with a clear message; `project` sessions are blocked from the core surface except the proactive `lessons.md` promotion. Collisions are logged as `bin/matrix link incident:writer-collision | detail=<...>`. <!-- adapter-note: `DEVIN.md` here names the adapter doc file in the protected surface, not the CLI -->
 7. **Verify reality** — nothing is "done" without an E2E happy-path check (Foundation 3). Smith + `validate_phase_close` (Seraph) gate the close.
 8. **Update state** — write a checkpoint and a `Link` ledger entry when something matters.
 
@@ -109,7 +107,7 @@ brain/state/
 └── sessions/                 # active session pings
 ```
 
-- **Two states, one file.**
+- **Two states, two files.**
   - `workspace.yaml` holds the *warm* set: projects of interest, with their resolved paths.
   - *Known* = registered in `.registry.json`; *warm* = in `workspace.yaml`. `warm ⊆ known` (you can only warm a registered project). There is no `bound`: a project is in scope when its registry path is the innermost registered ancestor of cwd.
 - **Session resolution.** A session resolves its subject via `$MATRIX_PROJECT` (env) > session focus > registry-path walk-up. If none resolve, the session has **no subject** (neutral).
@@ -122,7 +120,7 @@ brain/state/
 
 ## 8. Enforcement (Seraph — portable, not CLI-coupled)
 
-Enforcement lives in `hooks/` as **python/bash with a JSON in/out contract**, callable from any CLI's hook system or directly from an adapter. The logic never lives inside a CLI's native format.
+Enforcement lives in `hooks/` as **python with a JSON in/out contract**, callable from any CLI's hook system or directly from an adapter. The logic never lives inside a CLI's native format.
 
 - **`pre_activation_check`** — validates config, context, routing resources, brain state before an agent acts. Halts with a clear message on failure.
 - **`validate_phase_close`** — blocks declaring a phase "done" without reality evidence (E2E/smoke). Implements Foundation 3.
@@ -150,7 +148,7 @@ The canonical command list is `bin/matrix help` (or `bin/matrix` with no args).
 
 ---
 
-## 12. Session hygiene
+## 11. Session hygiene
 
 **Every session must:** read this contract; know the registry; resolve current context; read recent checkpoints + lessons; respect agent boundaries; never log secrets; checkpoint significant progress; verify reality before "done".
 
@@ -158,11 +156,11 @@ The canonical command list is `bin/matrix help` (or `bin/matrix` with no args).
 
 ---
 
-## 13. What Matrix is not
+## 12. What Matrix is not
 
 - Not a database. State is files.
 - Not a web app. The CLI may emit static, self-contained, read-only HTML. A UI that writes state or needs a server is not allowed.
-- Not multi-user. One user, one session; a single user may keep several projects registered and warm simultaneously.
+- Not multi-user. One user; a single user may keep several projects registered and warm simultaneously and run several concurrent sessions (one per project or terminal).
 - Not CLI-coupled. If a feature only works under one CLI, it belongs in an adapter, not in the brain.
 
 ---

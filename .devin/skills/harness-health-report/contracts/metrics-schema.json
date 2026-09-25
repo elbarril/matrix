@@ -1,0 +1,187 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://matrix.local/schemas/harness-health-report/metrics-schema.json",
+  "title": "Matrix harness health metrics",
+  "description": "Contrato exacto producido por scripts/extract_metrics.py (skill harness-health-report). Usado por Smith para validar la salida real del script como parte de su gate.",
+  "type": "object",
+  "required": ["snapshot", "datasets", "warnings"],
+  "additionalProperties": false,
+  "properties": {
+    "snapshot": {
+      "type": "object",
+      "required": ["generated_at_utc", "generated_at_epoch", "git_head", "matrix_root"],
+      "additionalProperties": false,
+      "properties": {
+        "generated_at_utc": {
+          "type": "string",
+          "description": "ISO8601 UTC con sufijo Z",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "generated_at_epoch": { "type": "integer" },
+        "git_head": { "type": "string" },
+        "matrix_root": { "type": "string" }
+      }
+    },
+    "datasets": {
+      "type": "object",
+      "required": [
+        "commits_by_type",
+        "checkpoints",
+        "activity_log",
+        "lessons",
+        "validation_report",
+        "harness_cost",
+        "routing_signal_history",
+        "orphan_close_attempts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "commits_by_type": {
+          "type": "object",
+          "required": ["feat", "fix", "docs", "chore", "refactor", "test", "other", "_total"],
+          "additionalProperties": false,
+          "properties": {
+            "feat": { "type": "integer", "minimum": 0 },
+            "fix": { "type": "integer", "minimum": 0 },
+            "docs": { "type": "integer", "minimum": 0 },
+            "chore": { "type": "integer", "minimum": 0 },
+            "refactor": { "type": "integer", "minimum": 0 },
+            "test": { "type": "integer", "minimum": 0 },
+            "other": { "type": "integer", "minimum": 0 },
+            "_total": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "checkpoints": {
+          "type": "object",
+          "required": ["total_lines", "by_agent", "first_ts", "last_ts"],
+          "additionalProperties": false,
+          "properties": {
+            "total_lines": { "type": "integer", "minimum": 0 },
+            "by_agent": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0 }
+            },
+            "first_ts": { "type": ["string", "null"] },
+            "last_ts": { "type": ["string", "null"] }
+          }
+        },
+        "activity_log": {
+          "type": "object",
+          "required": ["total_lines", "by_event_type", "first_ts", "last_ts"],
+          "additionalProperties": false,
+          "properties": {
+            "total_lines": { "type": "integer", "minimum": 0 },
+            "by_event_type": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0 }
+            },
+            "first_ts": { "type": ["string", "null"] },
+            "last_ts": { "type": ["string", "null"] }
+          }
+        },
+        "lessons": {
+          "type": "object",
+          "required": ["total_count", "last_lesson_number"],
+          "additionalProperties": false,
+          "properties": {
+            "total_count": { "type": "integer", "minimum": 0 },
+            "last_lesson_number": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "validation_report": {
+          "type": "object",
+          "required": ["path", "exists", "raw"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string" },
+            "exists": { "type": "boolean" },
+            "raw": { "type": "object" }
+          }
+        },
+        "harness_cost": {
+          "type": "object",
+          "required": ["context_bytes", "artifact_counts", "phase_close_verdicts", "audit_log", "activation_throttle"],
+          "additionalProperties": false,
+          "properties": {
+            "context_bytes": {
+              "type": "object",
+              "required": ["files", "trio_total"],
+              "additionalProperties": false,
+              "properties": {
+                "files": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": ["integer", "null"],
+                    "minimum": 0
+                  }
+                },
+                "trio_total": { "type": ["integer", "null"], "minimum": 0 }
+              }
+            },
+            "artifact_counts": {
+              "type": "object",
+              "required": ["total", "by_subdirectory"],
+              "additionalProperties": false,
+              "properties": {
+                "total": { "type": "integer", "minimum": 0 },
+                "by_subdirectory": {
+                  "type": "object",
+                  "additionalProperties": { "type": "integer", "minimum": 0 }
+                }
+              }
+            },
+            "phase_close_verdicts": {
+              "type": "object",
+              "required": ["pass", "block", "ratio"],
+              "additionalProperties": false,
+              "properties": {
+                "pass": { "type": "integer", "minimum": 0 },
+                "block": { "type": "integer", "minimum": 0 },
+                "ratio": { "type": ["number", "null"] }
+              }
+            },
+            "audit_log": {
+              "type": "object",
+              "required": ["bytes", "lines"],
+              "additionalProperties": false,
+              "properties": {
+                "bytes": { "type": ["integer", "null"], "minimum": 0 },
+                "lines": { "type": ["integer", "null"], "minimum": 0 }
+              }
+            },
+            "activation_throttle": {
+              "type": "object",
+              "required": ["value", "source"],
+              "additionalProperties": false,
+              "properties": {
+                "value": { "type": ["boolean", "null"] },
+                "source": { "type": "string" }
+              }
+            }
+          }
+        },
+        "routing_signal_history": {
+          "type": "object",
+          "required": ["total_lines", "note"],
+          "additionalProperties": false,
+          "properties": {
+            "total_lines": { "type": "integer", "minimum": 0 },
+            "note": { "type": "string" }
+          }
+        },
+        "orphan_close_attempts": {
+          "type": "object",
+          "required": ["total_lines"],
+          "additionalProperties": false,
+          "properties": {
+            "total_lines": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

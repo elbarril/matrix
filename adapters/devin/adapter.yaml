@@ -74,7 +74,17 @@ install_integrity:
     SessionEnd:        "session_audit.py"
     PostToolUse:       "session_audit.py"
     PreToolUse:        "pre_tool_use_guard.py"
-    Stop:              "stop_notify.py"
+  # Events whose requirement is CONDITIONAL on at least one gate being
+  # effectively on, mirroring the conditional PreToolUse wiring in
+  # install-hooks.sh (the guard is registered only when one of these gates is
+  # on; install_integrity_check must not demand a hook that the wiring
+  # legitimately omits). Semantics shared with the wiring: a gate counts when
+  # bool(flag.value, default True) and state != "inert"; loader failure fails
+  # closed (required). An event NOT listed here is required unconditionally.
+  # A malformed value (not a list of flag names) fails the check — never
+  # degrades to "not required".
+  required_hooks_when_any_flag:
+    PreToolUse: ["gate.shared_surface", "gate.writer_lane", "gate.pre_exec_guard", "gate.secret_deny"]
   mcp_config_path: "~/.config/devin/mcp_config.json"   # confirmed: key path is mcpServers.<name>
   required_mcp_servers: ["chrome-browser", "context7"]
   installed_agent_path_template: "{installed_agents_dir}/{agent}/AGENT.md"

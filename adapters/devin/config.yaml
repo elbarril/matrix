@@ -5,12 +5,13 @@
 flags:
   activation.reinject: false         # absorbe experiment.activation_inject
   activation.reinject_full: false    # absorbe experiment.activation_inject_userprompt_full
-  gate.shared_surface: false
-  gate.writer_lane: false
-  gate.pre_exec_guard: false
+  gate.shared_surface: true
+  gate.writer_lane: true
+  gate.pre_exec_guard: true
   gate.secret_deny: false            # absorbe secret_deny.enabled
-  hooks.pre_activation_check: false
-  hooks.boot_warn: false
+  hooks.pre_activation_check: true
+  hooks.boot_warn: true
+  hooks.session_extras: false        # extras no-audit de session_audit (orphan, flags:state, routing-signal, nudge)
   memory.tree: false
   views.scoped: false
   binding.artifacts: false

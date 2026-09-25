@@ -162,7 +162,7 @@ def case_pre_activation_disabled_conformant():
         print("C PRE-ACTIVATION DISABLED CONFORMANT PASS")
 
 
-def case_pre_activation_failed_still_blocks():
+def case_pre_activation_failed_warns_not_blocks():
     with tempfile.TemporaryDirectory(prefix="sg-prefail-") as td:
         fixture_root = Path(td)
         home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
@@ -171,10 +171,12 @@ def case_pre_activation_failed_still_blocks():
         write_audit(fixture_root, "sg-prefail", start_status="failed", mutating=False)
         proc = run_hook(fixture_root, env, "sg-prefail")
         result = json.loads(proc.stdout)
-        assert proc.returncode == 1, f"expected exit 1, got {proc.returncode}: {proc.stdout}"
-        assert result["ok"] is False, result
-        assert "pre_activation_check" in result["validation"]["missing"], result["validation"]
-        print("C PRE-ACTIVATION FAILED STILL BLOCKS PASS")
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stdout}"
+        assert result["ok"] is True, result
+        assert "pre_activation_check" not in result["validation"]["missing"], result["validation"]
+        assert result["pre_activation_check_status"] == "failed", result
+        assert result["pre_activation_check_failed"] is True, result
+        print("C PRE-ACTIVATION FAILED WARNS NOT BLOCKS PASS")
 
 
 def case_pre_activation_legacy_missing_still_blocks():
@@ -206,17 +208,33 @@ def case_flags_today_do_not_change_past():
         write_audit(fixture_root, "sg-past2", start_status="failed", mutating=False)
         proc2 = run_hook(fixture_root, env, "sg-past2")
         result2 = json.loads(proc2.stdout)
-        assert proc2.returncode == 1, f"past failed must stay blocking with flag on: {proc2.stdout}"
-        assert result2["ok"] is False, result2
+        assert proc2.returncode == 0, f"past failed must warn not block with flag on: {proc2.stdout}"
+        assert result2["ok"] is True, result2
+        assert "pre_activation_check" not in result2["validation"]["missing"], result2["validation"]
+        assert result2["pre_activation_check_status"] == "failed", result2
+        assert result2["pre_activation_check_failed"] is True, result2
         print("C FLAGS TODAY DO NOT CHANGE PAST PASS")
 
 
-def case_adapter_start_off_audits_disabled_and_close_conformant():
+def case_adapter_start_on_audits_ok_and_close_conformant():
     with tempfile.TemporaryDirectory(prefix="sg-e2e-") as td:
         fixture_root = Path(td)
         home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
         env = fixture_env(fixture_root)
         env["HOME"] = str(home_dir)
+        env["XDG_CONFIG_HOME"] = str(home_dir / ".config")
+        env["MATRIX_HOOKS_PRE_ACTIVATION_CHECK"] = "1"
+        matrix = fixture_root / "bin" / "matrix"
+        for cmd in (["build", "--target=devin"], ["install", "--target=devin"]):
+            p = subprocess.run(
+                ["bash", "-c", 'export RANDOM=12345; exec "$@"', "--", str(matrix)] + cmd,
+                cwd=str(fixture_root), env=env, capture_output=True, text=True, timeout=120,
+            )
+            assert p.returncode == 0, f"prepare {' '.join(cmd)} failed: {p.stdout} {p.stderr}"
+        mcp_path = home_dir / ".config" / "devin" / "mcp_config.json"
+        mcp_path.write_text(
+            json.dumps({"mcpServers": {"chrome-browser": {}, "context7": {}}}), encoding="utf-8"
+        )
         audit_script = REPO_ROOT / "adapters" / "devin" / "hooks" / "session_audit.py"
         proc = subprocess.run(
             ["python3", str(audit_script)],
@@ -229,8 +247,8 @@ def case_adapter_start_off_audits_disabled_and_close_conformant():
         entries = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines() if l.strip()]
         start = next((e for e in entries if e.get("event") == "session_start"), None)
         assert start is not None, entries
-        assert start.get("pre_activation_check_status") == "disabled", start
-        assert start.get("pre_activation_check_ok") is not True, start
+        assert start.get("pre_activation_check_status") == "ok", start
+        assert start.get("pre_activation_check_ok") is True, start
         sid = start["session_id"]
         close = subprocess.run(
             [str(fixture_root / "bin" / "matrix"), "session", "close", json.dumps({"session_id": sid})],
@@ -240,7 +258,7 @@ def case_adapter_start_off_audits_disabled_and_close_conformant():
         assert close.returncode == 0, f"expected conformant close: {close.stdout} {close.stderr}"
         assert result["ok"] is True, result
         assert result["validation"]["compliant"] is True, result["validation"]
-        print("C E2E ADAPTER START-DISABLED CLOSE CONFORMANT PASS")
+        print("C E2E ADAPTER START-ON AUDITS OK CLOSE CONFORMANT PASS")
 
 
 def main():
@@ -249,10 +267,10 @@ def main():
     case_smith_with_check_conforme()
     case_double_close_no_history_dup()
     case_pre_activation_disabled_conformant()
-    case_pre_activation_failed_still_blocks()
+    case_pre_activation_failed_warns_not_blocks()
     case_pre_activation_legacy_missing_still_blocks()
     case_flags_today_do_not_change_past()
-    case_adapter_start_off_audits_disabled_and_close_conformant()
+    case_adapter_start_on_audits_ok_and_close_conformant()
     print("C SMITH GATE ALL PASS")
     return 0
 

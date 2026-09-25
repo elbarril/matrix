@@ -2,9 +2,22 @@
 """Seraph · surface_budget — size budgets for the shared document surface.
 
 Checks the three docs that are injected on every activation — AGENTS.md,
-DEVIN.md, brain/agents/neo.md — against warn/fail byte budgets, and reports
-each as `ok` (under warn), `warn` (past warn, under fail), `fail` (past fail),
-or `missing`.
+DEVIN.md, brain/agents/neo.md — against warn/fail budgets, and reports each as
+`ok` (under warn), `warn` (past warn, under fail), `fail` (past fail), or
+`missing`.
+
+The two cut mechanisms are asymmetric on purpose: AGENTS.md is *injected* and
+truncated at 16.384 B, so it keeps byte budgets (warn 15.500 / fail 16.200,
+fail always below the real cut). DEVIN.md and brain/agents/neo.md are *read*
+with the `read` tool, which stops at 20.000 chars, so they use char budgets
+(warn 19.500 / fail 20.000). Each surface reports `bytes` (diagnostic) and
+`chars`, plus its comparison `unit`.
+
+Threshold history, documented so it does not silently return: the old byte
+fails (22/24 KiB) sat ABOVE the real 20.000-char read cutoff, which is why the
+detector could pass a file that still truncated. The correction lowers the
+fail to the real unit (20.000 chars) and makes the warn a uniform 500-char
+buffer on both read surfaces.
 
 Severity is asymmetric on purpose: `ok: false` only when a surface EXCEEDS its
 `fail` budget. A `warn` state never flips `ok` — the boot channel surfaces it
@@ -20,19 +33,25 @@ import os
 from _common import emit, read_input, resolve_root
 
 
-# Umbrales de la superficie documental compartida (bytes).
-# AGENTS.md: 16_384 B es la truncación de inyección; fail queda SIEMPRE por
-# debajo (16_200) para que el límite de alerta active antes del corte real.
-# DEVIN.md y neo.md: límites informales de lectura medidos (ver
-# brain/output/research/growth-risk-report-2026-09.md).
-# SUBIR UN UMBRAL ES CADENA COMPLETA: requiere Morpheus + Architect + Smith —
-# subir el límite en vez de recortar es el patrón de crecimiento confirmado y
-# no se hace en un fix de rutina.
+# Umbrales de la superficie documental compartida.
+# AGENTS.md se INYECTA y se trunca a 16.384 B: sigue en bytes, con fail (16.200)
+# siempre por debajo del corte real. DEVIN.md y neo.md se LEEN con read, que
+# corta a 20.000 chars: van en chars, fail 20.000, warn con buffer uniforme de
+# 500 chars. El fail viejo en bytes (22/24 KiB) quedaba por encima del corte y
+# dejaba el detector inerte; esta tabla baja el fail a la unidad real de corte.
 SURFACES = [
-    {"name": "AGENTS.md", "path": "AGENTS.md", "warn": 15_500, "fail": 16_200},
-    {"name": "DEVIN.md", "path": "DEVIN.md", "warn": 20 * 1024, "fail": 24 * 1024},
-    {"name": "brain/agents/neo.md", "path": os.path.join("brain", "agents", "neo.md"), "warn": 18 * 1024, "fail": 22 * 1024},
+    {"name": "AGENTS.md", "path": "AGENTS.md", "warn": 15_500, "fail": 16_200, "unit": "bytes"},
+    {"name": "DEVIN.md", "path": "DEVIN.md", "warn": 19_500, "fail": 20_000, "unit": "chars"},
+    {"name": "brain/agents/neo.md", "path": os.path.join("brain", "agents", "neo.md"), "warn": 19_500, "fail": 20_000, "unit": "chars"},
 ]
+
+
+def _char_count(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return len(fh.read())
+    except OSError:
+        return None
 
 
 def validate(_data):
@@ -45,6 +64,8 @@ def validate(_data):
                 {
                     "name": spec["name"],
                     "bytes": None,
+                    "chars": None,
+                    "unit": spec["unit"],
                     "warn": spec["warn"],
                     "fail": spec["fail"],
                     "status": "missing",
@@ -52,9 +73,13 @@ def validate(_data):
             )
             continue
         size = os.path.getsize(path)
-        if size > spec["fail"]:
+        chars = _char_count(path) or 0
+        # Compare in the surface's own unit so the fail always sits below the
+        # real cut (bytes for AGENTS.md, chars for the two read surfaces).
+        measure = size if spec["unit"] == "bytes" else chars
+        if measure > spec["fail"]:
             status = "fail"
-        elif size > spec["warn"]:
+        elif measure > spec["warn"]:
             status = "warn"
         else:
             status = "ok"
@@ -62,6 +87,8 @@ def validate(_data):
             {
                 "name": spec["name"],
                 "bytes": size,
+                "chars": chars,
+                "unit": spec["unit"],
                 "warn": spec["warn"],
                 "fail": spec["fail"],
                 "status": status,

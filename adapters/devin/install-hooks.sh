@@ -35,6 +35,28 @@ hook_script = sys.argv[2]
 matrix_root = sys.argv[3]
 adapter_yaml = sys.argv[4]
 
+# Wire the PreToolUse guard matchers only when at least one guard gate is
+# effectively on. Uses hooks/_flags.py (the single loader) instead of
+# re-implementing precedence. Import/loader failure fails closed: register the
+# guard (more protection, not less).
+guard_needed = True
+try:
+    sys.path.insert(0, os.path.join(matrix_root, "hooks"))
+    import _flags  # noqa: E402
+    def _gate_effectively_on(gate):
+        flag = _flags.get_flag(gate, root=matrix_root) or {}
+        # Safe accessor (fail-closed default True) + effective state: an inert
+        # gate (writer_lane requires shared_surface) over-registers with its
+        # raw value; RISKY_UP gates (secret_deny) stay relevant when on even
+        # though their state reads "dangerous".
+        return bool(flag.get("value", True)) and flag.get("state") != "inert"
+    guard_needed = any(
+        _gate_effectively_on(g)
+        for g in ("gate.shared_surface", "gate.writer_lane", "gate.pre_exec_guard", "gate.secret_deny")
+    )
+except Exception:
+    guard_needed = True
+
 if os.path.isfile(config_path):
     with open(config_path, encoding="utf-8") as fh:
         text = fh.read().strip()
@@ -45,12 +67,6 @@ else:
 command = f'env MATRIX_ROOT={matrix_root} python3 {hook_script}'
 guard_script = f'{matrix_root}/adapters/devin/hooks/pre_tool_use_guard.py'
 guard_command = f'env MATRIX_ROOT={matrix_root} python3 {guard_script}'
-notify_script = f'{matrix_root}/adapters/devin/hooks/session_end_notify.py'
-notify_command = f'env MATRIX_ROOT={matrix_root} python3 {notify_script}'
-stop_notify_script = f'{matrix_root}/adapters/devin/hooks/stop_notify.py'
-stop_notify_command = f'env MATRIX_ROOT={matrix_root} python3 {stop_notify_script}'
-prompt_timestamp_script = f'{matrix_root}/adapters/devin/hooks/user_prompt_submit_timestamp.py'
-prompt_timestamp_command = f'env MATRIX_ROOT={matrix_root} python3 {prompt_timestamp_script}'
 
 # Merge Matrix lifecycle hooks without touching unrelated config keys.
 # PostToolUse omits matcher to audit every tool call (empty/omitted matcher
@@ -59,40 +75,13 @@ hooks = cfg.setdefault("hooks", {})
 
 for event in ("SessionStart", "UserPromptSubmit", "PostCompaction", "SessionEnd"):
     timeout = 30 if event == "SessionEnd" else 10
-    if event == "SessionEnd":
-        hooks[event] = [
-            {
-                "hooks": [
-                    {"type": "command", "command": command, "timeout": 30},
-                    {"type": "command", "command": notify_command, "timeout": 15},
-                ]
-            }
-        ]
-    elif event == "UserPromptSubmit":
-        hooks[event] = [
-            {
-                "hooks": [
-                    {"type": "command", "command": command, "timeout": timeout},
-                    {"type": "command", "command": prompt_timestamp_command, "timeout": 5},
-                ]
-            }
-        ]
-    else:
-        hooks[event] = [
-            {
-                "hooks": [
-                    {"type": "command", "command": command, "timeout": timeout}
-                ]
-            }
-        ]
-
-hooks["Stop"] = [
-    {
-        "hooks": [
-            {"type": "command", "command": stop_notify_command, "timeout": 10}
-        ]
-    }
-]
+    hooks[event] = [
+        {
+            "hooks": [
+                {"type": "command", "command": command, "timeout": timeout}
+            ]
+        }
+    ]
 
 hooks["PostToolUse"] = [
     {
@@ -106,47 +95,24 @@ hooks["PostToolUse"] = [
     }
 ]
 
-hooks["PreToolUse"] = [
-    {
-        "matcher": "exec",
-        "hooks": [
+pre_tool_use_hooks = []
+if guard_needed:
+    for tool in ("exec", "edit", "write", "multi_edit"):
+        pre_tool_use_hooks.append(
             {
-                "type": "command",
-                "command": guard_command,
-                "timeout": 10,
+                "matcher": tool,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": guard_command,
+                        "timeout": 10,
+                    }
+                ],
             }
-        ]
-    },
-    {
-        "matcher": "edit",
-        "hooks": [
-            {
-                "type": "command",
-                "command": guard_command,
-                "timeout": 10,
-            }
-        ]
-    },
-    {
-        "matcher": "write",
-        "hooks": [
-            {
-                "type": "command",
-                "command": guard_command,
-                "timeout": 10,
-            }
-        ]
-    },
-    {
-        "matcher": "multi_edit",
-        "hooks": [
-            {
-                "type": "command",
-                "command": guard_command,
-                "timeout": 10,
-            }
-        ]
-    },
+        )
+# run_subagent is always wired: session_audit must see delegation even when
+# every guard gate is off.
+pre_tool_use_hooks.append(
     {
         "matcher": "run_subagent",
         "hooks": [
@@ -155,9 +121,15 @@ hooks["PreToolUse"] = [
                 "command": command,
                 "timeout": 10,
             }
-        ]
+        ],
     }
-]
+)
+hooks["PreToolUse"] = pre_tool_use_hooks
+
+# Stop (Hardline stop_notify) is no longer wired by Matrix. Remove any stale
+# entry left by an older install; the merge above is additive and would not
+# clear a key it no longer manages. Reactivate: re-add the Stop block + script.
+hooks.pop("Stop", None)
 
 # Merge Matrix Exec allowlist from adapter.yaml into permissions.allow.
 # Preserves pre-existing entries (Read(**), Write(**), MCP tools, etc.) and
