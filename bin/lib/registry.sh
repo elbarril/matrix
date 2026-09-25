@@ -275,8 +275,20 @@ focus_project() {
     local existing; existing="$(registry_path "$name")"
     [[ -n "$existing" && "$existing" != "null" ]] || { log_error "Project '$name' not found — register it first with 'matrix add'"; return 1; }
     local sid; sid="$(current_session_id || true)"
-    [[ -n "$sid" ]] || { log_error "No active session marker — can't set a session focus without a session to attach it to"; return 1; }
-    init_state
+    if [[ -z "$sid" ]]; then
+        local binding
+        for binding in "$STATE_DIR/sessions/"*-binding.json; do
+            [[ -e "$binding" ]] || continue
+            log_error "Active session bindings are ambiguous — set MATRIX_SESSION_ID explicitly"
+            return 1
+        done
+        sid="manual-$(python3 -c 'import secrets; print(secrets.token_hex(6))')"
+        init_state
+        printf '%s' "$sid" > "$STATE_DIR/.current-hook-session"
+        log_warning "No active session marker; created fallback session '$sid'"
+    else
+        init_state
+    fi
     local focus_file="$STATE_DIR/sessions/$sid.json"
     jq -n -c --arg sid "$sid" --arg proj "$name" --arg ts "$(date -Iseconds)" \
         '{session_id:$sid, focused_project:$proj, set_at:$ts}' > "$focus_file"
