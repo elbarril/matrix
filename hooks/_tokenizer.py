@@ -7,8 +7,13 @@ targets plus a flag — never the raw command line (secret leak surface).
 This detective tokenizer deliberately has a fail-closed policy on unparseable
 write intent. It is intentionally NOT shared with pre_exec_guard's preventive
 tokenizer, which fails open to avoid blocking on uncertainty — see that module.
+
+Segmentation divergence: the detective tokenizer splits control operators that
+are glued to a token (`clean;` -> `clean`, `;`); pre_exec_guard's preventive
+tokenizer does NOT. Do not fix one without the other as a tracked change.
 """
 
+import os
 import shlex
 
 
@@ -16,7 +21,7 @@ ALLOWED_MUTANT_PREFIX = "bin/matrix corpus-ingest"
 _WRITE_ALL_ARGS = {"rm", "rmdir", "truncate", "tee"}
 _WRITE_LAST_ARG = {"mv", "cp"}
 _CONTROL_OPS = {";", "&&", "||", "|", "&"}
-_WRITE_HINTS = (">", ">>", "tee ", "rm ", "rmdir ", "mv ", "cp ", "truncate ", "sed -i")
+_WRITE_HINTS = (">", ">>", "tee ", "rm ", "rmdir ", "mv ", "cp ", "truncate ", "sed -i", "dd ")
 
 
 def _strip_heredocs(command):
@@ -67,7 +72,10 @@ def _lexical_chunks(lines):
     for line in lines:
         buffer = line if buffer is None else buffer + "\n" + line
         try:
-            tokens = shlex.split(buffer)
+            lexer = shlex.shlex(buffer, posix=True, punctuation_chars=";&|<>")
+            lexer.whitespace_split = True
+            lexer.commenters = ""
+            tokens = list(lexer)
         except ValueError:
             continue
         chunks.append((buffer, tokens))
@@ -77,14 +85,46 @@ def _lexical_chunks(lines):
     return chunks
 
 
+# Shell variables the detective can resolve against the root it already
+# receives. $MATRIX_ROOT is always exported by the adapter runtime; $HOME is
+# the user home. $ROOT is deliberately NOT listed: it is never exported to
+# the exec runtime (only MATRIX_ROOT is), so treating it as known would be a
+# dead branch. An unresolved $VAR target is left as-is and surfaced by the
+# detector in an informative bucket, never flagged as an anomaly.
+_KNOWN_SHELL_VARS = ("MATRIX_ROOT", "HOME")
+
+
+def _resolve_shell_var(target, root):
+    """Resolve a leading known shell var in `target` against `root`.
+
+    Only a full `$VAR` or `$VAR/...` prefix is resolved; anything else (an
+    unknown variable such as `$FR/...`, or a `$` appearing mid-token) is
+    returned unchanged so the detector can bucket it without losing evidence.
+    """
+    for name in _KNOWN_SHELL_VARS:
+        prefix = "$" + name
+        if target == prefix:
+            return root if name == "MATRIX_ROOT" else os.path.expanduser("~")
+        if target.startswith(prefix + "/"):
+            base = root if name == "MATRIX_ROOT" else os.path.expanduser("~")
+            return base + target[len(prefix):]
+    return target
+
+
 def write_targets(command, root):
     """Return parsed write targets and whether write intent could not be parsed.
 
     A shell command is a single lexical unit even across physical lines; see
     `_lexical_chunks`. Order of operations: strip heredocs, chunk by quotable
-    lines, tokenize each chunk. This detective tokenizer intentionally
+    lines, tokenize each chunk with control operators split even when glued to
+    a token (`clean;` -> `clean`, `;`). This detective tokenizer intentionally
     diverges from pre_exec_guard but fails closed on unparseable write intent;
     the preventive guard fails open to avoid blocking on uncertainty.
+
+    A write target that begins with a known shell var (`$MATRIX_ROOT`, `$HOME`)
+    is resolved against `root` so the detector can judge it; an unknown var
+    (`$FR/...`) is returned unchanged and the detector buckets it
+    informatively instead of flagging a false anomaly.
     """
     targets = []
     unparsed = False
@@ -117,4 +157,11 @@ def write_targets(command, root):
                 targets.extend(arg for arg in args[1:] if not arg.startswith("-"))
             elif verb == "sed" and any(arg == "-i" or arg.startswith("-i.") or arg == "--in-place" for arg in args):
                 targets.extend(arg for arg in args if not arg.startswith("-"))
-    return targets, unparsed
+            elif verb == "dd":
+                # dd's write target is the `of=` operand only: `if=` is an
+                # input and loose operands (bs=, count=, status=) are not
+                # files the command creates. Confining this to the `dd` verb
+                # keeps unrelated tokens that merely start with `of=` from
+                # becoming false targets.
+                targets.extend(arg[3:] for arg in args if arg.startswith("of=") and arg[3:])
+    return [_resolve_shell_var(target, root) for target in targets], unparsed

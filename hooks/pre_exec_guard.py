@@ -16,6 +16,11 @@ protected path. The detective tokenizer that backstops it lives in
 hooks/_tokenizer.py; the two tokenizers deliberately diverge in fail policy —
 this guard fails open, the detective fails closed. See hooks/_tokenizer.py.
 
+Segmentation divergence: the preventive tokenizer does NOT split control
+operators glued to a token (`clean;` stays one token, over-blocking is
+fail-safe); the detective tokenizer DOES. Do not fix one without the other as
+a tracked change.
+
 Audit contract (see adapters/devin/hooks/pre_tool_use_guard.py): every
 `reason` this module returns is built only from a fixed verb plus the
 relative path of an entry in `protected_paths()` (a public, non-secret

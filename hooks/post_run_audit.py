@@ -7,6 +7,14 @@ activations. Besides the existing input (``agent``, ``steps``, and optional
 ``required``), it accepts optional ``profile``, ``session_id``,
 ``eval_artifact``, ``edited_paths``, ``since``, and ``until`` keys.
 
+Output report keys (Layer-1 contract): ``hook``, ``ok``, ``agent``,
+``profile``, ``session_id``, ``timestamp``, ``steps_seen``, ``required``,
+``missing``, ``bypass_suspected``, ``compliant``, ``smith_remediation``,
+``mutant_command_anomalies`` (command heads that are real mutants), and
+``unresolved_shell_var_targets`` (informative list of ``{"target", "head"}``
+for write targets that reference a shell variable the tokenizer could not
+resolve, e.g. ``$FR/...``; always present, empty when none).
+
 A Smith-profile run with edits must point to an eval artifact containing one
 ``<!-- MATRIX:EVAL-PREREG v1 -->`` JSON block, terminated by
 ``<!-- MATRIX:EVAL-PREREG END -->``. Its JSON has ``prereg_version: 1``,
@@ -68,10 +76,16 @@ def _is_smith(value):
 
 
 def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=None):
-    """Return shell commands in this session that wrote to a repo path outside
-    the sanctioned set.
+    """Return (anomalies, unresolved) for shell commands in this session that
+    wrote to a repo path outside the sanctioned set.
 
-    Detective check, not a preventive guard (that is pre_exec_guard). Four
+    `anomalies` is the list of command heads that are real mutants.
+    `unresolved` is a list of {"target", "head"} entries for targets that
+    reference a shell variable the tokenizer could not resolve ($FR/...):
+    those are reported informatively, never flagged as anomalies, because the
+    check cannot prove they write inside the repo (Foundation 3).
+
+    Detective check, not a preventive guard (that is pre_exec_guard). Five
     classes are NOT anomalies, by design:
       * commands outside the audited [since, until] window -- events that cannot
         be attributed to the run in time must not be attributed to Smith;
@@ -81,21 +95,24 @@ def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=N
         out of scope, this check protects repo integrity, not the filesystem;
       * writes to a path already in `sanctioned` -- the declared + pre-registered
         paths of this same run, which is how Smith's own eval artifact is
-        created via shell redirection per its <boundaries>.
+        created via shell redirection per its <boundaries>;
+      * targets with an unresolved shell variable ($VAR/...) -- the tokenizer
+        left them raw for the informative bucket, never a false anomaly.
     A write to any other repo path is the mutant this check was written for
     (see brain/subsystems/logos/agents/niobe.md: never ad-hoc redirection).
     """
     sanctioned = set(sanctioned or ())
     anomalies = []
+    unresolved = []
     if not session_id:
-        return anomalies
+        return anomalies, unresolved
     log_path = os.path.join(root, "brain", "state", "hook-audit.jsonl")
     if not os.path.isfile(log_path):
-        return anomalies
+        return anomalies, unresolved
     try:
         fh = open(log_path, encoding="utf-8")
     except OSError:
-        return anomalies
+        return anomalies, unresolved
     with fh:
         for line in fh:
             line = line.strip()
@@ -119,6 +136,9 @@ def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=N
                 continue
             offending = False
             for target in targets:
+                if isinstance(target, str) and "$" in target:
+                    unresolved.append({"target": target, "head": head})
+                    continue
                 norm = _normalize_path(root, target)
                 if os.path.isabs(norm):
                     continue
@@ -127,7 +147,7 @@ def _anomalous_mutant_commands(root, session_id, since, sanctioned=None, until=N
                     break
             if offending:
                 anomalies.append(head)
-    return anomalies
+    return anomalies, unresolved
 
 
 def _parse_time(value):
@@ -427,9 +447,9 @@ def main():
     sanctioned = set(smith_block.get("evaluated_paths") or ())
     if smith_block.get("eval_artifact"):
         sanctioned.add(_normalize_path(root, smith_block["eval_artifact"]))
-    mutant_anomalies = _anomalous_mutant_commands(root, session_id, since, sanctioned, until)
+    mutant_anomalies, unresolved_shell_var_targets = _anomalous_mutant_commands(root, session_id, since, sanctioned, until)
     compliant = (not missing) and smith_ok and not mutant_anomalies
-    report = {"hook": "post_run_audit", "ok": compliant, "agent": agent, "profile": profile, "session_id": session_id, "timestamp": datetime.datetime.now().astimezone().isoformat(), "steps_seen": steps, "required": required, "missing": missing, "bypass_suspected": bool(bypass), "compliant": compliant, "smith_remediation": smith_block, "mutant_command_anomalies": mutant_anomalies}
+    report = {"hook": "post_run_audit", "ok": compliant, "agent": agent, "profile": profile, "session_id": session_id, "timestamp": datetime.datetime.now().astimezone().isoformat(), "steps_seen": steps, "required": required, "missing": missing, "bypass_suspected": bool(bypass), "compliant": compliant, "smith_remediation": smith_block, "mutant_command_anomalies": mutant_anomalies, "unresolved_shell_var_targets": unresolved_shell_var_targets}
     state_dir = os.path.join(root, "brain", "state")
     os.makedirs(state_dir, exist_ok=True)
     with open(os.path.join(state_dir, "validation-report.json"), "w", encoding="utf-8") as fh:

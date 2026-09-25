@@ -923,6 +923,13 @@ def main():
                 envelope["tool_command_head"] = head
                 envelope["tool_command_unparsed"] = unparsed
 
+        # Attribution gap (lección 75): `subagent_profile` is written only for
+        # the `run_subagent` event, which never reaches the mutant-command
+        # detector (MUTANT_TOOL_NAMES in post_run_audit.py is exec-only) nor
+        # the inner exec/edit events of the subagent. A parent/subagent split
+        # in the detector would therefore be dead code -- the same no-op as
+        # _observed_edits filtering on this field. Real attribution of inner
+        # events to a subagent needs an adapter-level `delegated` marker.
         if tool_name == "run_subagent":
             try:
                 if isinstance(tool_input, dict):
