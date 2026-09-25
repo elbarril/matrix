@@ -184,7 +184,7 @@ The `PreToolUse` hook (`adapters/devin/hooks/pre_tool_use_guard.py`) covers the 
 
 - **Exception / kill-switch:** relaunch with `MATRIX_SHARED_SURFACE_ALLOW=1` (or `true`) to bypass the `project` block for the whole session (emergencies only; audited). The kill-switch does NOT bypass the lane.
 - **Writer lane:** `brain/state/lanes/<sha1(rel_path)[:16]>.json` — acquired on `PreToolUse`, released on `PostToolUse`/`SessionEnd`, reclaimed after `MATRIX_WRITER_LANE_TTL_S` (default `120`). A held lane blocks the edit and logs `bin/matrix link incident:writer-collision`.
-- **Wiring:** `adapters/devin/install-hooks.sh` registers `PreToolUse` matchers for `edit`/`write`/`multi_edit` → `pre_tool_use_guard.py`. Re-run `bin/matrix install --target=devin` after this change.
+- **Wiring (conditional):** `adapters/devin/install-hooks.sh` registers `PreToolUse` matchers for `edit`/`write`/`multi_edit`/`exec` → `pre_tool_use_guard.py` **only when** at least one of `gate.shared_surface`, `gate.writer_lane`, `gate.pre_exec_guard`, `gate.secret_deny` is effectively on (single loader `hooks/_flags.py`, effective state; an inert `gate.writer_lane` does not count; loader failure fails closed → registers). The `run_subagent` → `session_audit.py` matcher is always registered. Re-run `bin/matrix install --target=devin` after this change.
 
 ## Feature flags (Devin adapter)
 
@@ -195,6 +195,8 @@ The `PreToolUse` hook (`adapters/devin/hooks/pre_tool_use_guard.py`) covers the 
 The 12 flags: `activation.reinject`, `activation.reinject_full`, `gate.shared_surface`, `gate.writer_lane`, `gate.pre_exec_guard`, `gate.secret_deny`, `hooks.pre_activation_check`, `hooks.boot_warn`, `hooks.session_extras`, `memory.tree`, `views.scoped`, `binding.artifacts`. Effective state: see `bin/matrix flags` — the values in this doc are not the current state.
 
 `hooks.session_extras` (default `false`) is the umbrella switch for the **non-audit** extras of `session_audit.py`: orphan-session detection, `link flags:state`, periodic `validate_routing_signal` (every 20 tools) and the `phase_close` nudge. Off = only the audit trail (`audit_event`) + `pre_activation_check` (its own flag) + `session close` on SessionEnd run.
+
+**`post_tool_use` selective trim (always):** every tool call still refreshes the liveness binding and releases the writer lane (`edit`/`write`/`multi_edit`; release is flag-independent), but `bin/matrix scope` is skipped and the `hook-audit.jsonl` append runs only for consuming tools (`write`/`edit`/`multi_edit`/`exec`/`run_command`/`run-command`/`run_subagent`). **Accepted cost (cambio 7):** per-tool usage evidence loses fidelity — reads no longer appear in `hook-audit.jsonl`.
 
 Legacy env: `MATRIX_INJECT_ACTIVATION`→`activation.reinject`; `BOOT_WARN_ENABLED`/`MATRIX_BOOT_WARN`→`hooks.boot_warn`. `gate.secret_deny` defaults off; to re-enable: flag on + `bin/matrix harden --target=devin --apply` (sidecar `~/.config/devin/.matrix-managed-deny.json`). The numeric TTLs (`MATRIX_WRITER_LANE_TTL_S`, `BOOT_WARN_BUDGET_S`/`MATRIX_BOOT_WARN_BUDGET_S`) are NOT flags.
 

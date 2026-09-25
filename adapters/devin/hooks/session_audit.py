@@ -51,6 +51,13 @@ USERPROMPT_FULL_REINJECT_INTERVAL = 10
 MUTANT_WORK_THRESHOLD = 16
 MUTANT_WORK_TOOLS = {"write", "edit", "multi_edit", "run_command", "run-command", "exec"}
 
+# B-opt-3: post_tool_use tools that still append to hook-audit.jsonl. These
+# cover the post_tool_use consumers (validate_routing_signal,
+# _common._has_mutating_work, post_run_audit, and _common.snapshot_window
+# for the snapshot_due metric); read-type calls exit before the append. Do
+# not trim this set without re-checking those consumers.
+AUDIT_CONSUMER_TOOLS = {"write", "edit", "multi_edit", "exec", "run_command", "run-command", "run_subagent"}
+
 
 def _flag_value(name):
     """Effective boolean of a feature flag via hooks/_flags.py (best-effort).
@@ -821,14 +828,41 @@ def main():
         return
 
     session_id = _session_id(ROOT, event, payload)
-    project_active = _scope_project()
+
+    # B-opt-3: selective hot path for post_tool_use. Every tool call keeps only
+    # the in-process work — liveness touch and writer-lane release — and skips
+    # the `bin/matrix scope` subprocess. The audit append runs only for
+    # consuming tools (AUDIT_CONSUMER_TOOLS: write/edit/multi_edit/exec/
+    # run_command/run_subagent); read-type calls, the bulk of per-event volume,
+    # exit here. Those tools cover the post_tool_use consumers
+    # (validate_routing_signal, _common._has_mutating_work, post_run_audit,
+    # _common.snapshot_window), so omitting the rest does not blind them.
+    if event == "post_tool_use":
+        common.touch_session_binding(ROOT, session_id)
+        tool_name = payload.get("tool_name")
+        tool_input = payload.get("tool_input", {})
+        # Release the per-file writer lane for every surface path this edit
+        # touched (best-effort; only when holder == session_id). The flag
+        # gates acquisition, not release — keep this unconditional.
+        if tool_name in {"edit", "write", "multi_edit"}:
+            for p in _extract_tool_paths(tool_name, tool_input):
+                rel = lane.normalize_relpath(ROOT, p)
+                if rel is not None:
+                    lane.release(ROOT, rel, session_id)
+        if tool_name not in AUDIT_CONSUMER_TOOLS:
+            sys.exit(0)
+
+    # post_tool_use skips scope resolution (project_active stays null; the
+    # consumers of that field fall back to the session_start entry).
+    project_active = None if event == "post_tool_use" else _scope_project()
 
     # D1 (A0): maintain the per-session liveness binding. Schema/path/TTL are
     # owned by hooks/_common.py — this adapter only calls the helpers. Throttled
-    # refresh on user_prompt_submit/post_tool_use; removed on session_end.
+    # refresh on user_prompt_submit/post_tool_use (the post_tool_use touch ran
+    # in the hot-path branch above); removed on session_end.
     if event == "session_start":
         common.write_session_binding(ROOT, session_id, project_active)
-    elif event in ("user_prompt_submit", "post_tool_use"):
+    elif event == "user_prompt_submit":
         common.touch_session_binding(ROOT, session_id)
     elif event == "session_end":
         common.remove_session_binding(ROOT, session_id)
@@ -864,14 +898,8 @@ def main():
         if isinstance(invocation_id, str) and invocation_id.strip():
             envelope["subagent_invocation_id"] = invocation_id
         if event == "post_tool_use":
+            # Lane release already happened in the hot-path branch above.
             envelope["tool_paths"] = _extract_tool_paths(tool_name, tool_input)
-            # Release the per-file writer lane for every surface path this
-            # edit touched (best-effort; only when holder == session_id).
-            if tool_name in {"edit", "write", "multi_edit"}:
-                for p in envelope.get("tool_paths") or []:
-                    rel = lane.normalize_relpath(ROOT, p)
-                    if rel is not None:
-                        lane.release(ROOT, rel, session_id)
 
         # For shell-like tools, parse write targets in memory and only persist
         # argv[0] + first subcommand plus a parsed-target flag. The full command
