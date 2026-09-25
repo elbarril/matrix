@@ -164,6 +164,13 @@
       "type": "local",
       "added": "2026-09-22T10:05:06-03:00",
       "bound_target": "devin"
+    },
+    {
+      "name": "deloitteus",
+      "path": "/home/emiliano/www/Portal-Templates-Group/deloitteus",
+      "type": "local",
+      "added": "2026-09-22T11:15:06-03:00",
+      "bound_target": "devin"
     }
   ],
   "created": "2026-05-19T18:31:00-03:00",
