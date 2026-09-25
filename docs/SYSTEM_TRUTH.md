@@ -23,9 +23,11 @@
 ## Enforcement hooks (Seraph, live)
 
 - `_flags`
+- `_tokenizer`
 - `_writer_lane`
 - `audit_event`
 - `detect_orphan_session`
+- `import_boundaries`
 - `install_integrity_check`
 - `post_run_audit`
 - `pre_activation_check`

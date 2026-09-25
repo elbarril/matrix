@@ -54,7 +54,7 @@ MAX_GIT_CALLS = 6
 # substring over the whole line means a `checkpoint` whose prose happens to
 # contain "route ... Smith" is never misread as a delegation. A `phase:close`
 # entry is NOT counted as delegation evidence; that is a separate
-# checkpoint-discipline signal already handled by `_has_mutating_work` /
+# checkpoint-discipline signal already handled by `has_mutating_work` /
 # `phase_close_missing` in session_close.py.
 DELEGATION_RE = re.compile(
     r"\b(" + "|".join(re.escape(n) for n in DELEGATION_NAMES) + r")\b",

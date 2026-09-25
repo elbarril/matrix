@@ -13,7 +13,7 @@ import json
 import os
 import subprocess
 
-from _common import _has_mutating_work, current_session_id, emit, read_input, resolve_root
+from _common import current_session_id, emit, has_mutating_work, read_input, resolve_root
 
 
 AUDIT_LOG = "hook-audit.jsonl"
@@ -169,13 +169,13 @@ def main():
     start_status = _session_start_status(filtered)
     if start_status == "disabled":
         required = [s for s in required if s != "pre_activation_check"]
-    has_mutating_work = _has_mutating_work(filtered, root)
-    if has_mutating_work:
+    mutating_work = has_mutating_work(filtered, root)
+    if mutating_work:
         required.append("phase_close")
-    phase_close_missing = has_mutating_work and "phase_close" not in steps
+    phase_close_missing = mutating_work and "phase_close" not in steps
 
     validate_routing_signal_report = _run_validate_routing_signal_check(root, session_id)
-    smith_gate_required = has_mutating_work and validate_routing_signal_report.get("triggered") is True
+    smith_gate_required = mutating_work and validate_routing_signal_report.get("triggered") is True
     if smith_gate_required:
         required.append("smith_gate")
 

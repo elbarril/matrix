@@ -12,15 +12,28 @@ import json
 import os
 import re
 
-from _common import _load_yaml, parse_frontmatter
+from _common import ROSTER, SUPPORTING_AGENTS, _load_yaml, parse_frontmatter
 
 
-def _roster_and_supporting():
-    """Import roster names lazily to avoid a circular import with
-    pre_activation_check.py, which imports this module via optional import."""
-    import pre_activation_check
+def _conditional_hook_required(root, flag_names):
+    """Return True when a conditionally-wired hook must be required.
 
-    return pre_activation_check.ROSTER + pre_activation_check.SUPPORTING_AGENTS
+    Mirrors install-hooks.sh's guard_needed computation exactly: the hook is
+    required when at least one listed gate is effectively on. A gate counts
+    when bool(flag.value, default True) and state != "inert". If the flag
+    loader cannot be imported, fail closed (required) — the wiring registers
+    the guard in that case too.
+    """
+    try:
+        import _flags
+    except Exception:
+        return True
+
+    def gate_on(gate):
+        flag = _flags.get_flag(gate, root=root) or {}
+        return bool(flag.get("value", True)) and flag.get("state") != "inert"
+
+    return any(gate_on(g) for g in flag_names)
 
 
 def _expand_path(raw, root):
@@ -53,7 +66,7 @@ def _roster_form_map(render, root):
     master_form = render.get("master", "skill")
 
     master_name = None
-    for name in _roster_and_supporting():
+    for name in ROSTER + SUPPORTING_AGENTS:
         path = os.path.join(root, "brain", "agents", name + ".md")
         if not os.path.isfile(path):
             continue
@@ -68,7 +81,7 @@ def _roster_form_map(render, root):
 
     return {
         name: (master_form if name == master_name else default_form)
-        for name in _roster_and_supporting()
+        for name in ROSTER + SUPPORTING_AGENTS
     }
 
 
@@ -83,9 +96,8 @@ def check_install_integrity(target, root):
     - Every sub-check is an independent entry in `checks`; any failed sub-check
       appends to `errors` and forces `ok=False`.
     - Never reads or logs secret file contents. Only structural JSON/path checks.
-    - Roster names come from hooks/pre_activation_check.py's ROSTER +
-      SUPPORTING_AGENTS; rendered-form mapping comes from the adapter's
-      `render:` block.
+    - Roster names come from hooks/_common.py's ROSTER + SUPPORTING_AGENTS;
+      rendered-form mapping comes from the adapter's `render:` block.
     """
     checks = []
     errors = []
@@ -135,8 +147,25 @@ def check_install_integrity(target, root):
 
     # 2. hook_wired:<event>
     required_hooks = ii.get("required_hooks", {})
+    conditional = ii.get("required_hooks_when_any_flag")
+    if conditional is not None and not isinstance(conditional, dict):
+        check("required_hooks_when_any_flag", False, "must be an object mapping event -> list of flag names")
+        conditional = {}
     if isinstance(required_hooks, dict):
         for event, substring in required_hooks.items():
+            # Conditional requirement: an event listed in
+            # required_hooks_when_any_flag is only required when at least one
+            # of its gates is effectively on (mirroring install-hooks.sh's
+            # conditional wiring). A malformed value fails the check and falls
+            # through to "required always" — never "not required".
+            flag_names = (conditional or {}).get(event)
+            if flag_names is not None:
+                if isinstance(flag_names, list) and all(isinstance(f, str) and f for f in flag_names):
+                    if not _conditional_hook_required(root, flag_names):
+                        continue
+                else:
+                    check(f"required_hooks_when_any_flag:{event}", False,
+                          f"expected a list of flag names, got {flag_names!r}")
             if not isinstance(config, dict):
                 check(f"hook_wired:{event}", False, "config not loaded")
                 continue

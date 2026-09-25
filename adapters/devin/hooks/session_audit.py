@@ -23,8 +23,8 @@ for _ in range(3):
 sys.path.insert(0, os.path.join(_candidate, "hooks"))
 import _common as common  # noqa: E402
 import _flags  # noqa: E402
+import _tokenizer  # noqa: E402
 import _writer_lane as lane  # noqa: E402
-from post_run_audit import _write_targets, ALLOWED_MUTANT_PREFIX  # noqa: E402
 
 ROOT = common.resolve_root()
 BIN_MATRIX = os.path.join(ROOT, "bin", "matrix")
@@ -53,7 +53,7 @@ MUTANT_WORK_TOOLS = {"write", "edit", "multi_edit", "run_command", "run-command"
 
 # B-opt-3: post_tool_use tools that still append to hook-audit.jsonl. These
 # cover the post_tool_use consumers (validate_routing_signal,
-# _common._has_mutating_work, post_run_audit, and _common.snapshot_window
+# _common.has_mutating_work, post_run_audit, and _common.snapshot_window
 # for the snapshot_due metric); read-type calls exit before the append. Do
 # not trim this set without re-checking those consumers.
 AUDIT_CONSUMER_TOOLS = {"write", "edit", "multi_edit", "exec", "run_command", "run-command", "run_subagent"}
@@ -835,7 +835,7 @@ def main():
     # consuming tools (AUDIT_CONSUMER_TOOLS: write/edit/multi_edit/exec/
     # run_command/run_subagent); read-type calls, the bulk of per-event volume,
     # exit here. Those tools cover the post_tool_use consumers
-    # (validate_routing_signal, _common._has_mutating_work, post_run_audit,
+    # (validate_routing_signal, _common.has_mutating_work, post_run_audit,
     # _common.snapshot_window), so omitting the rest does not blind them.
     if event == "post_tool_use":
         common.touch_session_binding(ROOT, session_id)
@@ -907,10 +907,10 @@ def main():
         if tool_name in {"exec", "run_command", "run-command"} and isinstance(tool_input, dict):
             cmd = tool_input.get("command")
             if isinstance(cmd, str):
-                if cmd.strip().startswith(ALLOWED_MUTANT_PREFIX):
+                if cmd.strip().startswith(_tokenizer.ALLOWED_MUTANT_PREFIX):
                     targets, unparsed = [], False
                 else:
-                    targets, unparsed = _write_targets(cmd, ROOT)
+                    targets, unparsed = _tokenizer.write_targets(cmd, ROOT)
                 head = " ".join(cmd.split()[:2])
                 existing_paths = envelope.get("tool_paths") or []
                 seen = set()

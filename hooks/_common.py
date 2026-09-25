@@ -14,6 +14,21 @@ import sys
 import time
 
 
+# Roster + supporting agents — single owner in the kernel. Moved here from
+# pre_activation_check to break the pre_activation_check <-> install_integrity
+# import cycle (G3 S2); both hooks import these names.
+ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith"]
+
+# Infrastructure agents that deliberately live as installable subagent files in
+# brain/agents/ but are NOT subject to roster discipline (see
+# brain/data/contract-catalog.md "Supporting cast" — retire-one-to-add-one
+# applies only to ROSTER above).
+# docs/SYSTEM_TRUTH.md lists these alongside the roster with their own description.
+# Add a name here ONLY if brain/data/contract-catalog.md already documents it as
+# supporting-cast infrastructure — never to silently permit an undocumented new file.
+SUPPORTING_AGENTS = ["lock"]
+
+
 def resolve_root():
     """Resolve the Matrix root: $MATRIX_ROOT, else walk up to brain/ + AGENTS.md."""
     env = os.environ.get("MATRIX_ROOT")
@@ -100,7 +115,7 @@ def _session_binding_ttl_s():
     return int(os.environ.get("MATRIX_SESSION_BINDING_TTL_S", SESSION_BINDING_DEFAULT_TTL_S))
 
 
-def _session_binding_path(root, session_id):
+def session_binding_path(root, session_id):
     return os.path.join(root, SESSION_BINDING_DIR, f"{session_id}{SESSION_BINDING_SUFFIX}")
 
 
@@ -119,7 +134,7 @@ def _session_binding_paths(root):
     ]
 
 
-def _read_binding(path):
+def read_binding(path):
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -161,7 +176,7 @@ def _prune_stale_bindings(root):
     threshold = 2 * _session_binding_ttl_s()
     now = datetime.datetime.now().astimezone()
     for path in _session_binding_paths(root):
-        binding = _read_binding(path)
+        binding = read_binding(path)
         if binding is None:
             continue
         ts = _parse_iso_ts(binding.get("last_seen_at"))
@@ -185,7 +200,7 @@ def write_session_binding(root, session_id, project_active=None):
     if not session_id:
         return
     _prune_stale_bindings(root)
-    path = _session_binding_path(root, session_id)
+    path = session_binding_path(root, session_id)
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
     except OSError:
@@ -207,8 +222,8 @@ def touch_session_binding(root, session_id):
     """
     if not session_id:
         return
-    path = _session_binding_path(root, session_id)
-    existing = _read_binding(path)
+    path = session_binding_path(root, session_id)
+    existing = read_binding(path)
     if existing is None:
         write_session_binding(root, session_id)
         return
@@ -228,7 +243,7 @@ def remove_session_binding(root, session_id):
     if not session_id:
         return
     try:
-        os.remove(_session_binding_path(root, session_id))
+        os.remove(session_binding_path(root, session_id))
     except OSError:
         pass
 
@@ -269,7 +284,7 @@ def current_session_id(root=None, session_id=None):
     if not paths:
         return _marker_session_id(root)
     if len(paths) == 1:
-        binding = _read_binding(paths[0])
+        binding = read_binding(paths[0])
         sid = binding.get("session_id") if binding else None
         if sid and _binding_fresh(binding):
             return sid
@@ -352,7 +367,7 @@ def _is_state_path(root, raw_path):
     return norm == "brain/state" or norm.startswith("brain/state/")
 
 
-def _has_mutating_work(entries, root):
+def has_mutating_work(entries, root):
     """Return True if any post_tool_use mutating tool touches a path outside brain/state."""
     for entry in entries:
         if entry.get("event") != "post_tool_use":

@@ -15,6 +15,8 @@ import subprocess
 import time
 
 from _common import (
+    ROSTER,
+    SUPPORTING_AGENTS,
     _load_registry,
     emit,
     ledger_tail_events,
@@ -25,6 +27,7 @@ from _common import (
     snapshot_window,
     ttl_scan,
 )
+from import_boundaries import check_boundaries
 
 try:
     from _flags import DEFAULTS as _FLAGS_DEFAULTS
@@ -63,18 +66,6 @@ try:
     import the_source as the_source_mod
 except Exception:
     the_source_mod = None
-
-ROSTER = ["neo", "oracle", "morpheus", "architect", "trinity", "smith"]
-
-# Infrastructure agents that deliberately live as installable subagent files in
-# brain/agents/ but are NOT subject to roster discipline (see
-# brain/data/contract-catalog.md "Supporting cast" — retire-one-to-add-one
-# applies only to ROSTER above).
-# docs/SYSTEM_TRUTH.md lists these alongside the roster with their own description.
-# Add a name here ONLY if brain/data/contract-catalog.md already documents it as
-# supporting-cast infrastructure — never to silently permit an undocumented new file.
-SUPPORTING_AGENTS = ["lock"]
-
 
 def _flags_value(name):
     """Effective boolean of a feature flag; falls back to the loader default."""
@@ -393,6 +384,11 @@ def main():
     # State directory
     state = os.path.join(root, "brain", "state")
     check("state_dir", os.path.isdir(state), f"missing {state}")
+
+    # Import-boundary ratchet (hard fail, never boot_warn — a ratchet that only
+    # warns is the same trap as a guard degraded to a no-op).
+    ib = check_boundaries(root)
+    check("import_boundaries", ib.get("ok"), "; ".join(ib.get("errors", [])))
 
     # Legacy binding artifacts — WARN only, never BLOCK. With binding.artifacts=on
     # the legacy files are expected (only a broken `_brain` symlink still warns).
