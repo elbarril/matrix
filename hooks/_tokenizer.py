@@ -18,7 +18,7 @@ import shlex
 
 
 ALLOWED_MUTANT_PREFIX = "bin/matrix corpus-ingest"
-_WRITE_ALL_ARGS = {"rm", "rmdir", "truncate", "tee"}
+_WRITE_ALL_ARGS = {"rm", "rmdir", "tee"}
 _WRITE_LAST_ARG = {"mv", "cp"}
 _CONTROL_OPS = {";", "&&", "||", "|", "&"}
 _WRITE_HINTS = (">", ">>", "tee ", "rm ", "rmdir ", "mv ", "cp ", "truncate ", "sed -i", "dd ")
@@ -111,6 +111,85 @@ def _resolve_shell_var(target, root):
     return target
 
 
+def _sed_write_targets(args):
+    """Write targets for `sed` in-place editing; [] when no in-place flag.
+
+    Option-aware walk: `-e`/`-f`/`--expression=`/`--file=` consume their value
+    as script/script-file (never a target); short clusters are walked
+    char-by-char with `i` marking in-place and `e`/`f` consuming the
+    rest-of-cluster or the next token as script/script-file. The first bare
+    token is the script only when no script source was seen; every later bare
+    token is a FILE. A residual FP on `sed -i ''` (BSD) is accepted by design;
+    the file operands still resolve.
+    """
+    in_place = False
+    saw_script_source = False
+    bare = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("--"):
+            if arg == "--in-place" or arg.startswith("--in-place="):
+                in_place = True
+            elif arg.startswith("--expression=") or arg.startswith("--file="):
+                saw_script_source = True
+        elif arg.startswith("-") and arg != "-":
+            j = 0
+            cluster = arg[1:]
+            while j < len(cluster):
+                if cluster[j] == "i":
+                    in_place = True
+                elif cluster[j] in ("e", "f"):
+                    saw_script_source = True
+                    if j + 1 < len(cluster):
+                        break  # rest of the cluster is the script value
+                    i += 1  # the next token is the script value
+                    break
+                j += 1
+        else:
+            bare.append(arg)
+        i += 1
+    if not in_place:
+        return []
+    if not saw_script_source and bare:
+        return bare[1:]
+    return bare
+
+
+def _truncate_write_targets(args):
+    """Write targets for `truncate`.
+
+    `-s`/`--size` and `-r`/`--reference` consume their operand (a size or a
+    read-only reference file, never a target); `-o`/`--io-blocks` and
+    `-c`/`--no-create` are ignored. Short clusters are walked char-by-char
+    with `s`/`r` consuming the rest-of-cluster or the next token. Remaining
+    bare tokens are FILEs. A trailing `-s`/`-r` with no operand yields [].
+    """
+    bare = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("--"):
+            if arg == "--size" or arg == "--reference":
+                i += 1  # the next token is the operand
+            elif arg.startswith("--size=") or arg.startswith("--reference="):
+                pass  # value attached, consumed
+        elif arg.startswith("-") and arg != "-":
+            j = 0
+            cluster = arg[1:]
+            while j < len(cluster):
+                if cluster[j] in ("s", "r"):
+                    if j + 1 < len(cluster):
+                        break  # rest of the cluster is the operand
+                    i += 1  # the next token is the operand
+                    break
+                j += 1
+        else:
+            bare.append(arg)
+        i += 1
+    return bare
+
+
 def write_targets(command, root):
     """Return parsed write targets and whether write intent could not be parsed.
 
@@ -155,8 +234,10 @@ def write_targets(command, root):
                 targets.append(args[-1])
             elif verb == "git" and args and args[0] == "rm":
                 targets.extend(arg for arg in args[1:] if not arg.startswith("-"))
-            elif verb == "sed" and any(arg == "-i" or arg.startswith("-i.") or arg == "--in-place" for arg in args):
-                targets.extend(arg for arg in args if not arg.startswith("-"))
+            elif verb == "sed":
+                targets.extend(_sed_write_targets(args))
+            elif verb == "truncate":
+                targets.extend(_truncate_write_targets(args))
             elif verb == "dd":
                 # dd's write target is the `of=` operand only: `if=` is an
                 # input and loose operands (bs=, count=, status=) are not

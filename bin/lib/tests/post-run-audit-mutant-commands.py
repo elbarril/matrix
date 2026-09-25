@@ -234,9 +234,80 @@ def case_dd_in_root_target_anomaly():
         print("C DD IN-ROOT TARGET IS ANOMALY PASS")
 
 
+def case_tokenizer_sed_truncate_fp():
+    root = str(REPO_ROOT)
+
+    # sed: script and -e/-f values are never targets; the first bare token is
+    # the script only when no script source was seen.
+    targets, unparsed = _tokenizer.write_targets("sed -i 's/a/b/' file", root)
+    assert targets == ["file"], f"expected ['file'], got {targets}"
+    assert unparsed is False
+
+    targets, unparsed = _tokenizer.write_targets(
+        "sed -i -e 's/a/b/' -e 's/c/d/' file", root
+    )
+    assert targets == ["file"], f"expected ['file'], got {targets}"
+    assert unparsed is False
+
+    targets, unparsed = _tokenizer.write_targets("sed -n '/x/p'", root)
+    assert targets == [], f"expected [] (no -i), got {targets}"
+    assert unparsed is False
+
+    # Architect: combined short clusters and a suffix attached without a dot.
+    targets, unparsed = _tokenizer.write_targets("sed -ni 's/a/b/' file", root)
+    assert targets == ["file"], f"expected ['file'], got {targets}"
+    assert unparsed is False
+
+    # Architect: BSD `sed -i ''` residual FP is accepted by design; the file
+    # operand must still be detected (GNU treats '' as the script).
+    targets, unparsed = _tokenizer.write_targets("sed -i '' 's/a/b/' file", root)
+    assert "file" in targets, f"expected 'file' in targets, got {targets}"
+    assert unparsed is False
+
+    # Architect: `sed -i` with no operands -> [] without crashing.
+    targets, unparsed = _tokenizer.write_targets("sed -i", root)
+    assert targets == [], f"expected [], got {targets}"
+    assert unparsed is False
+
+    # truncate: -s/--size and -r/--reference operands are never targets.
+    targets, unparsed = _tokenizer.write_targets("truncate -s 0 file", root)
+    assert targets == ["file"], f"expected ['file'], got {targets}"
+    assert unparsed is False
+
+    targets, unparsed = _tokenizer.write_targets("truncate --size=+1K f", root)
+    assert targets == ["f"], f"expected ['f'], got {targets}"
+    assert unparsed is False
+
+    # Architect: -r reads the reference size, so the trailing bare token is the
+    # write target and the reference is not.
+    targets, unparsed = _tokenizer.write_targets("truncate -r ref f", root)
+    assert targets == ["f"], f"expected ['f'], got {targets}"
+    assert unparsed is False
+
+    # Architect: a trailing -s/-r with no operand -> [] without crashing.
+    targets, unparsed = _tokenizer.write_targets("truncate -s", root)
+    assert targets == [], f"expected [], got {targets}"
+    assert unparsed is False
+
+    # dd regression: untouched by the sed/truncate changes.
+    targets, unparsed = _tokenizer.write_targets("dd of=path", root)
+    assert targets == ["path"], f"expected ['path'], got {targets}"
+    assert unparsed is False
+
+    targets, unparsed = _tokenizer.write_targets("dd if=a of=b", root)
+    assert targets == ["b"], f"expected ['b'], got {targets}"
+    assert unparsed is False
+
+    targets, unparsed = _tokenizer.write_targets("dd if=a", root)
+    assert targets == [], f"expected [], got {targets}"
+    assert unparsed is False
+    print("C TOKENIZER SED/TRUNCATE FP PASS")
+
+
 def main():
     assert REPO_ROOT != Path("/tmp").resolve(), "repo root must not be /tmp"
     case_tokenizer_units()
+    case_tokenizer_sed_truncate_fp()
     case_detector_false_positive_side_compliant()
     case_detector_full_negative_battery()
     case_dd_absolute_outside_root_is_not_anomaly()
