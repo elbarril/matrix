@@ -36,6 +36,21 @@ Se carga automáticamente cuando la sesión resuelve el proyecto `calian`.
 
 ---
 
+## Ambiente: portal Internal Careers (caso 1232407)
+
+| Dato | Valor |
+|---|---|
+| Caso TEG | [1232407](https://teg.avature.net/#Case/1232407) — "Internal Careers" (S1 del plan de 3 casos, 2026-09-17) |
+| Instancia (obdbqa) | `obfint57475` → https://obfint57475.ir02.obfuscate.xcade.dev/ |
+| Settings/admin | https://obfint57475.ir02.obfuscate.xcade.dev/_managerLogin (cuenta avasso — lección core #58) |
+| Portal ID | **23** ("INT - Internal Careers", path `internalcareers`) |
+| Lista de acceso | `INT - Allowed Users to Log In` (ID 119) — abrir en `#People/Id:119` |
+| Usuario de prueba (el que entra al portal) | Person **142** "Nilyu Aaqff" — username `raghu.iyers`; último login 18-Sep-2026 vía Portal INT - Internal Careers |
+| PAR | El email "IC PAR" (customerservice@avature.net, 18-Sep-2026) queda en el Journal → Messages del person 142; el link `/su/<hash>` es reutilizable (verificado 2026-09-23 desde contexto limpio). El token no se copia acá (lección 8): consultarlo en el Journal del person. |
+| Branch | `T1232407_calian_NewInternalCareers` — interim tag `Tag1232407_calian__Interim_2026-09-18_123328` |
+
+---
+
 ## Decisiones y pendientes
 
 - **Variante HM4 (Full + Onboarding), pendiente de confirmación del case owner.** El scope form contractual del caso padre **no incluye ningún ítem de Onboarding** (verificado en las 76 filas de "Solutions in scope" + "Add-on solutions"), pero sí incluye Offer Management. El título del padre dice "ONB" y el portal 7 ya venía apuntado a `hiringmanager4`, así que se clonó HM4 para avanzar.
