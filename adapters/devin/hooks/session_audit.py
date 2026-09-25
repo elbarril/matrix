@@ -735,6 +735,7 @@ def _boot_warn_tokens(payload):
         "model_drift",
         "ttl_expired",
         "snapshot_due",
+        "flags_config",
     }
     return [t for t in tokens if isinstance(t, str) and t in allowed]
 
@@ -754,9 +755,10 @@ def _render_boot_warn_text(payload):
         "validate_layer2": ("Layer-2 CLI-neutrality drift", "run `bin/matrix hooks validate_layer2`"),
         "the_source": ("SYSTEM_TRUTH is stale", "run `bin/matrix hooks the_source`"),
         "snapshot_due": ("metrics snapshot is due", "run the harness-health-report extractor, then `bin/matrix link metrics:snapshot matrix path=<output>`"),
+        "flags_config": ("the flags config is unreadable or degraded", "repair brain/config.yaml or adapters/<target>/config.yaml"),
     }
     lines = []
-    for token in ["surface_budget", "validate_lessons", "model_drift", "ttl_expired", "validate_layer2", "the_source", "snapshot_due"]:
+    for token in ["surface_budget", "validate_lessons", "model_drift", "ttl_expired", "validate_layer2", "the_source", "snapshot_due", "flags_config"]:
         if token not in details:
             continue
         label, fix = mapping.get(token, (token, ""))

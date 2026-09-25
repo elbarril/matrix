@@ -14,7 +14,7 @@ Usage:
 import os
 import sys
 
-from _common import _load_yaml, emit, parse_frontmatter as _parse_frontmatter, read_input, resolve_root
+from _common import emit, load_yaml_strict, parse_frontmatter as _parse_frontmatter, read_input, resolve_root
 
 
 def parse_frontmatter(path):
@@ -57,12 +57,18 @@ def live_ships(root):
 
 
 def config_flags_missing(root):
-    """Return config keys from adapters/devin/config.yaml (depth <= 2) not named in DEVIN.md."""
+    """Return (missing_flags, load_error) for adapters/devin/config.yaml (depth <= 2).
+
+    An unreadable config is a real error, never a silent [] (lesson 71) — it
+    propagates as load_error so check() fails ok=False instead of passing.
+    """
     config_path = os.path.join(root, "adapters", "devin", "config.yaml")
     devin_md_path = os.path.join(root, "DEVIN.md")
-    cfg = _load_yaml(config_path)
+    cfg, load_error = load_yaml_strict(config_path)
+    if load_error is not None:
+        return [], load_error
     if not isinstance(cfg, dict):
-        return []
+        return [], None
     keys = set()
     for top_key, top_val in cfg.items():
         keys.add(top_key)
@@ -76,7 +82,7 @@ def config_flags_missing(root):
                 devin_text = fh.read()
     except Exception:
         pass
-    return sorted(k for k in keys if k not in devin_text)
+    return sorted(k for k in keys if k not in devin_text), None
 
 
 def generate(root):
@@ -145,16 +151,25 @@ def check(root, check=True):
             with open(target, encoding="utf-8") as fh:
                 existing = fh.read()
         in_sync = existing.strip() == content.strip()
-        missing_flags = config_flags_missing(root)
-        ok = in_sync and not missing_flags
+        missing_flags, config_load_error = config_flags_missing(root)
+        ok = in_sync and not missing_flags and config_load_error is None
+        if config_load_error is not None:
+            note = f"adapters/devin/config.yaml is unreadable: {config_load_error}"
+        elif not in_sync:
+            note = "SYSTEM_TRUTH.md is stale"
+        elif missing_flags:
+            note = "DEVIN.md omits a config flag"
+        else:
+            note = "in sync"
         return {
             "hook": "the_source",
             "ok": ok,
             "mode": "check",
             "in_sync": in_sync,
             "config_flags_missing": missing_flags,
+            "config_load_error": str(config_load_error) if config_load_error else None,
             "target": target,
-            "note": "in sync" if ok else "SYSTEM_TRUTH.md is stale or DEVIN.md omits a config flag",
+            "note": note,
         }
 
     os.makedirs(os.path.dirname(target), exist_ok=True)

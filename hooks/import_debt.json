@@ -1,13 +1,5 @@
 {
   "edges": {
-    "hooks/the_source.py -> hooks/_common.py::_load_yaml": {
-      "intentional": true,
-      "note": "leccion 71: _load_yaml traga excepciones a {} — queda privada a proposito; la arista queda visible como deuda hasta resolver la 71 (fase aparte)."
-    },
-    "hooks/install_integrity_check.py -> hooks/_common.py::_load_yaml": {
-      "intentional": true,
-      "note": "leccion 71: idem the_source — _load_yaml queda privada; deuda visible hasta resolver la 71 (fase aparte)."
-    },
     "hooks/pre_activation_check.py -> hooks/_common.py::_load_registry": {
       "intentional": true,
       "note": "simbolo privado preexistente fuera del set de renombres de S3 (G3); candidato a promocion a publico o a resolver junto con la leccion 71."

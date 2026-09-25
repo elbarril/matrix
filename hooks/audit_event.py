@@ -121,6 +121,7 @@ BOOT_WARN_IDS = {
     "model_drift",
     "ttl_expired",
     "snapshot_due",
+    "flags_config",
 }
 
 

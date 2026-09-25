@@ -9,7 +9,7 @@ Builds a throwaway Matrix fixture (never the real repo) and runs six cases:
    session_close DOES derive pre_activation_check (Opción B, status failed),
    post_run_audit compliant:true, and the failure is surfaced on the result
 5. healthy fixture (built/installed): ok:true, boot_warn.warns empty (dictamen Architect punto 4)
-6. BOOT_WARN_BUDGET_S=0:       ok:true, boot_warn.warns empty, skipped lists all seven tokens
+6. BOOT_WARN_BUDGET_S=0:       ok:true, boot_warn.warns empty, skipped lists all eight tokens
 """
 import importlib.util
 import json
@@ -187,8 +187,8 @@ def case_boot_warn_disabled():
         assert result.get("boot_warn", {}).get("warns") == [], f"case6 expected empty warns: {result}"
         assert sorted(result.get("boot_warn", {}).get("skipped", [])) == sorted([
             "surface_budget", "validate_lessons", "model_drift", "ttl_expired",
-            "validate_layer2", "the_source", "snapshot_due",
-        ]), f"case6 expected all 7 tokens skipped: {result}"
+            "validate_layer2", "the_source", "snapshot_due", "flags_config",
+        ]), f"case6 expected all 8 tokens skipped: {result}"
         print("D9-6 PASS")
 
 

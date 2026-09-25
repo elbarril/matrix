@@ -11,8 +11,9 @@ Never reads or logs secret file contents. Only structural JSON/path checks.
 import json
 import os
 import re
+import sys
 
-from _common import ROSTER, SUPPORTING_AGENTS, _load_yaml, parse_frontmatter
+from _common import ROSTER, SUPPORTING_AGENTS, load_yaml_strict, parse_frontmatter
 
 
 def _conditional_hook_required(root, flag_names):
@@ -102,8 +103,25 @@ def check_install_integrity(target, root):
     checks = []
     errors = []
 
+    def check(label, ok, detail=""):
+        checks.append({"check": label, "ok": bool(ok), "detail": "" if ok else detail})
+        if not ok:
+            errors.append(label + (f": {detail}" if detail else ""))
+
     adapter_yaml = os.path.join(root, "adapters", target, "adapter.yaml")
-    cfg = _load_yaml(adapter_yaml)
+    cfg, load_error = load_yaml_strict(adapter_yaml)
+    if load_error is not None:
+        # A corrupt/unreadable adapter.yaml is a visible failed check — never a
+        # silent {} opt-out (lesson 71). __main__ calls this without try/except,
+        # so load_yaml_strict must never raise (return-typed contract, B1a).
+        check("config_readable", False, f"{adapter_yaml}: {load_error}")
+        return {
+            "applicable": True,
+            "target": target,
+            "checks": checks,
+            "errors": errors,
+            "ok": False,
+        }
     if not isinstance(cfg, dict):
         cfg = {}
 
@@ -116,11 +134,6 @@ def check_install_integrity(target, root):
             "errors": [],
             "ok": True,
         }
-
-    def check(label, ok, detail=""):
-        checks.append({"check": label, "ok": bool(ok), "detail": "" if ok else detail})
-        if not ok:
-            errors.append(label + (f": {detail}" if detail else ""))
 
     artifacts = cfg.get("artifacts", {}) if isinstance(cfg, dict) else {}
     installed_agents_dir = artifacts.get("installed_agents_dir", "")
@@ -263,7 +276,14 @@ def model_drift(target, root):
     model-less installed artifacts are reported as unknown and never emit a warn.
     """
     adapter_yaml = os.path.join(root, "adapters", target, "adapter.yaml")
-    cfg = _load_yaml(adapter_yaml)
+    cfg, load_error = load_yaml_strict(adapter_yaml)
+    if load_error is not None:
+        print(
+            f"[install_integrity_check] model_drift: adapter.yaml ilegible para "
+            f"'{target}': {load_error}",
+            file=sys.stderr,
+        )
+        return {"applicable": False, "target": target, "drift": [], "unknown": []}
     if not isinstance(cfg, dict):
         return {"applicable": False, "target": target, "drift": [], "unknown": []}
 

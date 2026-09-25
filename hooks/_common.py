@@ -117,6 +117,7 @@ SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
 # only touches files whose session is long dead, never a working one.
 SESSION_ARTIFACT_TTL_DAYS = {
     "post-tool-count": 14,
+    "user-prompt-count": 14,
     "plain-sid": 14,
     "validation-report": 30,
     "phase-close-nudge": 7,
@@ -126,7 +127,10 @@ SESSION_ARTIFACT_TTL_DAYS = {
 # plain-sid rule needs current_sid); see current_session_id.
 SESSION_ARTIFACT_NON_BINDING_KINDS = frozenset(SESSION_ARTIFACT_TTL_DAYS)
 # Known per-session artifact suffixes. user-prompt-count is classified here so
-# it never falls through to plain-sid; it has no TTL entry and is not pruned.
+# it never falls through to plain-sid; it has a TTL entry (14 d, same "alive"
+# rule as post-tool-count: age + no fresh binding — it is an O(1) counter, and
+# its only reader (activation reinject_full) is off; the adapter rebuilds it
+# from hook-audit.jsonl via _user_prompt_submit_count).
 SESSION_ARTIFACT_SUFFIXES = {
     "binding": "-binding.json",
     "post-tool-count": "-post-tool-count.json",
@@ -443,14 +447,37 @@ def _registry_project(registry, name):
     return None
 
 
-def _load_yaml(path):
-    """Load a YAML file, falling back to empty dict if yaml is unavailable."""
+class LoadYamlError(Exception):
+    """A YAML file exists but could not be read/parsed (lesson 71).
+
+    Never raised by load_yaml_strict — it is returned as the error half of the
+    (data, error) contract so callers decide fatal vs non-fatal.
+    """
+
+
+def load_yaml_strict(path):
+    """Load a YAML file with a typed, return-based failure contract.
+
+    Never raises (lesson 71). Returns (data, None) when the file reads and
+    parses (data is {} for an empty document), or (None, LoadYamlError) when
+    it cannot. The error carries the real diagnostic (exception type + message
+    + sys.executable + sys.path), mirroring adapters/_adapter_meta.py — never a
+    silent {} that is indistinguishable from "no hay nada".
+    """
     try:
         import yaml
+    except Exception as exc:
+        return None, LoadYamlError(
+            f"PyYAML import failed: {type(exc).__name__}: {exc}"
+        )
+    try:
         with open(path, encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except Exception:
-        return {}
+            data = yaml.safe_load(fh)
+    except Exception as exc:
+        return None, LoadYamlError(
+            f"{type(exc).__name__}: {exc} | sys.executable={sys.executable} | sys.path[0:5]={sys.path[:5]}"
+        )
+    return (data if data is not None else {}), None
 
 
 def resolve_bound_target(project_name, root=None):

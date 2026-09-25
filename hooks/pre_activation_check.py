@@ -32,9 +32,11 @@ from import_boundaries import check_boundaries
 try:
     from _flags import DEFAULTS as _FLAGS_DEFAULTS
     from _flags import get_flag as _get_flag
+    from _flags import load_status as _flags_load_status
 except Exception:
     _FLAGS_DEFAULTS = {}
     _get_flag = None
+    _flags_load_status = None
 
 try:
     from validate_ship import validate as validate_ship
@@ -75,6 +77,21 @@ def _flags_value(name):
         return bool(_get_flag(name)["value"])
     except Exception:
         return bool(_FLAGS_DEFAULTS.get(name, False))
+
+
+def _safe_config_text(path):
+    """Return the raw text of a config file, or None when unreadable (D1).
+
+    Guards the config text read so a binary/non-UTF-8 config is a visible
+    flags_config warn, never a traceback (lesson 71). When None, the text-based
+    checks (config_has_user/config_has_language) are skipped — a corrupt config
+    must not behave differently for a reason that is only its encoding.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
 
 
 def _git_exclude_path(project_path):
@@ -153,6 +170,7 @@ BOOT_WARN_ORDER = [
     "validate_layer2",
     "the_source",
     "snapshot_due",
+    "flags_config",
 ]
 
 
@@ -333,6 +351,28 @@ def _boot_warn(root, target="devin"):
         except Exception as exc:
             add_warn("snapshot_due", {"error": str(exc), "fix": "run the harness-health-report extractor, then bin/matrix link metrics:snapshot matrix path=<output>"})
 
+    # 8. flags_config — declared consumer of _flags.load_status (§8, B1b).
+    # Non-fatal: a corrupt flags config is surfaced as a warn token, never a
+    # block — the loader itself never raises (lesson 71).
+    if hit_deadline():
+        skipped.append("flags_config")
+    else:
+        try:
+            if _flags_load_status:
+                ls = _flags_load_status(root)
+                status = ls.get("status")
+                if status in ("unreadable", "minimal-fallback"):
+                    add_warn(
+                        "flags_config",
+                        {
+                            "status": status,
+                            "sources": ls.get("sources"),
+                            "fix": "repair brain/config.yaml or adapters/<target>/config.yaml",
+                        },
+                    )
+        except Exception as exc:
+            add_warn("flags_config", {"error": str(exc), "fix": "repair the flags config"})
+
     elapsed = time.perf_counter() - start
     return {
         "warns": warns,
@@ -360,10 +400,10 @@ def main():
     cfg = os.path.join(root, "brain", "config.yaml")
     check("config_present", os.path.isfile(cfg), f"missing {cfg}")
     if os.path.isfile(cfg):
-        with open(cfg, encoding="utf-8") as fh:
-            txt = fh.read()
-        check("config_has_user", "user:" in txt, "config.yaml has no 'user:'")
-        check("config_has_language", "language:" in txt, "config.yaml has no 'language:'")
+        txt = _safe_config_text(cfg)
+        if txt is not None:
+            check("config_has_user", "user:" in txt, "config.yaml has no 'user:'")
+            check("config_has_language", "language:" in txt, "config.yaml has no 'language:'")
 
     # Roster intact
     agents_dir = os.path.join(root, "brain", "agents")
