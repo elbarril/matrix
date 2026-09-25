@@ -33,6 +33,7 @@
 - `pre_activation_check`
 - `pre_exec_guard`
 - `precheck_phase_close`
+- `prune_session_artifacts`
 - `session_close`
 - `surface_budget`
 - `the_source`

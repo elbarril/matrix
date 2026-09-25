@@ -110,6 +110,31 @@ SESSION_BINDING_DEFAULT_TTL_S = 900
 SESSION_BINDING_HEARTBEAT_INTERVAL_S = 60
 SESSION_MARKER = os.path.join("brain", "state", ".current-hook-session")
 
+# --- Session artifact pruning (G3 S4) --------------------------------------
+# TTL per artifact type in brain/state/sessions/. "Alive" means the sid has a
+# fresh liveness binding (<SESSION_BINDING_TTL), which touch_session_binding
+# refreshes on every post_tool_use. The TTLs are generous by design: pruning
+# only touches files whose session is long dead, never a working one.
+SESSION_ARTIFACT_TTL_DAYS = {
+    "post-tool-count": 14,
+    "plain-sid": 14,
+    "validation-report": 30,
+    "phase-close-nudge": 7,
+}
+# All prunable kinds except the liveness binding. The sid must be resolved
+# BEFORE these are pruned so the current session's own focus survives (the
+# plain-sid rule needs current_sid); see current_session_id.
+SESSION_ARTIFACT_NON_BINDING_KINDS = frozenset(SESSION_ARTIFACT_TTL_DAYS)
+# Known per-session artifact suffixes. user-prompt-count is classified here so
+# it never falls through to plain-sid; it has no TTL entry and is not pruned.
+SESSION_ARTIFACT_SUFFIXES = {
+    "binding": "-binding.json",
+    "post-tool-count": "-post-tool-count.json",
+    "user-prompt-count": "-user-prompt-count.json",
+    "validation-report": "-validation-report.json",
+    "phase-close-nudge": "-phase-close-nudge.json",
+}
+
 
 def _session_binding_ttl_s():
     return int(os.environ.get("MATRIX_SESSION_BINDING_TTL_S", SESSION_BINDING_DEFAULT_TTL_S))
@@ -167,28 +192,125 @@ def _binding_fresh(binding):
     return (now - ts).total_seconds() <= _session_binding_ttl_s()
 
 
-def _prune_stale_bindings(root):
-    """Best-effort hygiene: remove bindings older than 2*TTL.
+def _classify_session_artifact(name):
+    """Classify a brain/state/sessions filename as (kind, sid) or (None, None)."""
+    if name.startswith(".") or not name.endswith(".json"):
+        return None, None
+    for kind, suffix in SESSION_ARTIFACT_SUFFIXES.items():
+        if name.endswith(suffix):
+            return kind, name[: -len(suffix)]
+    return "plain-sid", name[: -len(".json")]
 
-    Never a correctness requirement — the read predicate already ignores stale
-    files, so a failed prune only accumulates disk until the next success.
+
+def prune_session_artifacts(root, current_sid=None, dry_run=False, kinds=None):
+    """Generalized TTL pruning of brain/state/sessions artifacts (G3 S4).
+
+    Extends the binding-prune precedent (2*TTL) to every session artifact type:
+
+      binding           age > 2*TTL (unchanged)                       never a fresh binding
+      post-tool-count   14 d and no fresh binding for the sid        never an alive sid
+      plain-sid (focus) 14 d and no fresh binding for the sid        never an alive sid, never current sid
+      validation-report 30 d and no fresh binding for the sid        never an alive sid
+      phase-close-nudge 7 d                                          always prunable past TTL
+
+    kinds restricts which artifact kinds are considered (None = all). The
+    caller owns the ordering: bindings may be pruned before the current sid is
+    known (they are protected by freshness only), but NON-binding kinds must
+    only be pruned once current_sid is resolved, or the current session's own
+    focus/counter would be deleted (see current_session_id).
+
+    "Alive" = the sid has a fresh liveness binding (touch_session_binding
+    refreshes it on every post_tool_use). Pruning is best-effort and never a
+    correctness requirement — the readers already ignore stale files, so a
+    failed prune only accumulates disk until the next success.
+
+    Every removed path is logged to the Link ledger as prune:session-artifact
+    via ledger_append (the kernel is the only writer; hooks never touch
+    activity.log directly). dry_run lists the candidates without removing or
+    logging anything.
+
+    Race (accepted, cosmetic — see hooks-design-hardening-g3-review.md §3):
+    pruning also runs at session_start. A session resumed after 14+ days has no
+    fresh binding in that instant, so its own session_start — or any concurrent
+    session's prune — can remove its counter/validation-report. Focus and
+    counter are rebuildable (the counter rebuilds from hook-audit.jsonl); the
+    plain-sid rule additionally protects the focus whose sid == the current
+    session. Covered by the S4 E2E.
+
+    Returns a list of removed {path, kind, sid, age_days} records.
     """
-    threshold = 2 * _session_binding_ttl_s()
+    if kinds is not None:
+        kinds = set(kinds)
+    directory = os.path.join(root, SESSION_BINDING_DIR)
+    if not os.path.isdir(directory):
+        return []
     now = datetime.datetime.now().astimezone()
-    for path in _session_binding_paths(root):
-        binding = read_binding(path)
-        if binding is None:
+    alive = set()
+    if kinds is None or any(k != "binding" for k in kinds):
+        for bp in _session_binding_paths(root):
+            binding = read_binding(bp)
+            if binding and _binding_fresh(binding):
+                sid = binding.get("session_id")
+                if sid:
+                    alive.add(sid)
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return []
+    removed = []
+    for name in names:
+        kind, sid = _classify_session_artifact(name)
+        if kind is None:
             continue
-        ts = _parse_iso_ts(binding.get("last_seen_at"))
-        if ts is None:
+        if kinds is not None and kind not in kinds:
             continue
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=now.tzinfo)
-        if (now - ts).total_seconds() > threshold:
+        path = os.path.join(directory, name)
+        if kind == "binding":
+            binding = read_binding(path)
+            if binding is None:
+                continue
+            ts = _parse_iso_ts(binding.get("last_seen_at"))
+            if ts is None:
+                continue
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=now.tzinfo)
+            age_days = (now - ts).total_seconds() / 86400.0
+            if age_days <= 2 * _session_binding_ttl_s() / 86400.0:
+                continue
+        else:
+            ttl_days = SESSION_ARTIFACT_TTL_DAYS.get(kind)
+            if ttl_days is None:
+                continue
+            try:
+                age_days = (now.timestamp() - os.path.getmtime(path)) / 86400.0
+            except OSError:
+                continue
+            if age_days <= ttl_days:
+                continue
+            if kind != "phase-close-nudge":
+                if sid in alive:
+                    continue
+                if kind == "plain-sid" and current_sid and sid == current_sid:
+                    continue
+        if not dry_run:
             try:
                 os.remove(path)
             except OSError:
-                pass
+                continue
+            ledger_append(
+                root,
+                "prune:session-artifact",
+                sid or "matrix",
+                f"path={os.path.relpath(path, root)} | kind={kind} | age_days={age_days:.1f}",
+                session_id=sid,
+            )
+        removed.append({
+            "path": path,
+            "kind": kind,
+            "sid": sid,
+            "age_days": round(age_days, 2),
+        })
+    return removed
 
 
 def write_session_binding(root, session_id, project_active=None):
@@ -199,7 +321,7 @@ def write_session_binding(root, session_id, project_active=None):
     """
     if not session_id:
         return
-    _prune_stale_bindings(root)
+    prune_session_artifacts(root, current_sid=session_id)
     path = session_binding_path(root, session_id)
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -279,16 +401,24 @@ def current_session_id(root=None, session_id=None):
         return env_sid
     if root is None:
         root = resolve_root()
-    _prune_stale_bindings(root)
+    # Prune order matters: a stale binding must NOT count as the current
+    # session, so stale bindings are pruned BEFORE resolution — but the current
+    # sid is only known after resolution. Therefore non-binding kinds are
+    # pruned AFTER the sid resolves, passing it as current_sid so the current
+    # session's own focus survives even when resumed after 14+ days (no fresh
+    # binding yet). Fix verified 2026-09-25 (Smith BLOCK, S4 hand-back).
+    prune_session_artifacts(root, kinds={"binding"})
     paths = _session_binding_paths(root)
+    resolved = None
     if not paths:
-        return _marker_session_id(root)
-    if len(paths) == 1:
+        resolved = _marker_session_id(root)
+    elif len(paths) == 1:
         binding = read_binding(paths[0])
-        sid = binding.get("session_id") if binding else None
-        if sid and _binding_fresh(binding):
-            return sid
-    return None
+        candidate = binding.get("session_id") if binding else None
+        if candidate and _binding_fresh(binding):
+            resolved = candidate
+    prune_session_artifacts(root, current_sid=resolved, kinds=SESSION_ARTIFACT_NON_BINDING_KINDS)
+    return resolved
 
 
 def _load_registry(root):
@@ -396,6 +526,31 @@ def _parse_iso_ts(ts):
         return datetime.datetime.fromisoformat(ts)
     except ValueError:
         return None
+
+
+def ledger_append(root, event, subject, detail, session_id=None):
+    """Append one event line to the Link ledger (brain/state/activity.log).
+
+    Kernel-side append mirroring the `matrix link` line format so
+    ledger_tail_events and `matrix link --validate` parse it. Hooks must use
+    this helper (or `bin/matrix link`) to touch the ledger — never write
+    activity.log by hand. Returns True on success, False on OSError.
+    """
+    detail = re.sub(r"[\r\n]+", " ", str(detail))
+    if session_id and not re.search(r"(^|\s)session_id=\S+\s*$", detail):
+        detail = f"{detail} session_id={session_id}"
+    line = (
+        f"{datetime.datetime.now().astimezone().isoformat(timespec='seconds')}"
+        f" | {event:<12} | {subject:<16} | {detail}"
+    )
+    path = os.path.join(root, "brain", "state", "activity.log")
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+        return True
+    except OSError:
+        return False
 
 
 def ledger_tail_events(root, max_bytes=256 * 1024):
