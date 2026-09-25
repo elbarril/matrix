@@ -84,13 +84,19 @@ def _now():
 
 
 def _load_yaml(path):
+    if not os.path.isfile(path):
+        return {}
     try:
-        import yaml
-        with open(path, encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
+        sys.path.insert(0, os.path.join(ROOT, "hooks"))
+        from _common import load_yaml_strict
+        data, load_error = load_yaml_strict(path)
     except Exception as exc:
         print(f"[trainman:harden] error reading {path}: {exc}", file=sys.stderr)
         return {}
+    if load_error is not None:
+        print(f"[trainman:harden] error reading {path}: {load_error}", file=sys.stderr)
+        return {}
+    return data
 
 
 def _load_json(path, default=None):

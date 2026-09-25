@@ -14,7 +14,7 @@ import fnmatch
 import os
 import re
 
-from _common import emit, parse_frontmatter, parse_scalar_list, read_input, resolve_root
+from _common import emit, load_yaml_strict, parse_frontmatter, parse_scalar_list, read_input, resolve_root
 
 REQUIRED_MANIFEST_KEYS = {
     "ship", "captain", "crew", "route-when", "writes", "reads", "state", "crew-max"
@@ -254,28 +254,27 @@ def declared_targets(root):
 
 
 def _load_yaml(path):
-    try:
-        import yaml
-        with open(path, encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except Exception:
-        return {}
+    if not os.path.isfile(path):
+        return {}, None
+    return load_yaml_strict(path)
 
 
 def _artifact_dirs_for_target(root, target):
     adapter_yaml = os.path.join(root, "adapters", target, "adapter.yaml")
     if not os.path.isfile(adapter_yaml):
-        return None, None
-    cfg = _load_yaml(adapter_yaml)
+        return None, None, None
+    cfg, load_error = _load_yaml(adapter_yaml)
+    if load_error is not None:
+        return None, None, load_error
     if not isinstance(cfg, dict):
-        return None, None
+        return None, None, None
     artifacts = cfg.get("artifacts", {})
     if not isinstance(artifacts, dict):
-        return None, None
+        return None, None, None
     generated = artifacts.get("generated_agents_dir")
     installed = artifacts.get("installed_agents_dir")
     if not generated or not installed:
-        return None, None
+        return None, None, None
 
     def resolve(raw):
         raw = raw.replace("{target}", target)
@@ -284,7 +283,7 @@ def _artifact_dirs_for_target(root, target):
             return raw
         return os.path.join(root, raw)
 
-    return resolve(generated), resolve(installed)
+    return resolve(generated), resolve(installed), None
 
 
 def max_nesting_check(root, ship, captain, crew, expected, target=None):
@@ -294,7 +293,12 @@ def max_nesting_check(root, ship, captain, crew, expected, target=None):
         agent_stems[member] = f"{ship}-{member}"
 
     def _check_one_target(target_name):
-        generated_dir, installed_dir = _artifact_dirs_for_target(root, target_name)
+        generated_dir, installed_dir, load_error = _artifact_dirs_for_target(root, target_name)
+        if load_error is not None:
+            return (
+                False,
+                f"target '{target_name}' adapter.yaml unreadable: {load_error}",
+            )
         if generated_dir is None or installed_dir is None:
             return (
                 False,
