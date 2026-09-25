@@ -12,6 +12,8 @@ Matrix is your personal intelligence layer: one root repo holds the brain, proje
 
 Esta sección explica todo el sistema en criollo, sin asumir que sabés cómo trabajan los agentes de IA. Si ya lo tenés claro, saltá a [El problema que resuelve Matrix](#el-problema-que-resuelve-matrix).
 
+¿Querés instalarlo en otra máquina/cuenta? Seguí la guía paso a paso en [`INSTALL.md`](INSTALL.md).
+
 ### ¿Qué es un "agente de IA" en este contexto?
 
 Un agente es un asistente de IA (en este caso, Devin CLI) al que le das una tarea en lenguaje natural y que puede leer archivos, escribir código, correr comandos de terminal, y tomar decisiones sobre qué hacer paso a paso, sin que vos le digas cada click. No es un chatbot que solo contesta preguntas: puede efectivamente modificar tu proyecto.

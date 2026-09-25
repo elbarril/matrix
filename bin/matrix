@@ -141,6 +141,8 @@ Projects:
   focus <name>            Persist a session-scoped focus (brain/state/sessions/<sid>.json) that
                           resolve_scope_project() prefers over cwd for this session only;
                           requires an active session marker, fails closed on an unregistered project
+  registry validate [--json]  Read-only validation of every registered project
+                          (resolved paths via get_project_path; status ok|missing|unreadable)
   adapter-doc-path [<cli>] Print the absolute path to the target adapter's own reference doc (binding.doc_path)
 
 Multi-project (warm set):
@@ -237,6 +239,15 @@ flags_cmd() {
     python3 "$HOOKS_DIR/_flags.py" table
 }
 
+registry_cmd() {
+    case "${1:-}" in
+        validate) shift; validate_registry "$@" ;;
+        --help|-h) echo "Usage: matrix registry {validate} [--json]"; return 0 ;;
+        "") log_error "Usage: matrix registry {validate} [--json]"; return 1 ;;
+        *) log_error "Unknown registry subcommand: $1"; return 1 ;;
+    esac
+}
+
 main() {
     case "${1:-}" in
         help|--help|-h)
@@ -284,6 +295,7 @@ main() {
                 flags)      shift; flags_cmd "$@" ;;
                 adapter-doc-path) shift; adapter_doc_path "${1:-devin}" ;;
                 status)     shift; show_status "$@" ;;
+                registry)   shift; registry_cmd "$@" ;;
                 checkpoint) write_checkpoint "${2:-}" ;;
                 activity)   shift; show_activity "$@" ;;
                 link)       shift; link_cmd "$@" ;;

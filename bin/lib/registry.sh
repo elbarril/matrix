@@ -345,3 +345,54 @@ set_registry_bound_target() {
        "$REGISTRY_FILE" > "$tmp" && mv "$tmp" "$REGISTRY_FILE"
 }
 
+# validate_registry [--json]: read-only validation of every registered project.
+# Uses get_project_path() (not the raw `.path` field) so `type: remote` and
+# paths relative to MATRIX_DIR resolve correctly — a remote project never
+# becomes a spurious invalid because its URL is not a local directory.
+# JSON shape (--json): array of {name, path, type, status} where status is
+# ok|missing|unreadable. Empty registry → exit 0 with a message.
+validate_registry() {
+    local json=false
+    [[ "${1:-}" == "--json" ]] && json=true
+    init_registry
+    local names
+    names="$(jq -r '.projects[] | .name' "$REGISTRY_FILE" 2>/dev/null || true)"
+    if [[ -z "$names" ]]; then
+        if $json; then
+            echo '[]'
+        else
+            log_info "No hay proyectos registrados."
+        fi
+        return 0
+    fi
+
+    local name path type status
+    local -a objs=()
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        path="$(get_project_path "$name" 2>/dev/null || true)"
+        type="$(registry_type "$name")"
+        status="ok"
+        if [[ -z "$path" || "$path" == "null" ]]; then
+            status="missing"
+        elif [[ ! -e "$path" ]]; then
+            status="missing"
+        elif [[ ! -r "$path" ]]; then
+            status="unreadable"
+        fi
+        if $json; then
+            objs+=("$(jq -n -c --arg name "$name" --arg path "$path" --arg type "$type" --arg status "$status" \
+                '{name:$name, path:$path, type:$type, status:$status}')")
+        else
+            printf '  %-22s %-10s %-7s %s\n' "$name" "$status" "$type" "$path"
+            if [[ "$type" == "remote" && "$status" == "missing" ]]; then
+                printf '    (remote sin clonar aún — corré "matrix select %s" para clonarlo)\n' "$name"
+            fi
+        fi
+    done <<< "$names"
+
+    if $json; then
+        printf '%s\n' "${objs[@]}" | jq -s .
+    fi
+}
+

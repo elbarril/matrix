@@ -91,4 +91,32 @@ else
     say "WARNING: $ROOT/adapters/devin/install-hooks.sh not found or not executable; skipping hook wiring."
 fi
 
+# MCP config: create/merge ~/.config/devin/mcp_config.json (chrome-browser +
+# context7), idempotente, con backup si el archivo existente está corrupto.
+if [[ -x "$ROOT/adapters/devin/ensure-mcp-config.sh" ]]; then
+    # Guard against a failing scaffold under `set -e`: MCPs are optional by
+    # contract, so a scaffold error warns and continues instead of aborting
+    # the install (same spirit as the integrity check capture below).
+    if ! "$ROOT/adapters/devin/ensure-mcp-config.sh"; then
+        say "WARNING: ensure-mcp-config.sh falló; los MCPs quedaron sin scaffold, el install continúa."
+    fi
+else
+    say "WARNING: $ROOT/adapters/devin/ensure-mcp-config.sh not found or not executable; skipping MCP config scaffolding."
+fi
+
+# Install-integrity self-check (informational). The hook exits 1 on ok:false,
+# so under `set -e` we must capture and continue: the install completes and
+# reports what's missing instead of aborting.
+integrity_summary="$(python3 "$ROOT/hooks/install_integrity_check.py" devin 2>&1 || true)"
+# Extract the TOP-LEVEL .ok only (the JSON also carries per-sub-check "ok"
+# fields; grepping any '"ok": true' would false-positive on ok:false).
+integrity_ok="$(printf '%s' "$integrity_summary" | jq -r '.ok // false' 2>/dev/null || true)"
+if [[ "$integrity_ok" == "true" ]]; then
+    say "Integridad de instalación: OK"
+else
+    integrity_errors="$(printf '%s' "$integrity_summary" | jq -r '(.errors // []) | join("; ")' 2>/dev/null || true)"
+    [[ -n "$integrity_errors" ]] || integrity_errors="revisá la salida de install_integrity_check"
+    say "ATENCIÓN: faltan piezas esenciales de la instalación — $integrity_errors"
+fi
+
 say "done. Neo and specialists installed to $DEVIN_HOME"

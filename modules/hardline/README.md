@@ -68,7 +68,7 @@ The bridge is a small Python 3 script using only the standard library, matching 
 
    It writes PID files and logs to `brain/state/hardline/` and runs each process as a detached background service, so it survives the terminal that launched it. Check status with `modules/hardline/hardline-ctl.sh status` and stop with `modules/hardline/hardline-ctl.sh stop`. `restart` is also available.
 
-   The control script expects the secrets file at `brain/state/hardline/telegram.env` (resolved from `$MATRIX_ROOT`, with the repo root as fallback). If that file is missing, the script still starts the monitor (which has no Telegram dependency) but refuses to start the bridge and prints the exact path and format to create.
+   **Ruta canónica del secrets file:** `$MATRIX_ROOT/brain/state/hardline/telegram.env` (resuelto desde `$MATRIX_ROOT`, con la raíz del repo como fallback). Es la **única** fuente de verdad: la usa `hardline-ctl.sh`, la skill `hardline-connect` de Devin y este README. Si el archivo falta, el script igual arranca el monitor (que no depende de Telegram) pero se niega a arrancar el bridge, e imprime la ruta exacta y el formato a crear.
 
    If you prefer to start the two processes manually (for example, in two tmux panes to watch their logs directly), you can still run them separately:
 

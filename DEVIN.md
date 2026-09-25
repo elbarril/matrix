@@ -56,8 +56,8 @@ No agent file changes — tier assignment is separate from its backing model.
 
 | Capability | Server | Devin binding | Scope | Added | Used by |
 | --- | --- | --- | --- | --- | --- |
-| `browser` | `chrome-browser` | `mcp__chrome-browser` | user (`~/.config/devin/config.json`) | pre-existing | Smith |
-| `docs-lookup` | `context7` | `mcp__context7` | user (`~/.config/devin/config.json`) | 2026-07-15 | Oracle |
+| `browser` | `chrome-browser` | `mcp__chrome-browser` | user (`~/.config/devin/mcp_config.json`) | pre-existing | Smith |
+| `docs-lookup` | `context7` | `mcp__context7` | user (`~/.config/devin/mcp_config.json`) | 2026-07-15 | Oracle |
 
 Both are **user-scope**, so they follow Neo/the specialists globally rather than needing per-project setup. Neither is required: the capability is simply unavailable if the server isn't configured, and the agent should say so (Foundation 3). context7 works unauthenticated (rate-limited, verified live).
 
