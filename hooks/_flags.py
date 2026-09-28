@@ -30,8 +30,8 @@ import os
 import re
 import sys
 
-# The v2 matrix flags (design appendix C); see `DEFAULTS` below. Defaults never
-# change the 10 original v1 values; `binding.artifacts` is new and off.
+# The v2 matrix flags (design appendix C); see `DEFAULTS` below. Defaults are
+# the full v2 set; every flag is declared here with its own default.
 DEFAULTS = {
     "activation.reinject": True,
     "activation.reinject_full": False,
@@ -45,6 +45,7 @@ DEFAULTS = {
     "memory.tree": True,
     "views.scoped": True,
     "binding.artifacts": False,
+    "notify.hardline_outbound": True,
 }
 
 # v2 appendix D — a flag whose dependency is off is inert.
@@ -68,6 +69,7 @@ RISK = {
     "memory.tree": "",
     "views.scoped": "",
     "binding.artifacts": "",
+    "notify.hardline_outbound": "",
 }
 
 # Security-down flags (off is dangerous) and the risky-up flag (on is dangerous).

@@ -15,6 +15,7 @@ flags:
   memory.tree: false
   views.scoped: false
   binding.artifacts: false
+  notify.hardline_outbound: true      # Hardline Telegram notify hooks (SessionEnd/Stop/UserPromptSubmit) wired on install
 
 secret_deny:
   # DESHABILITADA por decisión del usuario el 2026-09-07 (incidente

@@ -152,6 +152,8 @@ again will not duplicate the webapp process.
 
 ## SessionEnd notification for registered projects
 
+These notifications are governed by the Matrix feature flag `notify.hardline_outbound` (default ON). Setting it OFF and re-running `bin/matrix install --target=devin` un-wires all three hooks (`session_end_notify.py`, `stop_notify.py`, `user_prompt_submit_timestamp.py`) from the Devin config; the scripts themselves are never deleted.
+
 When `adapters/devin/install-hooks.sh` runs, it wires a second `SessionEnd` hook (`adapters/devin/hooks/session_end_notify.py`) alongside `session_audit.py`. This hook sends a single "básico" Telegram message when a Devin CLI session ends inside a **registered Matrix project**:
 
 - `🔔 <project_name>`

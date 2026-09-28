@@ -190,9 +190,9 @@ The `PreToolUse` hook (`adapters/devin/hooks/pre_tool_use_guard.py`) covers the 
 
 `hooks/_flags.py` is the single loader (precedence: env `MATRIX_<NAME>` > `adapters/devin/config.yaml#flags` > `brain/config.yaml#flags` > DEFAULTS). `bin/matrix flags` shows effective value, source, risk and state; `flags --validate` exits 1 if there are `dangerous`/`inert` flags.
 
-**Anti-truncation (Devin):** `read` returns at most 20,000 chars and prints `(truncated)` when it stops early; a truncated read is not full — resume the same file with `offset = last returned line + 1` until EOF. This file is kept ≤19,500 chars so a single read normally suffices.
+**Anti-truncation (Devin):** `read` returns at most 20,000 chars and prints `(truncated)` when it stops early; a truncated read is not full — resume the same file with `offset = last returned line + 1` until EOF. This file stays ≤19,500 chars.
 
-The 12 flags: `activation.reinject`, `activation.reinject_full`, `gate.shared_surface`, `gate.writer_lane`, `gate.pre_exec_guard`, `gate.secret_deny`, `hooks.pre_activation_check`, `hooks.boot_warn`, `hooks.session_extras`, `memory.tree`, `views.scoped`, `binding.artifacts`. Effective state: see `bin/matrix flags` — the values in this doc are not the current state.
+The 13 flags: `activation.reinject`, `activation.reinject_full`, `gate.shared_surface`, `gate.writer_lane`, `gate.pre_exec_guard`, `gate.secret_deny`, `hooks.pre_activation_check`, `hooks.boot_warn`, `hooks.session_extras`, `memory.tree`, `views.scoped`, `binding.artifacts`, `notify.hardline_outbound`. Effective state: `bin/matrix flags`. `notify.hardline_outbound` (default true): ON = wired, OFF = unwired; re-run `bin/matrix install --target=devin`.
 
 `hooks.session_extras` (default `false`) is the umbrella switch for the **non-audit** extras of `session_audit.py`: orphan-session detection, `link flags:state`, periodic `validate_routing_signal` (every 20 tools) and the `phase_close` nudge. Off = only the audit trail (`audit_event`) + `pre_activation_check` (its own flag) + `session close` on SessionEnd run.
 

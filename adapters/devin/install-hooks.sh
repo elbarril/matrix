@@ -40,6 +40,7 @@ adapter_yaml = sys.argv[4]
 # re-implementing precedence. Import/loader failure fails closed: register the
 # guard (more protection, not less).
 guard_needed = True
+notify_needed = True
 try:
     sys.path.insert(0, os.path.join(matrix_root, "hooks"))
     import _flags  # noqa: E402
@@ -54,8 +55,11 @@ try:
         _gate_effectively_on(g)
         for g in ("gate.shared_surface", "gate.writer_lane", "gate.pre_exec_guard", "gate.secret_deny")
     )
+    _notify = _flags.get_flag("notify.hardline_outbound", root=matrix_root) or {}
+    notify_needed = bool(_notify.get("value", True)) and _notify.get("state") != "inert"
 except Exception:
     guard_needed = True
+    notify_needed = True
 
 if os.path.isfile(config_path):
     with open(config_path, encoding="utf-8") as fh:
@@ -126,10 +130,30 @@ pre_tool_use_hooks.append(
 )
 hooks["PreToolUse"] = pre_tool_use_hooks
 
-# Stop (Hardline stop_notify) is no longer wired by Matrix. Remove any stale
-# entry left by an older install; the merge above is additive and would not
-# clear a key it no longer manages. Reactivate: re-add the Stop block + script.
-hooks.pop("Stop", None)
+# Hardline Telegram notify hooks (SessionEnd/Stop/UserPromptSubmit) are wired
+# only when notify.hardline_outbound is effectively on. Off removes any stale
+# Stop entry; the merge above is additive and would not clear a key it no
+# longer manages. The notify scripts themselves are never deleted.
+notify_end_command = f'env MATRIX_ROOT={matrix_root} python3 {matrix_root}/adapters/devin/hooks/session_end_notify.py'
+notify_stop_command = f'env MATRIX_ROOT={matrix_root} python3 {matrix_root}/adapters/devin/hooks/stop_notify.py'
+notify_prompt_command = f'env MATRIX_ROOT={matrix_root} python3 {matrix_root}/adapters/devin/hooks/user_prompt_submit_timestamp.py'
+
+if notify_needed:
+    hooks["SessionEnd"][0]["hooks"].append(
+        {"type": "command", "command": notify_end_command, "timeout": 30}
+    )
+    hooks["UserPromptSubmit"][0]["hooks"].append(
+        {"type": "command", "command": notify_prompt_command, "timeout": 10}
+    )
+    hooks["Stop"] = [
+        {
+            "hooks": [
+                {"type": "command", "command": notify_stop_command, "timeout": 30}
+            ]
+        }
+    ]
+else:
+    hooks.pop("Stop", None)
 
 # Merge Matrix Exec allowlist from adapter.yaml into permissions.allow.
 # Preserves pre-existing entries (Read(**), Write(**), MCP tools, etc.) and

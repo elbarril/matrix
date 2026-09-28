@@ -37,6 +37,25 @@ def _conditional_hook_required(root, flag_names):
     return any(gate_on(g) for g in flag_names)
 
 
+def _hook_wired(config, event, substring):
+    """Return True when a command containing `substring` is wired in hooks[event]."""
+    if not isinstance(config, dict):
+        return False
+    event_hooks = config.get("hooks", {}).get(event)
+    if not isinstance(event_hooks, list) or not event_hooks:
+        return False
+    for wrapper in event_hooks:
+        if not isinstance(wrapper, dict):
+            continue
+        inner_hooks = wrapper.get("hooks", [])
+        if not isinstance(inner_hooks, list):
+            continue
+        for hook in inner_hooks:
+            if isinstance(hook, dict) and substring in hook.get("command", ""):
+                return True
+    return False
+
+
 def _expand_path(raw, root):
     raw = os.path.expanduser(raw)
     if os.path.isabs(raw):
@@ -182,25 +201,33 @@ def check_install_integrity(target, root):
             if not isinstance(config, dict):
                 check(f"hook_wired:{event}", False, "config not loaded")
                 continue
-            event_hooks = config.get("hooks", {}).get(event)
-            if not isinstance(event_hooks, list) or not event_hooks:
-                check(f"hook_wired:{event}", False, f"no hooks defined for {event}")
-                continue
-            found = False
-            for wrapper in event_hooks:
-                if not isinstance(wrapper, dict):
-                    continue
-                inner_hooks = wrapper.get("hooks", [])
-                if not isinstance(inner_hooks, list):
-                    continue
-                for hook in inner_hooks:
-                    if isinstance(hook, dict) and substring in hook.get("command", ""):
-                        found = True
-                        break
-                if found:
-                    break
-            check(f"hook_wired:{event}", found,
+            check(f"hook_wired:{event}", _hook_wired(config, event, substring),
                   f"no command containing '{substring}' found in {event} hooks")
+
+    # 2b. hook_wired:<event> (per-flag conditional hooks)
+    flag_required_hooks = ii.get("required_hooks_when_flag")
+    if flag_required_hooks is not None and not isinstance(flag_required_hooks, dict):
+        check("required_hooks_when_flag", False,
+              "must be an object mapping flag -> {event -> substring}")
+        flag_required_hooks = {}
+    if isinstance(flag_required_hooks, dict):
+        for flag, event_map in flag_required_hooks.items():
+            if not isinstance(event_map, dict):
+                check(f"required_hooks_when_flag:{flag}", False,
+                      f"expected an object mapping event -> substring, got {event_map!r}")
+                continue
+            if not _conditional_hook_required(root, [flag]):
+                continue
+            for event, substring in event_map.items():
+                if not isinstance(substring, str) or not substring:
+                    check(f"required_hooks_when_flag:{flag}:{event}", False,
+                          f"expected a non-empty substring, got {substring!r}")
+                    continue
+                if not isinstance(config, dict):
+                    check(f"hook_wired:{event}", False, "config not loaded")
+                    continue
+                check(f"hook_wired:{event}", _hook_wired(config, event, substring),
+                      f"no command containing '{substring}' found in {event} hooks")
 
     # 3. mcp_readable (optional per-adapter)
     mcp_config_path = ii.get("mcp_config_path")
