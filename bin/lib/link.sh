@@ -4,15 +4,34 @@ link_append() {
     init_state
     local event="$1"; shift
     local subject="${1:-matrix}"; shift || true
-    local detail="$*"
+    # Explicit attribution flags are stripped from the detail and appended as
+    # structural tokens. project= is appended ONLY when --project= is passed
+    # (never with a default); session_id= resolution is explicit flag >
+    # MATRIX_SESSION_ID > current_session_id() (D2). Callers that pass no flags
+    # produce byte-identical lines to before.
+    local project="" sid_explicit=""
+    local parts=()
+    for arg in "$@"; do
+        case "$arg" in
+            --project=*) project="${arg#*=}" ;;
+            --session=*) sid_explicit="${arg#*=}" ;;
+            *) parts+=("$arg") ;;
+        esac
+    done
+    local detail="${parts[*]}"
     event="$(printf '%s' "$event" | tr '\r\n' '  ')"
     subject="$(printf '%s' "$subject" | tr '\r\n' '  ')"
     detail="$(printf '%s' "$detail" | tr '\r\n' '  ')"
     if [[ "${detail##* }" != session_id=* ]]; then
-        local sid="${MATRIX_SESSION_ID:-}"
+        local sid="${sid_explicit:-}"
+        [[ -z "$sid" ]] && sid="${MATRIX_SESSION_ID:-}"
         [[ -z "$sid" ]] && sid="$(current_session_id || true)"
         sid="$(printf '%s' "$sid" | tr '\r\n' '  ')"
         [[ -n "$sid" ]] && detail="${detail} session_id=${sid}"
+    fi
+    if [[ -n "$project" ]]; then
+        project="$(printf '%s' "$project" | tr '\r\n' '  ')"
+        detail="${detail} project=${project}"
     fi
     printf '%s | %-12s | %-16s | %s\n' "$(date -Iseconds)" "$event" "$subject" "$detail" >> "$ACTIVITY_LOG"
 }
@@ -40,9 +59,9 @@ link_cmd() {
         return "$invalid"
     fi
 
-    local event="" subject="" ref=""
+    local event="" subject="" ref="" project="" sid=""
     if [[ $# -lt 2 ]]; then
-        log_error "Usage: matrix link <event> <subject> [--ref=<id>] [detail...]"
+        log_error "Usage: matrix link <event> <subject> [--ref=<id>] [--project=<name>] [--session=<sid>] [detail...]"
         return 1
     fi
     event="$1"; subject="$2"; shift 2
@@ -52,6 +71,12 @@ link_cmd() {
         case "$arg" in
             --ref=*) ref="${arg#*=}" ;;
             --ref)   log_error "--ref requires a value"; return 1 ;;
+            --project=*) project="${arg#*=}"
+                [[ -n "$project" ]] || { log_error "--project requires a value"; return 1; } ;;
+            --project)   log_error "--project requires a value"; return 1 ;;
+            --session=*) sid="${arg#*=}"
+                [[ -n "$sid" ]] || { log_error "--session requires a value"; return 1; } ;;
+            --session)   log_error "--session requires a value"; return 1 ;;
             --*)     log_error "Unknown flag '$arg'"; return 1 ;;
             *)       details+=("$arg") ;;
         esac
@@ -83,8 +108,17 @@ link_cmd() {
         ref="${slug}-$(epoch36 "")"
     fi
 
+    if [[ -n "$project" ]]; then
+        local resolved; resolved="$(resolve_project_arg "$project" 2>/dev/null || true)"
+        [[ -n "$resolved" ]] || { log_error "Unknown project '$project' — pass a registered project or the reserved name 'matrix'"; return 1; }
+        project="$resolved"
+    fi
+
     local detail="[${ref}] ${details[*]}"
-    link_append "$event" "$subject" "$detail"
+    local link_args=("$detail")
+    [[ -n "$project" ]] && link_args+=(--project="$project")
+    [[ -n "$sid" ]] && link_args+=(--session="$sid")
+    link_append "$event" "$subject" "${link_args[@]}"
     echo "$ref"
 }
 

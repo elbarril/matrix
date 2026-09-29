@@ -21,7 +21,7 @@ import subprocess
 import time
 from datetime import datetime, timezone
 
-from _common import current_session_id, emit, read_input, resolve_root
+from _common import ROSTER, current_session_id, emit, read_input, resolve_root
 
 
 AUDIT_LOG = "brain/state/hook-audit.jsonl"
@@ -69,6 +69,11 @@ SMITH_CHECK_RE = re.compile(
 )
 EVAL_ARTIFACT_RE = re.compile(r"brain/output/[^\s]*eval|MATRIX:EVAL", re.IGNORECASE)
 SESSION_ID_RE = re.compile(r"session_id\s*=\s*([^\s|]+)")
+PROJECT_ID_RE = re.compile(r"project\s*=\s*([^\s|]+)")
+# Roster minus neo: a route/handoff written under a specialist subject carries
+# the specialist name (never the project) in the subject column, so the
+# project fallback must not apply to those lines (lesson 76).
+SPECIALIST_SUBJECTS = frozenset(ROSTER) - {"neo"}
 
 
 def _read_jsonl(path):
@@ -232,13 +237,21 @@ def _line_parts(rest):
 def _line_session_id(text):
     """Return the last session_id=<sid> value in a line, or None.
 
-    The Link writes the structural attribution as the final token of the
-    detail (the last whitespace-separated token starts with session_id=),
-    so the last match is the attribution; a prose mention of session_id=
-    earlier in the line must not override it. Trailing punctuation is
-    stripped so (session_id=S1) parses as S1.
+    The Link writes the session attribution as a trailing token of the
+    detail (session_id=<sid>, possibly followed by project=<name>), so the
+    last match is the attribution; a prose mention of session_id= earlier in
+    the line must not override it. Trailing punctuation is stripped so
+    (session_id=S1) parses as S1.
     """
     matches = list(SESSION_ID_RE.finditer(text))
+    if not matches:
+        return None
+    return matches[-1].group(1).rstrip("),;.")
+
+
+def _line_project(text):
+    """Return the last project=<name> value in a line, or None."""
+    matches = list(PROJECT_ID_RE.finditer(text))
     if not matches:
         return None
     return matches[-1].group(1).rstrip("),;.")
@@ -255,14 +268,23 @@ def _activity_in_scope(rest, session_id, project):
 
     A line that carries an explicit session_id= is attributed only on equality
     with the current session and never falls back to the project on a
-    mismatch. Project match (or the legacy in-scope default) applies only when
-    the line has no session_id.
+    mismatch. For a line without a session_id: an explicit project= token must
+    equal the session's project; a specialist subject (Trinity/Smith/...)
+    counts as in-scope for any known project (its subject column is the
+    specialist name, not the project — lesson 76); otherwise the legacy
+    subject == project fallback applies. Lines without a known project are
+    always in scope (legacy default).
     """
     line_sid = _line_session_id(rest)
     if line_sid is not None:
         return session_id is not None and line_sid == session_id
     _event, subject, _detail = _line_parts(rest)
     if project:
+        declared = _line_project(rest)
+        if declared is not None:
+            return declared == project
+        if subject.lower() in SPECIALIST_SUBJECTS:
+            return True
         return subject == project
     return True
 

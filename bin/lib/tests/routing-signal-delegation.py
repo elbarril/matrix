@@ -516,6 +516,48 @@ def case_same_tool_call_line_after_last_event():
         print("C SAME-TOOL-CALL LINE AFTER LAST EVENT PASS")
 
 
+def case_specialist_subject_counts_without_sid():
+    with tempfile.TemporaryDirectory(prefix="rs-spec76-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        sys.path.insert(0, str(REPO_ROOT / "hooks"))
+        import validate_routing_signal as r
+        # lesson 76: a specialist subject without sid counts for a known project
+        assert r._activity_in_scope(
+            "handoff | trinity | Smith smoke", "S1", "homedepot"
+        ) is True
+        # an explicit project= token overrides the specialist fallback
+        assert r._activity_in_scope(
+            "handoff | trinity | Smith smoke project=other", "S1", "homedepot"
+        ) is False
+        assert r._activity_in_scope(
+            "handoff | trinity | Smith smoke project=homedepot", "S1", "homedepot"
+        ) is True
+        print("C SPECIALIST SUBJECT WITHOUT SID COUNTS PASS")
+
+
+def case_specialist_handoff_no_sid_delegates():
+    with tempfile.TemporaryDirectory(prefix="rs-spec76e2e-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        env = fixture_env(fixture_root)
+        env["HOME"] = str(home_dir)
+        write_audit(fixture_root, "rs-spec76", project="homedepot")
+        write_activity(
+            fixture_root,
+            '[2026-01-01T00:00:01+00:00] | handoff | trinity | Smith con fidelity_check',
+        )
+        proc = run_hook(fixture_root, env, "rs-spec76")
+        result = json.loads(proc.stdout)
+        assert proc.returncode == 0, f"expected exit 0, got {proc.returncode}: {proc.stderr}"
+        assert result["triggered"] is False, f"specialist handoff must delegate: {result}"
+        assert result["resolved"] == "delegated", result
+        assert "fidelity_check" in result["delegation_evidence"], result["delegation_evidence"]
+        print("C SPECIALIST HANDOFF NO-SID DELEGATES PASS")
+
+
 def main():
     assert REPO_ROOT != Path("/tmp").resolve(), "repo root must not be /tmp"
     case_delegated_with_check()
@@ -535,6 +577,8 @@ def main():
     case_path_decision_foreign_sid_not_borrowed()
     case_resumed_session_window_reaches_last_event()
     case_same_tool_call_line_after_last_event()
+    case_specialist_subject_counts_without_sid()
+    case_specialist_handoff_no_sid_delegates()
     print("C DELEGATION ALL PASS")
     return 0
 

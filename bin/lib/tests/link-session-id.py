@@ -191,6 +191,78 @@ def case_focus_blocks_ambiguous_bindings():
         print("A FOCUS AMBIGUOUS BINDINGS BLOCK PASS")
 
 
+def case_checkpoint_and_link_project_flags():
+    with tempfile.TemporaryDirectory(prefix="lsid-proj-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        configure_alpha(fixture_root)
+        # checkpoint with explicit project -> JSONL project and Link subject alpha
+        proc = run_cli(fixture_root, home_dir, ["checkpoint", "cp con proyecto", "--project=alpha"])
+        assert proc.returncode == 0, f"{proc.stdout} {proc.stderr}"
+        cps = [json.loads(l) for l in (fixture_root / "brain" / "state" / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        assert cps and cps[-1]["project"] == "alpha", cps
+        cp_lines = lines_for_event(fixture_root, "checkpoint")
+        cp_subjects = [p.strip() for p in cp_lines[-1].split("|")] if cp_lines else []
+        assert len(cp_subjects) >= 3 and cp_subjects[2] == "alpha", cp_lines
+        assert "project=alpha" not in cp_lines[-1], cp_lines[-1]
+        # checkpoint with unknown project -> rc != 0 and no ledger write
+        before = (fixture_root / "brain" / "state" / "activity.log").read_text(encoding="utf-8") if (fixture_root / "brain" / "state" / "activity.log").is_file() else ""
+        proc = run_cli(fixture_root, home_dir, ["checkpoint", "cp ghost", "--project=ghost"])
+        assert proc.returncode != 0, f"{proc.stdout} {proc.stderr}"
+        after = (fixture_root / "brain" / "state" / "activity.log").read_text(encoding="utf-8")
+        assert before == after, "failed --project checkpoint must not write the ledger"
+        # link route with explicit project and session
+        proc = run_cli(fixture_root, home_dir, ["link", "route", "trinity", "--project=alpha", "--session=manual-sid", "Smith e2e"])
+        assert proc.returncode == 0, f"{proc.stdout} {proc.stderr}"
+        routes = lines_for_event(fixture_root, "route")
+        assert routes, "no route line in ledger"
+        line = routes[-1]
+        assert "session_id=manual-sid" in line, line
+        assert "project=alpha" in line, line
+        assert line.rstrip().split()[-1] == "project=alpha", line
+        # empty --project=/--session= values must fail closed (Smith O1)
+        before = (fixture_root / "brain" / "state" / "activity.log").read_text(encoding="utf-8")
+        proc = run_cli(fixture_root, home_dir, ["checkpoint", "cp empty", "--project="])
+        assert proc.returncode != 0, f"empty --project must fail closed on checkpoint: {proc.stdout} {proc.stderr}"
+        proc = run_cli(fixture_root, home_dir, ["checkpoint", "cp empty sid", "--session="])
+        assert proc.returncode != 0, f"empty --session must fail closed on checkpoint: {proc.stdout} {proc.stderr}"
+        proc = run_cli(fixture_root, home_dir, ["link", "route", "trinity", "--project=", "Smith e2e"])
+        assert proc.returncode != 0, f"empty --project must fail closed on link: {proc.stdout} {proc.stderr}"
+        proc = run_cli(fixture_root, home_dir, ["link", "route", "trinity", "--session=", "Smith e2e"])
+        assert proc.returncode != 0, f"empty --session must fail closed on link: {proc.stdout} {proc.stderr}"
+        after = (fixture_root / "brain" / "state" / "activity.log").read_text(encoding="utf-8")
+        assert before == after, "failed empty-value commands must not write the ledger"
+        print("A CHECKPOINT/LINK EMPTY FLAG VALUES FAIL CLOSED PASS")
+
+
+def case_checkpoint_ambiguous_bindings_fallback_and_override():
+    with tempfile.TemporaryDirectory(prefix="lsid-ambig-") as td:
+        fixture_root = Path(td)
+        home_dir = smoke.build_fixture(REPO_ROOT, fixture_root)
+        configure_alpha(fixture_root)
+        marker = fixture_root / "brain" / "state" / ".current-hook-session"
+        marker.unlink()
+        sessions = fixture_root / "brain" / "state" / "sessions"
+        sessions.mkdir(exist_ok=True)
+        now = "2099-01-01T00:00:00+00:00"
+        for sid in ("one", "two"):
+            (sessions / f"{sid}-binding.json").write_text(json.dumps({"session_id": sid, "last_seen_at": now}))
+        # A focus file exists but current_session_id() is fail-closed (2+ fresh
+        # bindings), so the focus cannot be read: without --project the subject
+        # falls back to the workspace "matrix" (lesson 69 — never guess).
+        (sessions / "one.json").write_text(json.dumps({"session_id": "one", "focused_project": "alpha", "set_at": now}))
+        proc = run_cli(fixture_root, home_dir, ["checkpoint", "x"])
+        assert proc.returncode == 0, f"{proc.stdout} {proc.stderr}"
+        cps = [json.loads(l) for l in (fixture_root / "brain" / "state" / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        assert cps and cps[-1]["project"] == "matrix", cps
+        # with --project=alpha the explicit override wins
+        proc = run_cli(fixture_root, home_dir, ["checkpoint", "x", "--project=alpha"])
+        assert proc.returncode == 0, f"{proc.stdout} {proc.stderr}"
+        cps = [json.loads(l) for l in (fixture_root / "brain" / "state" / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        assert cps and cps[-1]["project"] == "alpha", cps
+        print("A CHECKPOINT AMBIGUOUS FALLBACK/OVERRIDE PASS")
+
+
 def main():
     assert REPO_ROOT != Path("/tmp").resolve(), "repo root must not be /tmp"
     case_link_route_annotates_sid()
@@ -200,6 +272,8 @@ def main():
     case_focus_mints_fallback_without_marker()
     case_focus_preserves_explicit_session_sources()
     case_focus_blocks_ambiguous_bindings()
+    case_checkpoint_and_link_project_flags()
+    case_checkpoint_ambiguous_bindings_fallback_and_override()
     print("A LINK SESSION-ID ALL PASS")
     return 0
 

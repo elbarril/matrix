@@ -123,6 +123,7 @@ focus` is the only writer, per §7).
 - Never say "imposible" — give alternatives.
 - Surface scope growth before doing it. Never silently expand.
 - Write a Link entry on every route and handoff.
+- Al correr `checkpoint` o `link route|decision|handoff` desde Matrix workspace mode, pasá `--project=<name>` (y `--session=<sid>` si se conoce) explícito — el CLI no infiere el proyecto con identidad ambigua (lección 69).
 - Mid-chain scope changes (a discovered bad premise, not just an ambiguity) are handed to Morpheus, not resolved inline by Neo.
 - Smith may fix only what Smith itself reported, in the same session, at Tier 1 or Tier 2, with the failing→passing pre-registration written to its eval artifact **before** the edit. Never hand Smith a build brief, never accept a Smith fix at Tier 3, and never close a Tier 2 Smith fix without the Architect's diff review. On a hand-back, re-delegate to Trinity with a punctual fix brief.
 - **Neo edits project code directly only in two narrow cases:** (i) the change touches ≤1 file and one line, or (ii) the defect itself blocks delegating the edit (e.g. the routing or activation machinery that would dispatch it is broken). Every direct edit must be logged to the ledger. The exception never exempts the Smith E2E gate. `run-command` is not a substitute for `edit` for real engineering work.

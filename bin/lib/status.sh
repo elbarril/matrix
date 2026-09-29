@@ -108,7 +108,7 @@ show_status() {
             echo "Recent Link events ($scope_label):"
             awk -F' *\\| *' -v chain="$filter_projects" '
                 BEGIN { nn=split(chain, arr, "\n"); for (i=1;i<=nn;i++) set[arr[i]]=1 }
-                { if ($3 in set) print }
+                { for (i=1;i<=nn;i++) if ($3 in set || index($0, "project=" arr[i])) { print; break } }
             ' "$ACTIVITY_LOG" | tail -n 5 | sed 's/^/  /'
         fi
         echo
@@ -128,15 +128,37 @@ show_status() {
 
 # --- Checkpoints ------------------------------------------------------------
 write_checkpoint() {
-    local note="$1"
+    local project_arg="" sid_arg=""
+    local parts=()
+    for arg in "$@"; do
+        case "$arg" in
+            --project=*) project_arg="${arg#*=}"
+                [[ -n "$project_arg" ]] || { log_error "--project requires a value"; return 1; } ;;
+            --project)   log_error "--project requires a value"; return 1 ;;
+            --session=*) sid_arg="${arg#*=}"
+                [[ -n "$sid_arg" ]] || { log_error "--session requires a value"; return 1; } ;;
+            --session)   log_error "--session requires a value"; return 1 ;;
+            *)           parts+=("$arg") ;;
+        esac
+    done
+    local note="${parts[*]}"
     [[ -z "$note" ]] && { log_error "Usage: matrix checkpoint \"<note>\""; return 1; }
     init_state
     local ts; ts="$(date -Iseconds)"
     local active; active="$(resolve_scope_project)"; active="${active:-null}"
+    if [[ -n "$project_arg" ]]; then
+        local resolved; resolved="$(resolve_project_arg "$project_arg" 2>/dev/null || true)"
+        [[ -n "$resolved" ]] || { log_error "Unknown project '$project_arg' — pass a registered project or the reserved name 'matrix'"; return 1; }
+        active="$resolved"
+    fi
     jq -n -c --arg ts "$ts" --arg user "Emiliano" --arg proj "$active" --arg note "$note" \
         '{timestamp:$ts,user:$user,project:$proj,note:$note,context:{active_agents:[],current_focus:"",blockers:[],next_actions:[]}}' \
         >> "$CHECKPOINTS_FILE"
-    link_append "checkpoint" "$active" "$note"
+    # The checkpoint's subject IS the project; do not re-append project= to the
+    # Link line (Architect Change 1). --session is forwarded as an explicit flag.
+    local link_args=("$note")
+    [[ -n "$sid_arg" ]] && link_args+=(--session="$sid_arg")
+    link_append "checkpoint" "$active" "${link_args[@]}"
     log_success "Checkpoint written"
 }
 
@@ -191,7 +213,7 @@ show_activity() {
         log_info "Link ledger (last $n, $label):"; echo
         awk -F' *\\| *' -v chain="$filter" '
             BEGIN { nn=split(chain, arr, "\n"); for (i=1;i<=nn;i++) set[arr[i]]=1 }
-            { if ($3 in set) print }
+            { for (i=1;i<=nn;i++) if ($3 in set || index($0, "project=" arr[i])) { print; break } }
         ' "$ACTIVITY_LOG" | tail -n "$n" | sed 's/^/  /'
     else
         log_info "Link ledger (last $n, all projects):"; echo

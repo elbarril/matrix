@@ -153,7 +153,7 @@ Multi-project (warm set):
 State & telemetry:
   status [--all]          Show current Matrix status (checkpoints/Link scoped to the
                           resolved chain by default; --all for the unfiltered view)
-  checkpoint "<note>"     Write a timestamped checkpoint (+ Link entry)
+  checkpoint "<note>" [--project=<name>] [--session=<sid>]  Write a timestamped checkpoint (+ Link entry)
   activity [n] [--all] [--project=<name>]  Show last n Link ledger events, scoped to
                           the resolved chain by default (default n=20)
 
@@ -164,7 +164,7 @@ Flags:
   flags --validate        List dangerous/inert flags; exit 1 if any
 
 Link ledger & fleet:
-  link <event> <subject> [--ref=<id>] [detail...]  Append a namespaced Link ledger event and echo the ref
+  link <event> <subject> [--ref=<id>] [--project=<name>] [--session=<sid>] [detail...]  Append a namespaced Link ledger event and echo the ref
   ship list                                         List discovered federated ships
   corpus-ingest --topic=<t> --slug=<s>              Ingest stdin as a new Logos corpus source (sanitized,
                                                    create-only, atomic write)
@@ -296,7 +296,7 @@ main() {
                 adapter-doc-path) shift; adapter_doc_path "${1:-devin}" ;;
                 status)     shift; show_status "$@" ;;
                 registry)   shift; registry_cmd "$@" ;;
-                checkpoint) write_checkpoint "${2:-}" ;;
+                checkpoint) shift; write_checkpoint "$@" ;;
                 activity)   shift; show_activity "$@" ;;
                 link)       shift; link_cmd "$@" ;;
                 ship)       shift; ship_cmd "${1:-}" "${2:-}" ;;

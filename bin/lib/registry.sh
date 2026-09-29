@@ -74,6 +74,22 @@ scope_subject_from_name() {
     return 0
 }
 
+# resolve_project_arg <name>: prints <name> iff it is a valid explicit
+# --project=<name> value: either the reserved Matrix workspace name ("matrix",
+# is_workspace_target) or a still-registered project. Prints nothing otherwise
+# so callers fail closed on an empty result (D3). Mirrors the subject
+# resolution checks in scope_subject_from_name + is_workspace_target.
+resolve_project_arg() {
+    local name="$1"
+    [[ -n "$name" ]] || return 0
+    if is_workspace_target "$name"; then
+        printf '%s\n' "$name"
+        return 0
+    fi
+    scope_subject_from_name "$name"
+    return 0
+}
+
 # resolve_scope_project: the *filter subject* for checkpoints/ledger views.
 # Priority: $MATRIX_PROJECT (env, explicit) > session focus > registry walk-up
 # (chain[0], innermost). Workspace resolves to the reserved "matrix" name.
