@@ -150,63 +150,66 @@ This starts the webapp (silently, in the background, and surviving the
 terminal) and opens `http://127.0.0.1:8765/` in the default browser. Running it
 again will not duplicate the webapp process.
 
-## SessionEnd notification for registered projects
+## SessionEnd notification (retired)
 
-These notifications are governed by the Matrix feature flag `notify.hardline_outbound` (default ON). Setting it OFF and re-running `bin/matrix install --target=devin` un-wires all three hooks (`session_end_notify.py`, `stop_notify.py`, `user_prompt_submit_timestamp.py`) from the Devin config; the scripts themselves are never deleted.
+The `SessionEnd` Telegram message (`adapters/devin/hooks/session_end_notify.py`) and its companion `UserPromptSubmit` timestamp hook (`adapters/devin/hooks/user_prompt_submit_timestamp.py`) were **retired by product decision**: the per-turn `Stop` notification below already tells you the agent finished a turn and is waiting, so the separate close signal was removed. Both scripts remain on disk and importable, but `adapters/devin/install-hooks.sh` no longer wires them; re-wiring is a two-line change if the close signal is ever wanted again. `session_audit.py` still runs on `SessionEnd` for the audit trail, unchanged.
 
-When `adapters/devin/install-hooks.sh` runs, it wires a second `SessionEnd` hook (`adapters/devin/hooks/session_end_notify.py`) alongside `session_audit.py`. This hook sends a single "básico" Telegram message when a Devin CLI session ends inside a **registered Matrix project**:
+## Stop-hook notification (every turn)
 
-- `🔔 <project_name>`
-- `Sesión finalizada — <reason>`
-- `<timestamp>`
+These notifications are governed by the Matrix feature flag `notify.hardline_outbound` (default ON). Setting it OFF and re-running `bin/matrix install --target=devin` un-wires the `Stop` hook (`adapters/devin/hooks/stop_notify.py`) from the Devin config; the script itself is never deleted.
 
-It fires only when all four of these gates are true; otherwise it no-ops silently and never blocks session teardown:
+A `Stop` hook sends a Telegram message after **every turn** — there is **no duration threshold**. It fires for sessions inside a registered Matrix project **and** for Matrix workspace mode (the pseudo-project `matrix`).
 
-1. The session was **not** started by the Hardline dispatcher (`MATRIX_HARDLINE_DISPATCH` is absent and `/proc` ancestry does not contain `hardline-dispatch.sh`).
-2. `DEVIN_PROJECT_DIR` resolves to a registered Matrix project (`bin/matrix scope` subject).
-3. The Hardline Telegram bridge is running (`hardline-ctl.sh status --json` reports `bridge.running == true`).
-4. `brain/state/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
-
-This hook is intentionally separate from `session_audit.py` so a slow or failing Telegram POST cannot delay the audit trail or `bin/matrix session close`. It never duplicates the Hardline ack path; sessions dispatched through `hardline-dispatch.sh` are excluded by construction.
-
-## Stop-hook notification for long unattended turns
-
-A second, independent Telegram notification is fired from a new `Stop` hook (`adapters/devin/hooks/stop_notify.py`), with a companion `UserPromptSubmit` hook (`adapters/devin/hooks/user_prompt_submit_timestamp.py`) that only stamps a clock. Both are wired into the Devin CLI by `adapters/devin/install-hooks.sh`.
-
-This hook notifies you when the agent finishes a turn and is waiting for your input, **but only when the turn was long enough to be worth interrupting you for**. Shorter turns are a silent no-op.
-
-It fires only when all five of these gates are true; otherwise it no-ops silently and never blocks the agent:
+It fires only when all six of these gates are true; otherwise it no-ops silently and never blocks the agent:
 
 1. The session was **not** started by the Hardline dispatcher (`MATRIX_HARDLINE_DISPATCH` is absent and `/proc` ancestry does not contain `hardline-dispatch.sh`).
-2. `DEVIN_PROJECT_DIR` resolves to a registered Matrix project (`bin/matrix scope` subject).
-3. The Hardline Telegram bridge is running (`hardline-ctl.sh status --json` reports `bridge.running == true`).
-4. `brain/state/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
-5. The turn's elapsed time (since the last message you sent) exceeds the configured threshold.
-
-### Threshold
-
-The default threshold is **1800 seconds (30 minutes)**. Only turns longer than this trigger a message. You can override it by adding this key to the existing `brain/state/hardline/telegram.env` secrets file (no new file):
-
-```bash
-MATRIX_HARDLINE_STOP_NOTIFY_THRESHOLD_SECONDS=900
-```
-
-Missing, empty, non-numeric, or non-positive values silently fall back to the 1800s default.
-
-### Double-ping suppression
-
-If `stop_notify.py` already sent a notification within the last **60 seconds** for the same project, the `SessionEnd` message for that session is suppressed — the user was already told "the agent stopped and is waiting" moments ago. The 60s window is fixed and non-configurable.
+2. `DEVIN_PROJECT_DIR` exists and is a directory.
+3. `bin/matrix scope` resolves the directory to a registered Matrix project **or** the Matrix workspace root (`mode` `project`/`workspace`).
+4. The Hardline Telegram bridge is running (`hardline-ctl.sh status --json` reports `bridge.running == true`).
+5. `brain/state/hardline/telegram.env` exists and contains both `MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN` and `MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID`.
+6. The `Stop` payload carried a usable `last_assistant_message` (when absent, the message still goes out with a "no text" placeholder).
 
 ### Message format
 
 ```
-⏳ <project_name>
-Turno largo terminado — esperando tu respuesta
-Duración: 33m (desde 14:02)
+💬 <project_name>
+<output of the turn>
 2026-08-01 16:16:32 -0300
 ```
 
-The elapsed duration is shown in whole minutes (e.g. `35m` or `2h 14m`). No summary of the agent's work is included because the `Stop` payload carries no usable turn summary.
+- `<project_name>` is the registered project name, or `matrix` in workspace mode.
+- The output is `last_assistant_message` from the `Stop` payload, truncated to 3800 characters (with a `… (truncado)` suffix when cut).
+- A turn with no text sends `(sin texto en este turno)` — the fact that the turn ended is still useful signal.
+- There is no duration, no "desde HH:MM", and no double-ping suppression: this is now the single outbound notification, so there is nothing to suppress.
+
+## Reply to a bot message (additive grammar)
+
+The `<project> <task>` grammar above stays **intact** for non-Telegram bridges:
+they keep appending `<project>|<line>` to `inbox.log` and the monitor dispatches
+them exactly as before. Telegram adds a second, additive grammar on top:
+
+- **Replying to a bot message continues that conversation** instead of sending a
+  new `<project> <task>` message. The reply does not touch `inbox.log`; the
+  bridge dispatches it directly through the same `hardline dispatch` queue.
+- A reply to a per-turn notification (`kind="turn"`) opens a **fresh headless
+  run** seeded with the previous turn's output (context, truncated to 1200
+  chars). Resuming a live TUI session is not supported by the Devin CLI
+  (Spike B, Fase 0), so the first reply is the only one that "cuts" from the
+  TUI.
+- A reply to an ack notification (`kind="ack"`, the `✅ <project>: listo`
+  messages) resumes that **headless session** (`-r <session_id>`), so the
+  Telegram thread becomes a continuous conversation after the first reply.
+- Every dispatched reply is tracked back to your chat, so its ack notification
+  also comes back to Telegram, and that ack is itself a new reply anchor.
+- Reply anchors expire after **48 hours** (TTL) and are capped at **1000
+  entries**; the bridge sweeps both on every poll. Overrides:
+  `MATRIX_HARDLINE_REPLY_TTL_SECONDS` and `MATRIX_HARDLINE_REPLY_MAX_ENTRIES`.
+- A reply to a message that is no longer tracked (expired anchor, or a reply to
+  a non-bot message) is ignored with a stderr note; resend the request as a
+  normal `<project> <task>` message.
+- The reply framing is a single line by design: `hardline dispatch` keeps its
+  "events must be a single line" validation, so the direct reply channel
+  respects the same invariant the inbox contract already enforces.
 
 ## Safety
 

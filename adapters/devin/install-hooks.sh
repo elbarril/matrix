@@ -130,21 +130,13 @@ pre_tool_use_hooks.append(
 )
 hooks["PreToolUse"] = pre_tool_use_hooks
 
-# Hardline Telegram notify hooks (SessionEnd/Stop/UserPromptSubmit) are wired
-# only when notify.hardline_outbound is effectively on. Off removes any stale
-# Stop entry; the merge above is additive and would not clear a key it no
-# longer manages. The notify scripts themselves are never deleted.
-notify_end_command = f'env MATRIX_ROOT={matrix_root} python3 {matrix_root}/adapters/devin/hooks/session_end_notify.py'
+# Hardline Telegram notify hook (Stop) is wired only when
+# notify.hardline_outbound is effectively on. Off removes any stale Stop
+# entry; the merge above is additive and would not clear a key it no longer
+# manages. The notify scripts themselves are never deleted.
 notify_stop_command = f'env MATRIX_ROOT={matrix_root} python3 {matrix_root}/adapters/devin/hooks/stop_notify.py'
-notify_prompt_command = f'env MATRIX_ROOT={matrix_root} python3 {matrix_root}/adapters/devin/hooks/user_prompt_submit_timestamp.py'
 
 if notify_needed:
-    hooks["SessionEnd"][0]["hooks"].append(
-        {"type": "command", "command": notify_end_command, "timeout": 30}
-    )
-    hooks["UserPromptSubmit"][0]["hooks"].append(
-        {"type": "command", "command": notify_prompt_command, "timeout": 10}
-    )
     hooks["Stop"] = [
         {
             "hooks": [

@@ -14,12 +14,15 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+import reply_threads
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +33,17 @@ QUEUE_PATH = ROOT / "brain" / "state" / "hardline" / "queue.jsonl"
 TOKEN_ENV = "MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN"
 CHAT_ENV = "MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID"
 PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _env_int(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+REPLY_TTL_SECONDS = _env_int("MATRIX_HARDLINE_REPLY_TTL_SECONDS", reply_threads.REPLY_TTL_SECONDS)
+REPLY_MAX_ENTRIES = _env_int("MATRIX_HARDLINE_REPLY_MAX_ENTRIES", reply_threads.REPLY_MAX_ENTRIES)
 TERMINAL_STATES = {
     "acked-success",
     "acked-failed",
@@ -78,7 +92,82 @@ def parse_message(message):
     return f"{project}|{task.strip()}"
 
 
-def iter_valid_updates(payload, allowed_chat_id=None, include_chat_id=False):
+def _single_line(text):
+    """Collapse all whitespace (including newlines) into single spaces."""
+    return " ".join(str(text).split())
+
+
+def build_reply_task(reply):
+    """Build the single-line Hardline task for a Telegram reply (design §5.2/D8).
+
+    kind="turn" (no session_id): seed the fresh headless run with the previous
+    turn's context. kind="ack" (session_id set): resume that headless session.
+    The task is single-line on purpose: ``hardline dispatch`` keeps its
+    existing "events must be a single line" validation (design §8 item 13),
+    and the reply channel dispatches directly without touching ``inbox.log``.
+    """
+    text = _single_line(reply.get("text"))
+    if reply.get("session_id"):
+        return f"[Reply] Continuación desde Telegram. Instrucción nueva del usuario: {text}"
+    context = _single_line(reply.get("context")) if reply.get("context") else ""
+    if context:
+        return (
+            "[Reply] Continuación desde Telegram. "
+            f"Contexto del turno anterior (respuesta final del agente): {context} "
+            f"Instrucción nueva del usuario: {text}"
+        )
+    return f"[Reply] Continuación desde Telegram. Instrucción nueva del usuario: {text}"
+
+
+def reply_info(message, threads):
+    """Return a dict describing a reply to a tracked bot message, or None."""
+    if not isinstance(message, dict):
+        return None
+    reply_to = message.get("reply_to_message")
+    if not isinstance(reply_to, dict):
+        return None
+    reply_to_id = reply_to.get("message_id")
+    text = message.get("text")
+    if not isinstance(reply_to_id, int) or not isinstance(text, str) or not text.strip():
+        return None
+    entry = (threads or {}).get(str(reply_to_id))
+    if not isinstance(entry, dict):
+        return None
+    return {
+        "project": entry.get("project"),
+        "session_id": entry.get("session_id"),
+        "context": entry.get("context"),
+        "text": text.strip(),
+    }
+
+
+def classify_message(message, threads):
+    """Classify a Telegram message for the bridge grammar.
+
+    Returns one of:
+      ("reply", reply_dict)      a reply to a tracked bot message
+      ("task", line)             a valid <project> <task> message
+      ("ignored-reply", None)    a reply to a bot message not in the map
+      (None, None)               anything else (off-grammar, wrong chat, ...)
+    """
+    if not isinstance(message, dict):
+        return None, None
+    reply_to = message.get("reply_to_message")
+    if isinstance(reply_to, dict):
+        reply = reply_info(message, threads)
+        if reply is not None:
+            return "reply", reply
+        text = message.get("text")
+        if isinstance(text, str) and text.strip():
+            return "ignored-reply", None
+        return None, None
+    line = parse_message(message)
+    if line is not None:
+        return "task", line
+    return None, None
+
+
+def iter_valid_updates(payload, allowed_chat_id=None, include_chat_id=False, threads=None):
     if not isinstance(payload, dict) or payload.get("ok") is not True:
         raise ValueError("Telegram response is not a successful getUpdates payload")
     updates = payload.get("result")
@@ -90,11 +179,14 @@ def iter_valid_updates(payload, allowed_chat_id=None, include_chat_id=False):
         message = update.get("message")
         chat = message.get("chat") if isinstance(message, dict) else None
         chat_id = chat.get("id") if isinstance(chat, dict) else None
-        line = None if allowed_chat_id is not None and str(chat_id) != allowed_chat_id else parse_message(message)
-        if include_chat_id:
-            yield update["update_id"], line, chat_id
+        if allowed_chat_id is not None and str(chat_id) != allowed_chat_id:
+            kind, value = None, None
         else:
-            yield update["update_id"], line
+            kind, value = classify_message(message, threads)
+        if include_chat_id:
+            yield update["update_id"], kind, value, chat_id
+        else:
+            yield update["update_id"], kind, value
 
 
 def load_offset():
@@ -175,6 +267,7 @@ def notification_text(event):
 
 
 def send_message(token, chat_id, text):
+    """POST to Telegram sendMessage. Returns the Telegram message_id (int)."""
     body = urllib.parse.urlencode({"chat_id": str(chat_id), "text": text}).encode("utf-8")
     request = urllib.request.Request(
         "https://api.telegram.org/bot" + token + "/sendMessage",
@@ -185,6 +278,10 @@ def send_message(token, chat_id, text):
         payload = json.load(response)
     if not isinstance(payload, dict) or payload.get("ok") is not True:
         raise ValueError("Telegram response is not a successful sendMessage payload")
+    result = payload.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("message_id"), int):
+        raise ValueError("Telegram response has no message_id")
+    return result["message_id"]
 
 
 def notify_terminal_events(token, tracked):
@@ -194,11 +291,66 @@ def notify_terminal_events(token, tracked):
         event = completed.get(key)
         if event is None:
             continue
-        send_message(token, chat_id, notification_text(event))
+        message_id = send_message(token, chat_id, notification_text(event))
+        # Fase 2: register the ack notification as a reply anchor so the next
+        # reply can resume that headless session (-r). Only for acked-success
+        # events that actually carry a session_id (design §5.2).
+        if event.get("state") == "acked-success" and event.get("session_id"):
+            reply_threads.add_entry(ROOT, message_id, {
+                "project": event.get("project") or "",
+                "session_id": event.get("session_id"),
+                "context": None,
+                "kind": "ack",
+                "created_at": time.time(),
+            })
         del tracked[key]
         changed = True
     if changed:
         save_tracked(tracked)
+
+
+def dispatch_reply(project, task, session_id):
+    """Spawn `bin/matrix hardline dispatch` as a detached child for a reply."""
+    command = [str(ROOT / "bin" / "matrix"), "hardline", "dispatch", project, task]
+    if session_id:
+        command += ["--session", session_id]
+    env = {**os.environ, "MATRIX_ROOT": str(ROOT)}
+    return subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=env,
+        start_new_session=True,
+    )
+
+
+_ACTIVE_PROCS = []
+
+
+def reap_active_procs():
+    """Drop finished dispatch children so we never accumulate zombies."""
+    for proc in list(_ACTIVE_PROCS):
+        if proc.poll() is not None:
+            _ACTIVE_PROCS.remove(proc)
+
+
+def handle_reply(reply, chat_id, tracked):
+    """Dispatch a reply directly and map its dedupe_key to the chat so the
+    ack notification comes back. A spawn failure only logs to stderr — it
+    never crashes the bridge loop (design §5.2 mode of failure)."""
+    project = reply.get("project")
+    if not project:
+        return
+    task = build_reply_task(reply)
+    session_id = reply.get("session_id") or ""
+    try:
+        proc = dispatch_reply(project, task, session_id)
+    except (OSError, ValueError) as error:
+        print(f"[telegram-bridge] reply dispatch spawn failed: {error}", file=sys.stderr)
+        return
+    _ACTIVE_PROCS.append(proc)
+    tracked[dedupe_key(project, task)] = chat_id
+    save_tracked(tracked)
 
 
 def get_updates(token, offset):
@@ -222,7 +374,10 @@ def parse_args():
     parser.add_argument(
         "--parse-response",
         metavar="PATH",
-        help="test-only: print valid inbox lines from a saved getUpdates JSON response; no network or writes",
+        help=(
+            "test-only: print accepted inbox lines and detected reply dispatches from a "
+            "saved getUpdates JSON response; no network, no inbox writes, no spawning"
+        ),
     )
     return parser.parse_args()
 
@@ -232,9 +387,16 @@ def main():
     if args.parse_response:
         try:
             payload = json.loads(Path(args.parse_response).read_text(encoding="utf-8"))
-            for _, line in iter_valid_updates(payload):
-                if line is not None:
-                    print(line)
+            threads = reply_threads.load(ROOT)
+            for _, kind, value in iter_valid_updates(payload, threads=threads):
+                if kind == "task":
+                    print(value)
+                elif kind == "reply":
+                    task = build_reply_task(value)
+                    print(
+                        f"REPLY project={value.get('project') or ''} "
+                        f"session_id={value.get('session_id') or '-'} task={task}"
+                    )
         except (OSError, json.JSONDecodeError, ValueError) as error:
             print(f"telegram-bridge: cannot parse test response: {error}", file=sys.stderr)
             return 1
@@ -249,6 +411,8 @@ def main():
     tracked = load_tracked()
 
     while True:
+        reap_active_procs()
+        reply_threads.sweep(ROOT, REPLY_TTL_SECONDS, REPLY_MAX_ENTRIES)
         try:
             payload = get_updates(token, offset)
             if args.show_chat_ids:
@@ -266,12 +430,23 @@ def main():
                 if highest_update_id is not None:
                     save_offset(highest_update_id)
                 return 0
-            for update_id, line, chat_id in iter_valid_updates(payload, allowed_chat_id, include_chat_id=True):
-                if line is not None:
-                    append_inbox(line)
-                    project, raw_line = line.split("|", 1)
+            threads = reply_threads.load(ROOT)
+            for update_id, kind, value, chat_id in iter_valid_updates(
+                payload, allowed_chat_id, include_chat_id=True, threads=threads
+            ):
+                if kind == "task":
+                    append_inbox(value)
+                    project, raw_line = value.split("|", 1)
                     tracked[dedupe_key(project, raw_line)] = chat_id
                     save_tracked(tracked)
+                elif kind == "reply":
+                    handle_reply(value, chat_id, tracked)
+                elif kind == "ignored-reply":
+                    print(
+                        "[telegram-bridge] ignoring reply to an untracked bot message; "
+                        "resend as '<project> <task>'",
+                        file=sys.stderr,
+                    )
                 offset = update_id + 1
                 save_offset(offset)
             notify_terminal_events(token, tracked)

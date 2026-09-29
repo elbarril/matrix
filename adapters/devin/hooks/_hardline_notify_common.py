@@ -27,6 +27,13 @@ for _ in range(3):
 sys.path.insert(0, os.path.join(_candidate, "hooks"))
 import _common as common  # noqa: E402
 
+# Fase 2: single owner of the reply-threads path/schema, shared by the Stop
+# hook and the Telegram bridge (lesson 15 — never duplicate path+schema).
+sys.path.insert(0, os.path.join(_candidate, "modules", "hardline"))
+import reply_threads  # noqa: E402
+
+add_reply_thread = reply_threads.add_entry
+
 TOKEN_ENV = "MATRIX_HARDLINE_TELEGRAM_BOT_TOKEN"
 CHAT_ENV = "MATRIX_HARDLINE_TELEGRAM_ALLOWED_CHAT_ID"
 SECRETS_PATH_DEFAULT = os.path.join(common.resolve_root(), "brain", "state", "hardline", "telegram.env")
@@ -80,17 +87,21 @@ def is_hardline_dispatched():
 
 def is_brain_linked(project_dir):
     """Registry-first check: run `<bin_matrix> scope` (5s timeout) from
-    project_dir and return True when the resolved mode is `project` (the
-    directory is inside a registered project). No filesystem `_brain`
-    symlink is consulted anymore."""
+    project_dir and return True when the resolved mode is `project` or
+    `workspace` (the directory is inside a registered project, or the
+    Matrix workspace root). No filesystem `_brain` symlink is consulted
+    anymore."""
     root = common.resolve_root()
     return _scope_project_name(root, project_dir) is not None
 
 
 def bound_project_name(root, project_dir, bin_matrix=None):
     """Return the resolved subject (field 2 of `bin/matrix scope`) from
-    project_dir, or None. Identical role to the old bound_project_name but
-    registry-first: no `bindings --json` / bound==true filtering anymore."""
+    project_dir, or None. Accepts both `project` mode (the registered
+    project name) and `workspace` mode (`"matrix"`, the pseudo-project for
+    the Matrix workspace root). Identical role to the old
+    bound_project_name but registry-first: no `bindings --json` /
+    bound==true filtering anymore."""
     return _scope_project_name(root, project_dir, bin_matrix=bin_matrix)
 
 
@@ -114,7 +125,7 @@ def _scope_project_name(root, project_dir, bin_matrix=None):
         fields = line.split("\t")
         mode = fields[0].strip() if fields else ""
         project = fields[1].strip() if len(fields) > 1 else ""
-        if mode == "project":
+        if mode in ("project", "workspace"):
             return project or None
         return None
     except Exception:
@@ -195,10 +206,10 @@ def get_telegram_credentials_from(secrets):
 
 
 def send_message(token, chat_id, text):
-    """POST to Telegram sendMessage. Identical to the existing
-    _send_message / telegram-bridge.py's send_message. Raises on any
-    failure (network, non-ok response) — caller catches, logs exception
-    type only (never token/body), and continues."""
+    """POST to Telegram sendMessage. Returns the Telegram message_id (int)
+    from the successful response. Raises on any failure (network, non-ok
+    response, missing message_id) — caller catches, logs exception type only
+    (never token/body), and continues."""
     body = urllib.parse.urlencode({"chat_id": str(chat_id), "text": text}).encode("utf-8")
     request = urllib.request.Request(
         "https://api.telegram.org/bot" + token + "/sendMessage",
@@ -209,6 +220,10 @@ def send_message(token, chat_id, text):
         payload = json.load(response)
     if not isinstance(payload, dict) or payload.get("ok") is not True:
         raise ValueError("Telegram response is not a successful sendMessage payload")
+    result = payload.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("message_id"), int):
+        raise ValueError("Telegram response has no message_id")
+    return result["message_id"]
 
 
 DEFAULT_THRESHOLD_SECONDS = 1800

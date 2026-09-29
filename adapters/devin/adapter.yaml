@@ -93,9 +93,7 @@ install_integrity:
   # "not required". `Stop` intentionally lives only here, not in required_hooks.
   required_hooks_when_flag:
     notify.hardline_outbound:
-      SessionEnd: "session_end_notify.py"
       Stop: "stop_notify.py"
-      UserPromptSubmit: "user_prompt_submit_timestamp.py"
   mcp_config_path: "~/.config/devin/mcp_config.json"   # confirmed: key path is mcpServers.<name>
   required_mcp_servers: ["chrome-browser", "context7"]
   installed_agent_path_template: "{installed_agents_dir}/{agent}/AGENT.md"

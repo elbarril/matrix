@@ -72,9 +72,24 @@ hardline_reject() {
 }
 
 hardline_dispatch() {
-    local project="${1:-}" raw_line="${2:-}"
-    [[ $# -eq 2 && -n "$project" && -n "$raw_line" ]] || {
-        log_error 'Usage: matrix hardline dispatch <project> "<line>"'; return 1; }
+    local project="${1:-}" raw_line="${2:-}" session_id=""
+    shift 2 2>/dev/null || true
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --session)
+                [[ $# -ge 2 ]] || {
+                    log_error 'Usage: matrix hardline dispatch <project> "<line>" [--session <id>]'; return 1; }
+                session_id="$2"
+                shift 2
+                ;;
+            *)
+                log_error 'Usage: matrix hardline dispatch <project> "<line>" [--session <id>]'
+                return 1
+                ;;
+        esac
+    done
+    [[ -n "$project" && -n "$raw_line" ]] || {
+        log_error 'Usage: matrix hardline dispatch <project> "<line>" [--session <id>]'; return 1; }
     [[ "$project" =~ ^[A-Za-z0-9._-]+$ ]] || {
         hardline_reject "$project" "$raw_line" "Invalid project '$project' (allowed: letters, numbers, dot, underscore, hyphen)"; return 1; }
     [[ "$raw_line" != *$'\n'* && "$raw_line" != *$'\r'* ]] || {
@@ -166,7 +181,7 @@ hardline_dispatch() {
     adapter_err="$HARDLINE_DIR/events/$event_id.adapter.err"
     mkdir -p "$HARDLINE_DIR/events"
     if MATRIX_ROOT="$MATRIX_DIR" MATRIX_HARDLINE_TIMEOUT_SECONDS="${MATRIX_HARDLINE_TIMEOUT_SECONDS:-300}" \
-       "$MATRIX_DIR/adapters/devin/hardline-dispatch.sh" "$project_path" "$raw_line" "" "$event_id" > "$adapter_out" 2> "$adapter_err"; then
+       "$MATRIX_DIR/adapters/devin/hardline-dispatch.sh" "$project_path" "$raw_line" "$session_id" "$event_id" > "$adapter_out" 2> "$adapter_err"; then
         : # adapter executed
     else
         printf '[hardline] %s adapter-internal-error project=%s event=%s\n' "$(date +%s.%N)" "$project" "$event_id" >&2
@@ -232,7 +247,7 @@ hardline_cmd() {
         resume)   shift; hardline_resume "$@" ;;
         queue)    shift; [[ $# -eq 0 ]] || { log_error "Usage: matrix hardline queue"; return 1; }
                   init_hardline; cat "$HARDLINE_QUEUE" ;;
-        *)        log_error 'Usage: matrix hardline dispatch <project> "<line>" | reject <project> "<line>" "<reason>" | status [project] | resume <event_id> | queue'; return 1 ;;
+        *)        log_error 'Usage: matrix hardline dispatch <project> "<line>" [--session <id>] | reject <project> "<line>" "<reason>" | status [project] | resume <event_id> | queue'; return 1 ;;
     esac
 }
 
